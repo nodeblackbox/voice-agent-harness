@@ -14,6 +14,7 @@ import { SearxngService } from './services/searxng'
 import { KokoroService } from './services/kokoro'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
+import { setupTraining } from './training'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 const projectRoot = resolve(here, '..', '..')
@@ -115,7 +116,17 @@ app.whenReady().then(async () => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
   }
   const emitRef = { current: (event: AgentEvent): void => send(IPC.event, event) }
-  const emit = (event: AgentEvent): void => emitRef.current(event)
+  // opt-in voice-clone dataset capture (RECORD_TRAINING_DATA=1); null when off
+  const training = setupTraining({
+    env: (name) => settings.envVar(name),
+    appVersion: app.getVersion(),
+    log: (m) => log('training', m),
+    notify: (text) => emitRef.current({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'info', text } })
+  })
+  const emit = (event: AgentEvent): void => {
+    training?.onAgentEvent(event)
+    emitRef.current(event)
+  }
   const statuses = new Map<ServiceStatus['name'], ServiceStatus>()
   const onStatus = (status: ServiceStatus): void => {
     statuses.set(status.name, status)
@@ -130,6 +141,7 @@ app.whenReady().then(async () => {
     onStatus,
     trace,
     onEvent: (evt) => {
+      training?.onEarEvent(evt)
       if (evt.type !== 'level' && evt.type !== 'pong') {
         const { type, ...data } = evt as Record<string, unknown> & { type: string }
         // the sidecar's `t` is its own perf-counter clock; keep it, but never under the trace's timestamp key
@@ -184,9 +196,9 @@ app.whenReady().then(async () => {
 
   const agent = new Agent({
     store,
-    settings: () => settings.get(),
+    settings: () => training?.settings(settings.get()) ?? settings.get(),
     keys: settings,
-    customStyles: () => settings.styles(),
+    customStyles: () => (training ? [...settings.styles(), ...training.styles] : settings.styles()),
     skills: () => settings.skills(),
     mcp,
     search: { baseUrl: () => searxng.baseUrl(), ensure: () => searxng.ensure(), configured: () => searxng.configured() },
@@ -315,6 +327,7 @@ app.whenReady().then(async () => {
 
   app.on('before-quit', () => {
     agent.shutdown()
+    training?.recorder.dispose()
     // VA_TRACE=1: print where this session's trace landed so scripted runs can pick it up
     if (process.env.VA_TRACE) console.log(`VA_TRACE ${tracePath() ?? 'none'}`)
     sidecar.stop()

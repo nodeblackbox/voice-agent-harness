@@ -212,6 +212,11 @@ export class SettingsService implements KeySource {
     return []
   }
 
+  /** A raw variable from .env (or the inherited environment), for opt-in dev features. */
+  envVar(name: string): string | undefined {
+    return this.env[name]?.trim() || undefined
+  }
+
   headersFor(provider: Provider): Record<string, string> | undefined {
     if (provider !== 'anthropic') return undefined
     const ws = this.env.ANTHROPIC_WORKSPACE_ID?.trim()

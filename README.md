@@ -138,6 +138,10 @@ diagnostics** produces a self-contained Markdown report. See `docs/DEBUGGING.md`
 vocabulary and `docs/TUNING.md` for every tuning parameter (Settings → Tuning; export/import
 profiles as JSON).
 
+**Training recording mode** (opt-in, for building a voice-clone dataset): `RECORD_TRAINING_DATA=1`
+in `.env` saves every user turn as raw 48 kHz WAV + JSON context, and talks through a recording-coach
+prompt. Off by default; it lives in `src/main/training/`. See `docs/TRAINING_RECORDING.md`.
+
 ## Roadmap
 
 - Claude Code session control from voice (attach, get read the result, answer "needs input" prompts).

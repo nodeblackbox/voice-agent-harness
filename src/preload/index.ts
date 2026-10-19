@@ -24,6 +24,12 @@ const api: VoiceAgentApi = {
     stop: () => invoke(IPC.voiceStop),
     sendFrame: (pcm) => ipcRenderer.send(IPC.audioFrame, pcm)
   },
+  training: {
+    config: () => invoke(IPC.trainingConfig),
+    tapStart: (info) => invoke(IPC.trainingTapStart, info),
+    tapStop: () => ipcRenderer.send(IPC.trainingTapStop),
+    sendFrame: (pcm) => ipcRenderer.send(IPC.trainingFrame, pcm)
+  },
   speak: {
     message: (id) => invoke(IPC.speakMessage, id),
     stop: () => invoke(IPC.speakStop),

@@ -57,6 +57,8 @@ export const IPC = {
   traceSession: 'trace:session',
   traceLastTurn: 'trace:last-turn',
   sessionSummary: 'session:summary',
+  trainingConfig: 'training:config',
+  trainingTapStart: 'training:tap-start',
 
   // renderer -> main (send, fire and forget)
   logWrite: 'log:write',
@@ -65,6 +67,8 @@ export const IPC = {
   playbackFinished: 'playback:finished',
   playbackCancelled: 'playback:cancelled',
   playbackDrained: 'playback:drained',
+  trainingTapStop: 'training:tap-stop',
+  trainingFrame: 'training:frame',
 
   // main -> renderer
   event: 'agent:event',

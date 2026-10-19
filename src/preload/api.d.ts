@@ -47,6 +47,14 @@ export interface VoiceAgentApi {
     stop(): Promise<void>
     sendFrame(pcm: ArrayBuffer): void
   }
+  /** Training recording mode (RECORD_TRAINING_DATA=1): a raw, unprocessed copy of the mic. */
+  training: {
+    config(): Promise<{ enabled: boolean }>
+    tapStart(info: { sampleRate: number; device: string; processing: Record<string, unknown> }): Promise<void>
+    tapStop(): void
+    /** Float32 mono samples at the tap's native rate. */
+    sendFrame(pcm: ArrayBuffer): void
+  }
   speak: {
     message(messageId: string): Promise<void>
     stop(): Promise<void>
