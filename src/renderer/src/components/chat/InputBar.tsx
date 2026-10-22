@@ -1,11 +1,12 @@
 import { useState, type KeyboardEvent } from 'react'
-import { AlignLeft, ChevronDown, Folder, Headphones, HeadphoneOff, Lock, MessageSquare, Mic, MicOff, Send, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
+import { AlignLeft, Bot, ChevronDown, Folder, Headphones, HeadphoneOff, Lock, MessageSquare, Mic, MicOff, Send, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
 import type { Mode } from '@shared/types'
 import { T } from '../../theme'
 import { selectActiveModel, selectActiveProject, selectActiveStyle, useStore } from '../../state/store'
 import { toggleListening, toggleMicMuted } from '../../audio/voice'
 import { Dropdown, MenuItem } from '../primitives'
 import { VoiceBars } from '../VoiceBars'
+import { ClaudeStrip } from './ClaudeStrip'
 
 const MODES: Array<{ id: Mode; label: string; desc: string }> = [
   { id: 'ask', label: 'Ask', desc: 'Single reply, tools only if needed' },
@@ -61,6 +62,12 @@ export function InputBar() {
   const setView = useStore((s) => s.setView)
   const [open, setOpen] = useState<Menu>(null)
   const [draft, setDraft] = useState('')
+  const claudeAvailable = !!settings?.claude && !!window.api.claude
+  const claudeOn = claudeAvailable && !!settings?.claude?.enabled
+  const toggleClaude = () => {
+    if (!settings) return
+    void updateSettings({ claude: { ...settings.claude, enabled: !claudeOn } })
+  }
 
   const mode = MODES.find((m) => m.id === settings?.mode) ?? MODES[0]
   const busy = agentState === 'thinking' || agentState === 'tool' || agentState === 'speaking'
@@ -97,6 +104,7 @@ export function InputBar() {
   return (
     <div className="absolute left-0 right-0 flex justify-center px-6" style={{ bottom: 20, pointerEvents: 'none' }}>
       <div className="w-full flex flex-col gap-2" style={{ maxWidth: 720, pointerEvents: 'auto' }}>
+        {claudeOn && <ClaudeStrip />}
         <div className="flex items-center gap-2 px-1">
           <button
             onClick={() => setView('projects')}
@@ -140,13 +148,13 @@ export function InputBar() {
         </div>
         <div
           className="rounded-2xl shadow-2xl"
-          style={{ background: T.raised, border: `1px solid ${listening ? T.cyanBorder : T.border}`, transition: 'border-color .2s' }}
+          style={{ background: T.raised, border: `1px solid ${listening ? T.cyanBorder : claudeOn ? T.violetBorder : T.border}`, transition: 'border-color .2s' }}
         >
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKey}
-            placeholder={listening ? 'Listening — or type to override…' : 'Ask anything, or press Voice to talk…'}
+            placeholder={claudeOn ? 'Talk or type — e.g. “start a session called landing page and build a one-page site”' : listening ? 'Listening — or type to override…' : 'Ask anything, or press Voice to talk…'}
             rows={2}
             className="w-full bg-transparent px-4 pt-3 pb-1 text-sm resize-none"
             style={{ color: T.text, border: 'none', lineHeight: 1.5 }}
@@ -216,6 +224,27 @@ export function InputBar() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {claudeAvailable && (
+              <button
+                aria-label={claudeOn ? 'Turn off Claude Code control' : 'Turn on Claude Code control'}
+                aria-pressed={claudeOn}
+                title={claudeOn ? 'Claude Code control is on: the voice agent can start, steer and answer Claude Code sessions. Click to turn off.' : 'Turn on Claude Code control: manage Claude Code sessions by voice'}
+                onClick={toggleClaude}
+                className="inline-flex items-center gap-1.5 rounded-lg text-xs"
+                style={{
+                  height: 32,
+                  padding: '0 10px',
+                  color: claudeOn ? T.violet : T.text2,
+                  background: claudeOn ? T.violetTint : 'transparent',
+                  border: `1px solid ${claudeOn ? T.violetBorder : T.border}`,
+                  cursor: 'pointer',
+                  transition: 'all .2s ease'
+                }}
+              >
+                <Bot size={13} />
+                <span style={{ fontWeight: claudeOn ? 600 : 400 }}>Claude</span>
+              </button>
+              )}
               {busy && (
                 <button
                   onClick={() => void window.api.chat.cancel()}

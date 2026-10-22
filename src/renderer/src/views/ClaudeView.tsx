@@ -237,6 +237,35 @@ function ClaudeSettingsCard({ s }: { s: ClaudeSettings }) {
   )
 }
 
+const EXAMPLES: Array<[string, string]> = [
+  ['“Start a session called landing page and build a one-page site for a bakery.”', 'Creates a sandboxed folder and gets Claude Code working.'],
+  ['“Also add a contact form.”', 'Queued behind what it is doing now.'],
+  ['“How is landing page going?”', 'A short spoken summary of what just happened.'],
+  ['“The second one.” / “Yes, go ahead.”', 'Answers its question or approval when it asks you.'],
+  ['“Hold on, stop that.”', 'Interrupts it; it keeps its context and can carry on.'],
+  ['“Shut down landing page.”', 'Stops it; send it anything later to resume.']
+]
+
+function HowTo({ root }: { root: string }) {
+  return (
+    <Card pad={16} className="flex flex-col gap-3">
+      <div className="text-sm font-medium" style={{ color: T.text }}>How it works</div>
+      <div className="text-xs" style={{ color: T.text2, lineHeight: 1.6 }}>
+        Turn on <b style={{ color: T.violet }}>Claude</b> (button next to Voice in chat, or here). Then just talk: the voice agent starts and steers Claude Code sessions for you,
+        reads out their questions, and tells you when they finish. Each session can only touch its own folder inside <code style={{ fontFamily: T.mono, color: T.text }}>{root}</code>.
+      </div>
+      <div className="flex flex-col gap-2">
+        {EXAMPLES.map(([say, does]) => (
+          <div key={say} className="flex flex-col">
+            <span className="text-sm" style={{ color: T.cyan }}>{say}</span>
+            <span className="text-xs" style={{ color: T.text3 }}>{does}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 export function ClaudeView() {
   const settings = useStore((s) => s.settings)
   const sessions = useStore((s) => s.claudeSessions)
@@ -251,10 +280,25 @@ export function ClaudeView() {
   const current = sessions.find((s) => s.id === selected) ?? sessions[0]
 
   if (!settings) return null
+  // The window reloads on its own during development, but the main process does not: an app started
+  // before this feature existed has no Claude backend yet.
+  if (!settings.claude || !window.api.claude) {
+    return (
+      <Page title="Claude Code" sub="Run several Claude Code sessions in the background and manage them with your voice.">
+        <Card pad={16} style={{ background: T.amberTint, border: `1px solid ${T.amber}` }}>
+          <div className="text-sm font-medium" style={{ color: T.amber }}>Restart the app to load Claude Code</div>
+          <div className="text-xs mt-1" style={{ color: T.text2 }}>
+            This window is newer than the running app. Close it and run <code style={{ fontFamily: T.mono }}>pnpm dev</code> again.
+          </div>
+        </Card>
+      </Page>
+    )
+  }
   if (!settings.claude.enabled) {
     return (
       <Page title="Claude Code" sub="Run several Claude Code sessions in the background and manage them with your voice.">
         <ClaudeSettingsCard s={settings.claude} />
+        <HowTo root={settings.claude.workspaceRoot} />
       </Page>
     )
   }
@@ -291,7 +335,15 @@ export function ClaudeView() {
         </button>
         {showSettings && <ClaudeSettingsCard s={settings.claude} />}
       </aside>
-      {current ? <Detail key={current.id} session={current} /> : <div className="flex-1 flex items-center justify-center"><Empty>Pick or start a session.</Empty></div>}
+      {current ? (
+        <Detail key={current.id} session={current} />
+      ) : (
+        <div className="va-scroll flex-1 overflow-y-auto p-6">
+          <div className="mx-auto" style={{ maxWidth: 640 }}>
+            <HowTo root={settings.claude.workspaceRoot} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

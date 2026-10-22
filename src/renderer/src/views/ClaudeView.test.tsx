@@ -18,6 +18,7 @@ const claude = {
 
 const { useStore } = await import('../state/store')
 const { ClaudeView } = await import('./ClaudeView')
+const { ClaudeStrip } = await import('../components/chat/ClaudeStrip')
 
 const session = (over: Partial<CcSession> = {}): CcSession => ({
   id: 's1', name: 'Landing page', workspace: 'D:\\ws\\landing-page', status: 'idle', queued: [], lastSummary: 'Built it', costUsd: 0.02, turns: 2, createdAt: 1, updatedAt: 1, ...over,
@@ -50,9 +51,34 @@ describe('ClaudeView', () => {
     expect(host.textContent).not.toContain('Sessions')
   })
 
-  it('shows an empty state with no sessions', async () => {
+  it('shows an empty state and the how-to guide with no sessions', async () => {
     await render()
     expect(host.textContent).toContain('No sessions yet')
+    expect(host.textContent).toContain('How it works')
+    expect(host.textContent).toContain('Hold on, stop that')
+  })
+
+  it('asks for a restart when the running app has no Claude backend yet', async () => {
+    const api = (globalThis as unknown as { window: { api: Record<string, unknown> } }).window.api
+    const saved = api.claude
+    delete api.claude
+    try {
+      await render()
+      expect(host.textContent).toContain('Restart the app to load Claude Code')
+    } finally {
+      api.claude = saved
+    }
+  })
+
+  it('the chat strip shows each session and opens it in the Claude view', async () => {
+    const p = { id: 'p', kind: 'permission' as const, toolName: 'Bash', summary: 'Run: npm test' }
+    useStore.setState({ view: 'chat', claudeSessions: [session(), session({ id: 's2', name: 'API', status: 'needs_permission', pending: p })], claudeSelected: 's1' })
+    await act(async () => { root.render(<ClaudeStrip />) })
+    expect(host.textContent).toContain('Landing page')
+    expect(host.textContent).toContain('needs approval')
+    await click(button('API'))
+    expect(useStore.getState().view).toBe('claude')
+    expect(useStore.getState().claudeSelected).toBe('s2')
   })
 
   it('renders a session with its output, and the interrupt/stop controls call the API', async () => {

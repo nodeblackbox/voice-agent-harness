@@ -29,6 +29,7 @@ export default function App() {
   const view = useStore((s) => s.view)
   const setView = useStore((s) => s.setView)
   const init = useStore((s) => s.init)
+  const claudeWaiting = useStore((s) => s.claudeSessions.filter((x) => x.pending).length)
 
   useEffect(() => {
     void init()
@@ -49,7 +50,18 @@ export default function App() {
     <div className="flex h-screen w-full overflow-hidden" style={{ background: T.bg, color: T.text }}>
       <nav className="flex flex-col items-center py-3 gap-1" style={{ width: 48, background: T.rail, borderRight: `1px solid ${T.border}` }}>
         {NAV.map((n) => (
-          <IconBtn key={n.id} icon={n.icon} label={n.label} active={view === n.id} onClick={() => setView(n.id)} />
+          <div key={n.id} className="relative">
+            <IconBtn icon={n.icon} label={n.label} active={view === n.id} onClick={() => setView(n.id)} />
+            {n.id === 'claude' && claudeWaiting > 0 && (
+              <span
+                aria-label={`${claudeWaiting} Claude Code session${claudeWaiting > 1 ? 's' : ''} waiting on you`}
+                className="absolute flex items-center justify-center rounded-full text-[10px] font-semibold"
+                style={{ top: 2, right: 2, minWidth: 15, height: 15, padding: '0 3px', background: T.amber, color: T.bg, pointerEvents: 'none' }}
+              >
+                {claudeWaiting}
+              </span>
+            )}
+          </div>
         ))}
         <div className="flex-1" />
         <IconBtn icon={Settings} label="Settings" active={view === 'settings'} onClick={() => setView('settings')} />
