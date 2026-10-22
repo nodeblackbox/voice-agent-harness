@@ -35,9 +35,16 @@ describe('KokoroTtsEngine', () => {
     expect(b.synth).toHaveBeenCalledWith('Hello.', 'bf_emma', 1, expect.anything())
   })
 
-  it('falls through to the Windows voice instead of throwing when Kokoro errors', async () => {
+  it('falls through to the Windows voice instead of throwing when Kokoro keeps erroring', async () => {
     const b = backend({ synth: vi.fn(async () => Promise.reject(new Error('boom'))) })
     expect(await new KokoroTtsEngine(b, () => 'af_heart').synth(req, new AbortController().signal)).toBeNull()
+    expect(b.synth).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries one Kokoro hiccup so the sentence keeps the Kokoro voice', async () => {
+    let n = 0
+    const b = backend({ synth: vi.fn(async () => (n++ === 0 ? Promise.reject(new Error('reset')) : Buffer.from('wav'))) })
+    expect(await new KokoroTtsEngine(b, () => 'af_heart').synth(req, new AbortController().signal)).toEqual(Buffer.from('wav'))
   })
 
   it('maps the rate offset onto a sane speed', () => {

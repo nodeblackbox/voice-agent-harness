@@ -20,9 +20,9 @@ function setup() {
 const Q = { questions: [{ question: 'Pick one?', header: 'p', multiSelect: false, options: [{ label: 'Alpha' }, { label: 'Beta' }] }] }
 
 describe('claude voice tools', () => {
-  it('exposes the seven tools', () => {
+  it('exposes the session tools', () => {
     expect(Object.keys(claudeTools(setup().m)).sort()).toEqual(
-      ['claude_answer', 'claude_attach', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_recent', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
+      ['claude_answer', 'claude_attach', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_recent', 'claude_remove', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
   })
 
   it('start -> list -> status flow returns immediately with speakable fields', async () => {
@@ -101,5 +101,15 @@ describe('claude prompt context', () => {
     expect(withClaude).toContain('Claude Code sessions')
     expect(withClaude).toContain('- A [idle]')
     expect(withClaude).toContain('claude_answer')
+  })
+
+  it('claude_remove takes several sessions off the list in one go and reports what is left', async () => {
+    const { call } = setup()
+    await call('claude_start', { name: 'slop one' })
+    await call('claude_start', { name: 'slop two' })
+    await call('claude_start', { name: 'test session' })
+    const r = await call('claude_remove', { sessions: ['slop one', 'slop two', 'ghost'] })
+    expect(r).toMatchObject({ status: 'partly done', removed: ['slop one', 'slop two'], remaining: ['test session'] })
+    expect(r.failed).toHaveLength(1)
   })
 })

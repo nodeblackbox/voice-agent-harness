@@ -16,8 +16,11 @@ body,
   overflow: hidden;
 }
 
-button {
-  font: inherit;
+/* in the base layer so Tailwind's text-* utilities (a later layer) can still size buttons */
+@layer base {
+  button {
+    font: inherit;
+  }
 }
 
 textarea:focus,

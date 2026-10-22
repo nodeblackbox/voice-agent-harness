@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, Octagon, Pencil, Play, Plus, RotateCcw, Send,
+  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, ListChecks, Octagon, Pencil, Play, Plus, RotateCcw, Send,
   Square, Trash2, Wrench, X, Zap, type LucideIcon
 } from 'lucide-react'
 import type { CcAnswer, CcEvent, CcPending, CcQuestion, CcSession } from '@shared/claude'
@@ -154,9 +154,14 @@ function SessionMenu({ session, onClose }: { session: CcSession; onClose: () => 
       {confirm === 'reset'
         ? item(RotateCcw, 'Click again to start fresh', 'Forgets the conversation. Files stay.', () => run(window.api.claude.reset(session.id)), T.amber)
         : item(RotateCcw, 'Fresh start', 'New conversation, same folder', () => setConfirm('reset'))}
-      {confirm === 'remove'
-        ? item(Trash2, 'Click again to remove', 'The folder stays on disk.', () => run(window.api.claude.remove(session.id)), T.red)
-        : item(Trash2, 'Remove session', 'Take it off the list (folder kept)', () => setConfirm('remove'), T.red)}
+      {confirm === 'remove' ? (
+        <>
+          {item(Trash2, 'Remove, keep the folder', 'Off the list; files stay on disk', () => run(window.api.claude.remove(session.id)), T.red)}
+          {!session.external && item(Trash2, 'Remove and delete the folder', `Deletes ${session.workspace.split(/[\\/]/).pop()} and its files for good`, () => run(window.api.claude.remove(session.id, true)), T.red)}
+        </>
+      ) : (
+        item(Trash2, 'Remove session', session.external ? 'Take it off the list (your project folder is never deleted)' : 'Take it off the list, optionally deleting its folder', () => setConfirm('remove'), T.red)
+      )}
     </div>
   )
 }
@@ -336,7 +341,7 @@ function Detail({ session }: { session: CcSession }) {
   )
 }
 
-function SessionCard({ s, active, onClick }: { s: CcSession; active: boolean; onClick: () => void }) {
+function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boolean; picked?: boolean; onClick: () => void }) {
   const working = s.status === 'running'
   const c = statusColor(s.status, T)
   return (
@@ -347,11 +352,17 @@ function SessionCard({ s, active, onClick }: { s: CcSession; active: boolean; on
       style={{
         cursor: 'pointer',
         background: active ? T.raised : T.surface,
-        border: `1px solid ${s.pending ? T.amber : active ? 'rgba(217,119,87,.45)' : T.border}`,
+        border: `1px solid ${picked ? T.red : s.pending ? T.amber : active ? 'rgba(217,119,87,.45)' : T.border}`,
+        opacity: picked === false ? 0.75 : 1,
         boxShadow: active ? '0 0 0 3px rgba(217,119,87,.08)' : undefined
       }}
     >
       <div className="flex items-center gap-2">
+        {picked !== undefined && (
+          <span className="inline-flex items-center justify-center rounded" style={{ width: 15, height: 15, border: `1px solid ${picked ? T.red : T.text3}`, background: picked ? T.red : 'transparent', flexShrink: 0 }}>
+            {picked && <Check size={11} style={{ color: T.bg }} />}
+          </span>
+        )}
         <ClaudeMark size={16} working={working} color={s.status === 'stopped' ? T.text3 : undefined} />
         <span className="text-sm font-medium truncate flex-1" style={{ color: T.text }}>{s.name}</span>
         {s.external && <FolderGit2 size={12} style={{ color: '#8AA4C8', flexShrink: 0 }} aria-label="your project" />}
@@ -375,21 +386,63 @@ function SessionCard({ s, active, onClick }: { s: CcSession; active: boolean; on
   )
 }
 
-function NewSession({ onDone }: { onDone: () => void }) {
+type Folders = Array<{ name: string; path: string; mtime: number; inUse: boolean }>
+
+function NewSession({ onDone, root }: { onDone: () => void; root: string }) {
   const pushToast = useStore((s) => s.pushToast)
   const selectClaude = useStore((s) => s.selectClaude)
   const [name, setName] = useState('')
   const [task, setTask] = useState('')
+  // '' = a new sandbox folder; a folder name under the root; or a full path chosen with Browse
+  const [folder, setFolder] = useState('')
+  const [folders, setFolders] = useState<Folders>([])
+  useEffect(() => {
+    if (typeof window.api.claude.folders !== 'function') return
+    void window.api.claude.folders().then(setFolders, () => setFolders([]))
+  }, [])
+  const outside = /^[a-z]:[\\/]|^[\\/]/i.test(folder) && !folder.toLowerCase().startsWith(root.toLowerCase())
+  const browse = async () => {
+    const p = await window.api.claude.pickFolder()
+    if (p) setFolder(p)
+  }
   const go = async () => {
-    const r = await window.api.claude.start(name.trim(), task.trim() || undefined)
+    const r = await window.api.claude.start(name.trim(), task.trim() || undefined, folder || undefined)
     if (!r.ok) return pushToast('error', r.error)
     selectClaude(r.session.id)
     onDone()
   }
+  const chip = (on: boolean) => ({ cursor: 'pointer', background: on ? 'rgba(217,119,87,.15)' : T.bg, color: on ? '#E8A58C' : T.text3, border: `1px solid ${on ? 'rgba(217,119,87,.4)' : T.border}` })
   return (
     <Card pad={12} className="flex flex-col gap-2" style={{ border: '1px solid rgba(217,119,87,.4)' }}>
       <TextInput value={name} onChange={setName} placeholder="Session name, e.g. landing page" autoFocus />
       <textarea value={task} onChange={(e) => setTask(e.target.value)} rows={3} placeholder="First task (optional)" className="w-full rounded-lg p-2 text-sm resize-none" style={{ background: T.bg, color: T.text, border: `1px solid ${T.border}` }} />
+      <div className="flex flex-col gap-1.5">
+        <SectionTitle>Works in</SectionTitle>
+        <div className="flex gap-1.5 flex-wrap">
+          <button type="button" onClick={() => setFolder('')} className="text-xs rounded-full px-2.5 py-0.5" style={chip(!folder)}>New folder</button>
+          {folders.slice(0, 6).map((f) => (
+            <button key={f.path} type="button" onClick={() => setFolder(f.name)} title={f.inUse ? 'Another session works here too' : f.path} className="text-xs rounded-full px-2.5 py-0.5" style={chip(folder === f.name)}>
+              {f.name}
+              {f.inUse && <span style={{ display: 'inline-block', width: 5, height: 5, borderRadius: 5, background: T.violet, marginLeft: 5, verticalAlign: 'middle' }} />}
+            </button>
+          ))}
+          {typeof window.api.claude.pickFolder === 'function' && (
+            <button type="button" onClick={() => void browse()} className="text-xs rounded-full px-2.5 py-0.5 inline-flex items-center gap-1" style={chip(outside)}>
+              <FolderOpen size={11} /> Browse…
+            </button>
+          )}
+        </div>
+        {folder && (
+          <div className="text-xs truncate" style={{ color: T.text3, fontFamily: T.mono }} title={folder}>
+            {/^[a-z]:[\\/]|^[\\/]/i.test(folder) ? folder : `${root}\\${folder}`}
+          </div>
+        )}
+        {outside && (
+          <div className="text-xs rounded-lg px-2 py-1.5" style={{ background: T.amberTint, color: T.amber, lineHeight: 1.5 }}>
+            Your real files: it can edit inside this folder (deleting, other folders and pushing stay blocked; every command asks you).
+          </div>
+        )}
+      </div>
       <div className="flex gap-1.5 justify-end">
         <Btn small onClick={onDone} icon={X}>Cancel</Btn>
         <Btn small primary icon={Play} disabled={!name.trim()} onClick={() => void go()}>Start</Btn>
@@ -466,6 +519,17 @@ export function ClaudeView() {
   const [creating, setCreating] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [browsing, setBrowsing] = useState(false)
+  const [picking, setPicking] = useState<Set<string> | null>(null)
+  const [deleteFolders, setDeleteFolders] = useState(false)
+  const pushToast = useStore((s) => s.pushToast)
+  const prune = async () => {
+    if (!picking?.size) return
+    const results = await Promise.all([...picking].map((id) => window.api.claude.remove(id, deleteFolders && !sessions.find((s) => s.id === id)?.external)))
+    const failed = results.filter((x) => !x.ok)
+    pushToast(failed.length ? 'warn' : 'info', failed.length ? `${results.length - failed.length} removed; ${(failed[0] as { error: string }).error}` : `Removed ${results.length} session${results.length > 1 ? 's' : ''}${deleteFolders ? ' and their folders' : ''}`)
+    setPicking(null)
+    setDeleteFolders(false)
+  }
 
   useEffect(() => { void reloadClaude() }, [reloadClaude])
   const waiting = useMemo(() => waitingOnUser(sessions), [sessions])
@@ -503,7 +567,10 @@ export function ClaudeView() {
           <span className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: T.text }}>
             <ClaudeMark size={16} working={running > 0} /> Sessions
           </span>
-          <Btn small icon={Plus} onClick={() => setCreating(true)}>New</Btn>
+          <span className="flex gap-1">
+            {sessions.length > 0 && <Btn small icon={picking ? X : ListChecks} onClick={() => { setPicking(picking ? null : new Set()); setDeleteFolders(false) }}>{picking ? 'Done' : 'Select'}</Btn>}
+            {!picking && <Btn small icon={Plus} onClick={() => setCreating(true)}>New</Btn>}
+          </span>
         </div>
         {sessions.length > 0 && (
           <div className="flex items-center gap-3 px-1 text-xs" style={{ color: T.text3 }}>
@@ -517,9 +584,42 @@ export function ClaudeView() {
             {waiting.length} waiting on you
           </div>
         )}
-        {creating && <NewSession onDone={() => setCreating(false)} />}
+        {creating && <NewSession root={settings.claude.workspaceRoot} onDone={() => setCreating(false)} />}
         {sessions.length === 0 && !creating && <Empty>No sessions yet. Say “start a session called landing page” or tap New.</Empty>}
-        {sessions.map((s) => <SessionCard key={s.id} s={s} active={!browsing && s.id === current?.id} onClick={() => { setBrowsing(false); selectClaude(s.id) }} />)}
+        {sessions.map((s) => (
+          <SessionCard
+            key={s.id}
+            s={s}
+            active={!picking && !browsing && s.id === current?.id}
+            picked={picking ? picking.has(s.id) : undefined}
+            onClick={() => {
+              if (picking) {
+                const n = new Set(picking)
+                if (n.has(s.id)) n.delete(s.id)
+                else n.add(s.id)
+                setPicking(n)
+              } else {
+                setBrowsing(false)
+                selectClaude(s.id)
+              }
+            }}
+          />
+        ))}
+        {picking && (
+          <div className="rounded-xl p-3 flex flex-col gap-2 va-fade" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+            <div className="flex gap-1.5">
+              <Btn small onClick={() => setPicking(new Set(sessions.filter((x) => x.status === 'stopped' || x.status === 'idle').map((x) => x.id)))}>All not working</Btn>
+              <Btn small onClick={() => setPicking(new Set())}>None</Btn>
+            </div>
+            <label className="flex items-center gap-2 text-xs" style={{ color: deleteFolders ? T.red : T.text2, cursor: 'pointer' }}>
+              <input type="checkbox" checked={deleteFolders} onChange={(e) => setDeleteFolders(e.target.checked)} />
+              Also delete their sandbox folders
+            </label>
+            <Btn small danger icon={Trash2} disabled={!picking.size} onClick={() => void prune()}>
+              Remove {picking.size || ''} session{picking.size === 1 ? '' : 's'}
+            </Btn>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setBrowsing(!browsing)}

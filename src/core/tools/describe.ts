@@ -50,6 +50,8 @@ export function describeInput(name: string, input: unknown): string {
       return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${Array.isArray(i.choice) ? `option ${i.choice.join(', ')}` : typeof i.text === 'string' ? `“${str(i.text, 60)}”` : i.approve === true ? 'approve' : i.approve === false ? 'deny' : ''}`
     case 'claude_list':
       return ''
+    case 'claude_remove':
+      return Array.isArray(i.sessions) ? `${i.sessions.join(', ')}${i.delete_folder ? ' + folders' : ''}` : ''
     case 'claude_status':
     case 'claude_interrupt':
     case 'claude_stop':
@@ -129,6 +131,10 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_files': {
       const r = o as { count?: number; error?: string } | undefined
       return { detail: r?.error ?? `${r?.count ?? 0} files` }
+    }
+    case 'claude_remove': {
+      const r = o as { removed?: string[]; failed?: unknown[] } | undefined
+      return { detail: `${r?.removed?.length ?? 0} removed${r?.failed?.length ? `, ${r.failed.length} failed` : ''}` }
     }
     case 'claude_recent': {
       const r = o as { count?: number } | undefined

@@ -12,7 +12,8 @@ export interface SpeakerDeps {
   /** Consecutive failed sentences before the rest of the turn uses the fallback engine. */
   degradeAfter?: number
   emit(chunk: AudioChunk): void
-  onDegraded(): void
+  /** The engine failed this turn; `reason` is the last error (e.g. a 429 from Edge). */
+  onDegraded(reason: string): void
   log(msg: string): void
   trace?(ev: string, data?: Record<string, unknown>): void
 }
@@ -120,6 +121,7 @@ export class Speaker {
     const attempts = this.deps.attempts ?? DEFAULT_TUNING.speech.ttsAttempts
     let unreachable = false
     let tried = 0
+    let lastError = ''
     while (tried < attempts && !unreachable && !this.degraded) {
       tried++
       try {
@@ -130,6 +132,7 @@ export class Speaker {
       } catch (e) {
         if (isAbort(e) || this.signal.aborted) throw e
         const msg = (e as Error).message
+        lastError = msg
         unreachable = UNREACHABLE.test(msg)
         this.deps.log(`tts attempt ${tried} failed: ${msg}`)
       }
@@ -137,7 +140,7 @@ export class Speaker {
     this.consecutiveFailures++
     if (!this.degraded && (unreachable || this.consecutiveFailures >= (this.deps.degradeAfter ?? DEFAULT_TUNING.speech.ttsDegradeAfter))) {
       this.degraded = true
-      this.deps.onDegraded()
+      this.deps.onDegraded(lastError)
     }
     // a sentence Edge couldn't produce is still spoken, in the fallback voice, rather than dropped
     try {

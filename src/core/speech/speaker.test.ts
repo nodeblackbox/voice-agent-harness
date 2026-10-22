@@ -88,6 +88,7 @@ describe('Speaker', () => {
     for (const s of ['One.', 'Two.', 'Three.', 'Four.']) speaker.say(s)
     await speaker.finish()
     expect(deps.onDegraded).toHaveBeenCalledTimes(1)
+    expect(deps.onDegraded).toHaveBeenCalledWith('edge down') // the reason drives the back-off (429 waits longer)
     const spoken = chunks.filter((c) => c.text)
     expect(spoken.map((c) => c.text)).toEqual(['One.', 'Two.', 'Three.', 'Four.'])
     for (const c of spoken) expect(c.mp3.byteLength).toBe(0)

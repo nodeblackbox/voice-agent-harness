@@ -31,20 +31,24 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
 
   return {
     claude_list: tool({
-      description: 'List the Claude Code sessions: name, status, what is waiting on the user, and what just happened in each.',
+      description: 'List the Claude Code sessions (name, status, what is waiting on the user, what just happened) and the existing folders in the workspace root that a new session could reuse.',
       inputSchema: z.object({}),
-      execute: async () => ({ sessions: m.list().map((s) => brief(s, m)) })
+      execute: async () => ({
+        sessions: m.list().map((s) => brief(s, m)),
+        workspace_folders: m.folders().slice(0, 20).map((f) => (f.inUse ? `${f.name} (in use)` : f.name))
+      })
     }),
 
     claude_start: tool({
       description:
-        'Start a NEW Claude Code session in its own sandboxed workspace folder and optionally give it a first task. Use when the user wants something built or investigated in a fresh session. Pick a short, spoken-friendly name (e.g. "landing page").',
+        'Start a NEW Claude Code session and optionally give it a first task. By default it gets a fresh sandbox folder of its own. Use "folder" when the user says where it should work: the name of an existing workspace folder (see claude_list) to continue in it, or the FULL path of one of their project folders. A project path means it works in their real files (fenced to that folder, shell commands ask), so say that and get a clear yes first. Pick a short, spoken-friendly name (e.g. "landing page").',
       inputSchema: z.object({
         name: z.string().min(1).describe('Short session name'),
-        task: z.string().default('').describe('The first instruction for Claude Code. Full, self-contained, written as a clear brief.')
+        task: z.string().default('').describe('The first instruction for Claude Code. Full, self-contained, written as a clear brief.'),
+        folder: z.string().default('').describe('Optional: an existing workspace folder name, or a full project path. Empty = a new sandbox folder.')
       }),
-      execute: async ({ name, task }) => {
-        const r = m.start(name, task || undefined)
+      execute: async ({ name, task, folder }) => {
+        const r = m.start(name, task || undefined, { folder: folder || undefined })
         return r.ok ? { status: 'started', session: brief(r.session, m) } : { status: 'failed', error: r.error }
       }
     }),
@@ -112,6 +116,27 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
         if (!f.ok) return { status: 'failed', error: f.error }
         const r = await m.stop(f.session.id)
         return r.ok ? { status: 'stopped', session: f.session.name } : { status: 'failed', error: r.error }
+      }
+    }),
+
+    claude_remove: tool({
+      description:
+        'Remove one or more sessions from the list for good ("get rid of slop one and slop two", "clean up the old sessions"). Stops them first. Their folders are KEPT unless delete_folder is true, which permanently deletes each one\'s sandbox folder and files; only set it when the user explicitly asked to delete the files too. Project folders of the user\'s own are never deleted.',
+      inputSchema: z.object({
+        sessions: z.array(z.string().min(1)).min(1).describe('Session names (or parts of names), one per session to remove'),
+        delete_folder: z.boolean().default(false).describe('Also delete each session\'s sandbox folder and files (permanent)')
+      }),
+      execute: async ({ sessions, delete_folder }) => {
+        const removed: string[] = []
+        const failed: Array<{ session: string; error: string }> = []
+        for (const ref of sessions) {
+          const f = find(ref)
+          if (!f.ok) { failed.push({ session: ref, error: f.error }); continue }
+          const r = await m.remove(f.session.id, { deleteFolder: delete_folder })
+          if (r.ok) removed.push(f.session.name + (r.deletedFolder ? ' (folder deleted)' : ''))
+          else failed.push({ session: f.session.name, error: r.error })
+        }
+        return { status: failed.length ? (removed.length ? 'partly done' : 'failed') : 'removed', removed, failed, remaining: m.list().map((s) => s.name) }
       }
     }),
 

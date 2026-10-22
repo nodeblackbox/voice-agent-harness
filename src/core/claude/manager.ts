@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { digest } from './digest'
 import { historyEvents, messageEvents } from './events'
-import { checkToolUse } from './fence'
+import { checkToolUse, insideRoot } from './fence'
 import { listWorkspace, readWorkspaceFile } from './files'
 import { Pushable } from './pushable'
 import type {
@@ -34,6 +34,8 @@ export interface ManagerDeps {
   eventBuffer?: number
   now?: () => number
   mkdir?: (dir: string) => void
+  /** Deletes a sandbox workspace folder (injectable for tests). */
+  rmdir?: (dir: string) => void
   /** Called with a snapshot whenever a session changes, for persistence. */
   persist?: (sessions: CcSession[]) => void
 }
@@ -103,19 +105,45 @@ export class ClaudeSessionManager {
     }
   }
 
-  start(name: string, firstPrompt?: string): CcResult<{ session: CcSession }> {
+  /**
+   * Start a session. By default it gets a new folder of its own under the workspace root. `folder` picks
+   * where it works instead: the name of a folder under the root (reused, or created), or the full path
+   * of an existing project folder elsewhere, which makes it an "external" session like an attached one
+   * (fenced to that folder, shell commands always ask).
+   */
+  start(name: string, firstPrompt?: string, opts: { folder?: string } = {}): CcResult<{ session: CcSession }> {
     const max = this.cfg.maxSessions ?? 4
     if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
-    let slug = slugify(name)
-    const taken = new Set([...this.rts.values()].map((r) => path.basename(r.s.workspace)))
-    for (let i = 2; taken.has(slug); i++) slug = `${slugify(name)}-${i}`
-    const workspace = path.join(this.cfg.workspaceRoot, slug)
+    const root = path.resolve(this.cfg.workspaceRoot)
+    let workspace: string
+    let external = false
+    const folder = opts.folder?.trim()
+    if (folder && path.isAbsolute(folder)) {
+      workspace = path.resolve(folder)
+      if (workspace.toLowerCase() === root.toLowerCase()) return { ok: false, error: 'Pick a folder inside the workspace root, not the root itself.' }
+      if (!insideRoot(workspace, { root })) {
+        if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) return { ok: false, error: `No such folder: ${workspace}` }
+        // a drive or a top-level folder (D:\, D:\Downloads) is too broad to hand over
+        if (workspace.split(/[\\/]/).filter(Boolean).length < 3) {
+          return { ok: false, error: 'That folder is too broad (a drive or top-level folder). Pick a project folder.' }
+        }
+        external = true
+      }
+    } else if (folder) {
+      const slug = slugify(folder)
+      workspace = path.join(root, slug)
+    } else {
+      let slug = slugify(name)
+      const taken = new Set([...this.rts.values()].map((r) => path.basename(r.s.workspace)))
+      for (let i = 2; taken.has(slug); i++) slug = `${slugify(name)}-${i}`
+      workspace = path.join(root, slug)
+    }
     const t = this.now()
     const s: CcSession = {
-      id: `cc${++this.seq}-${t.toString(36)}`, name: name.trim() || slug, workspace, status: 'idle',
-      queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
+      id: `cc${++this.seq}-${t.toString(36)}`, name: name.trim() || path.basename(workspace), workspace, status: 'idle',
+      ...(external ? { external } : {}), queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
     }
-    try { (this.d.mkdir ?? ((p) => fs.mkdirSync(p, { recursive: true })))(workspace) } catch (e) {
+    if (!external) try { (this.d.mkdir ?? ((p) => fs.mkdirSync(p, { recursive: true })))(workspace) } catch (e) {
       return { ok: false, error: `Could not create the workspace: ${(e as Error).message}` }
     }
     this.rts.set(s.id, { s, events: [], lastText: '' })
@@ -277,13 +305,64 @@ export class ClaudeSessionManager {
   }
 
   /** Stop it and drop it from the list. Its workspace folder is left on disk. */
-  async remove(id: string): Promise<CcResult> {
-    if (!this.rts.has(id)) return { ok: false, error: 'No such session.' }
+  /**
+   * Stop it and drop it from the list. The folder stays unless `deleteFolder`, which is only allowed for a
+   * sandbox folder of its own under the workspace root: never a real project, never the root itself, and
+   * never a folder another session still uses.
+   */
+  async remove(id: string, opts: { deleteFolder?: boolean } = {}): Promise<CcResult<{ deletedFolder?: string }>> {
+    const r = this.rts.get(id)
+    if (!r) return { ok: false, error: 'No such session.' }
+    let target: string | undefined
+    if (opts.deleteFolder) {
+      const v = this.deletable(r)
+      if (!v.ok) return v
+      target = v.dir
+    }
     await this.stop(id)
     this.rts.delete(id)
+    if (target) {
+      try { (this.d.rmdir ?? ((p) => fs.rmSync(p, { recursive: true, force: true })))(target) } catch (e) {
+        this.d.persist?.(this.list())
+        this.emit({ type: 'removed', id })
+        return { ok: false, error: `Removed the session, but could not delete its folder: ${(e as Error).message}` }
+      }
+    }
     this.d.persist?.(this.list())
     this.emit({ type: 'removed', id })
-    return { ok: true }
+    return { ok: true, ...(target ? { deletedFolder: target } : {}) }
+  }
+
+  /** Can this session's folder be deleted? Only its own sandbox folder, directly under the workspace root. */
+  private deletable(r: Rt): CcResult<{ dir: string }> {
+    const root = path.resolve(this.cfg.workspaceRoot)
+    const dir = path.resolve(r.s.workspace)
+    if (r.s.external) return { ok: false, error: `${r.s.name} works in your own project folder; it is never deleted from here.` }
+    if (dir.toLowerCase() === root.toLowerCase() || path.dirname(dir).toLowerCase() !== root.toLowerCase() || !insideRoot(dir, { root })) {
+      return { ok: false, error: 'Its folder is not a sandbox folder under the workspace root, so it is kept.' }
+    }
+    const shared = [...this.rts.values()].some((o) => o !== r && path.resolve(o.s.workspace).toLowerCase() === dir.toLowerCase())
+    if (shared) return { ok: false, error: 'Another session still uses that folder, so it is kept.' }
+    return { ok: true, dir }
+  }
+
+  /** Folders directly under the workspace root, newest first (to reuse one for a new session). */
+  folders(): Array<{ name: string; path: string; mtime: number; inUse: boolean }> {
+    const root = path.resolve(this.cfg.workspaceRoot)
+    const used = new Set([...this.rts.values()].map((r) => path.resolve(r.s.workspace).toLowerCase()))
+    try {
+      return fs.readdirSync(root, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && !e.isSymbolicLink())
+        .map((e) => {
+          const p = path.join(root, e.name)
+          let mtime = 0
+          try { mtime = fs.statSync(p).mtimeMs } catch { /* vanished */ }
+          return { name: e.name, path: p, mtime, inUse: used.has(p.toLowerCase()) }
+        })
+        .sort((a, b) => b.mtime - a.mtime)
+    } catch {
+      return []
+    }
   }
 
   /** Remove a queued prompt (index 0-based). */

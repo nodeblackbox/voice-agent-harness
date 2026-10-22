@@ -58,6 +58,8 @@ export const IPC = {
   claudeExternal: 'claude:external',
   claudeExternalEvents: 'claude:external-events',
   claudeAttach: 'claude:attach',
+  claudeFolders: 'claude:folders',
+  claudePickFolder: 'claude:pick-folder',
   mcpStatus: 'mcp:status',
   mcpReload: 'mcp:reload',
   mcpTestTool: 'mcp:test-tool',

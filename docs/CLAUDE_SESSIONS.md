@@ -18,6 +18,8 @@ Claude Code view (rail) → Settings.
 | a shell command needs approval → "Is that okay?" → "yes" / "no" | `claude_answer` approve true/false |
 | "shut down landing page" | `claude_stop` (workspace and history kept; the next send resumes it) |
 | "start landing page over" | `claude_reset` → fresh conversation, same folder |
+| "get rid of slop one and slop two" (+ "and delete their files") | `claude_remove` → several at once; folders kept unless asked |
+| "start a session in the bing-bong-jiggly folder" / "…in D:\\Downloads\\my-app" | `claude_start` with `folder` (a workspace folder, or your project after a yes) |
 | "what files did it make?" | `claude_files` → newest files with sizes |
 | "what were my other Claude sessions about?" | `claude_recent` → your saved sessions from the terminal/IDE |
 | "pick up the build-fix session" (after a clear yes) | `claude_attach` → continues a copy of it here |
@@ -39,6 +41,14 @@ summary, so "answer it" works without you naming the session when only one is wa
 - **Preview**: web pages it builds, served read-only from the workspace over `ccws://` in a sandboxed frame
   (scripts run; no access to the app, no popups, no top navigation). Desktop/tablet/phone widths; reloads by
   itself when a tool finishes.
+
+## Managing sessions
+
+- **Remove**: from the ⋯ menu (keep the folder, or delete it) or **Select** in the sidebar to prune several at
+  once. Deleting is only ever allowed for a session's own sandbox folder directly under the workspace root: never
+  a project folder, never the root, never a folder another session still uses.
+- **Where it works**: the New form offers a new sandbox folder, an existing workspace folder, or **Browse…** for a
+  project folder (then it works in your real files, fenced to that folder, and every shell command asks).
 
 ## Your other sessions
 

@@ -52,6 +52,7 @@ export function toolLabel(toolName: string): string {
       claude_interrupt: 'Stopping Claude',
       claude_stop: 'Shutting down a session',
       claude_reset: 'Starting it fresh',
+      claude_remove: 'Removing sessions',
       claude_files: 'Looking at its files',
       claude_recent: 'Looking at your other sessions',
       claude_attach: 'Bringing that session in'

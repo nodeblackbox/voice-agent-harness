@@ -78,14 +78,17 @@ export class KokoroTtsEngine implements TtsEngine {
       return null
     }
     const t0 = performance.now()
-    try {
-      const buf = await this.backend.synth(req.text, this.voice(), kokoroSpeed(req.rate), signal)
-      req.onFirstByte?.(performance.now() - t0)
-      return buf
-    } catch (e) {
-      if (signal.aborted) throw abortError()
-      this.log(`kokoro synth failed: ${(e as Error).message}`)
-      return null
+    // one retry: a single hiccup would otherwise put a sentence in the Windows voice mid-reply
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const buf = await this.backend.synth(req.text, this.voice(), kokoroSpeed(req.rate), signal)
+        req.onFirstByte?.(performance.now() - t0)
+        return buf
+      } catch (e) {
+        if (signal.aborted) throw abortError()
+        this.log(`kokoro synth failed (attempt ${attempt}): ${(e as Error).message}`)
+        if (attempt >= 2) return null
+      }
     }
   }
 }

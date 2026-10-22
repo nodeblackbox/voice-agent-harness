@@ -119,7 +119,8 @@ export interface VoiceAgentApi {
   claude: {
     list(): Promise<CcSession[]>
     events(id: string, n?: number): Promise<CcEvent[]>
-    start(name: string, task?: string): Promise<CcResult<{ session: CcSession }>>
+    /** `folder`: a workspace folder name to reuse, or a full project path (works in your real files). */
+    start(name: string, task?: string, folder?: string): Promise<CcResult<{ session: CcSession }>>
     send(id: string, text: string, now?: boolean): Promise<CcResult<{ queued: boolean }>>
     answer(id: string, answer: CcAnswer): Promise<CcResult<{ said: string }>>
     interrupt(id: string, clearQueue?: boolean): Promise<CcResult>
@@ -128,8 +129,8 @@ export interface VoiceAgentApi {
     rename(id: string, name: string): Promise<CcResult>
     /** Fresh start: forget the conversation, keep the folder. */
     reset(id: string): Promise<CcResult>
-    /** Drop from the list; the folder stays on disk. */
-    remove(id: string): Promise<CcResult>
+    /** Drop from the list; the folder stays on disk unless `deleteFolder` (sandbox folders only). */
+    remove(id: string, deleteFolder?: boolean): Promise<CcResult<{ deletedFolder?: string }>>
     files(id: string): Promise<CcFile[]>
     read(id: string, rel: string): Promise<CcFileContent | { error: string }>
     /** Open the workspace (rel '') or a file in it: default app, Explorer, or VS Code. */
@@ -139,6 +140,10 @@ export interface VoiceAgentApi {
     externalEvents(sessionId: string, cwd?: string): Promise<CcEvent[]>
     /** Continue a saved session here (forks it; works in its own project folder). */
     attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>>
+    /** Folders directly under the workspace root, newest first. */
+    folders(): Promise<Array<{ name: string; path: string; mtime: number; inUse: boolean }>>
+    /** Native folder picker; null when cancelled. */
+    pickFolder(): Promise<string | null>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }

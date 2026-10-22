@@ -87,7 +87,7 @@ const api: VoiceAgentApi = {
   claude: {
     list: () => invoke(IPC.claudeList),
     events: (id, n) => invoke(IPC.claudeEvents, id, n),
-    start: (name, task) => invoke(IPC.claudeStart, name, task),
+    start: (name, task, folder) => invoke(IPC.claudeStart, name, task, folder),
     send: (id, text, now) => invoke(IPC.claudeSend, id, text, now),
     answer: (id, answer) => invoke(IPC.claudeAnswer, id, answer),
     interrupt: (id, clearQueue) => invoke(IPC.claudeInterrupt, id, clearQueue),
@@ -95,13 +95,15 @@ const api: VoiceAgentApi = {
     dequeue: (id, index) => invoke(IPC.claudeDequeue, id, index),
     rename: (id, name) => invoke(IPC.claudeRename, id, name),
     reset: (id) => invoke(IPC.claudeReset, id),
-    remove: (id) => invoke(IPC.claudeRemove, id),
+    remove: (id, deleteFolder) => invoke(IPC.claudeRemove, id, deleteFolder),
     files: (id) => invoke(IPC.claudeFiles, id),
     read: (id, rel) => invoke(IPC.claudeRead, id, rel),
     open: (id, rel, how) => invoke(IPC.claudeOpen, id, rel, how),
     external: () => invoke(IPC.claudeExternal),
     externalEvents: (sessionId, cwd) => invoke(IPC.claudeExternalEvents, sessionId, cwd),
-    attach: (x) => invoke(IPC.claudeAttach, x)
+    attach: (x) => invoke(IPC.claudeAttach, x),
+    folders: () => invoke(IPC.claudeFolders),
+    pickFolder: () => invoke(IPC.claudePickFolder)
   },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },

@@ -15,6 +15,7 @@ const claude = {
   rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
   external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
+  folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null),
 }
 ;(globalThis as { window: { api?: unknown } }).window.api = { claude, settings: { set: vi.fn(async (p: object) => p) } }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -211,7 +212,8 @@ describe('ClaudeView', () => {
     await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
     await click(button('Remove session'))
     expect(claude.remove).not.toHaveBeenCalled()
-    await click(button('Click again to remove'))
+    expect(button('Remove and delete the folder')).toBeTruthy()
+    await click(button('Remove, keep the folder'))
     expect(claude.remove).toHaveBeenCalledWith('s1')
     await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
     await click(button('Fresh start'))
@@ -291,5 +293,42 @@ describe('ClaudeView', () => {
     await click(button('Continue here'))
     expect(claude.attach).toHaveBeenCalledWith({ sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\Downloads\\AgentHarness' })
     expect(useStore.getState().claudeSelected).toBe('s9')
+  })
+
+  it('select mode prunes several sessions at once, optionally deleting their folders', async () => {
+    useStore.setState({ claudeSessions: [session(), session({ id: 's2', name: 'slop one', status: 'stopped' }), session({ id: 's3', name: 'slop two', status: 'stopped' })], claudeSelected: 's1' })
+    await render()
+    await click(button('Select'))
+    await click(button('slop one'))
+    await click(button('slop two'))
+    const box = host.querySelector('input[type="checkbox"]') as HTMLInputElement
+    await act(async () => { box.click() })
+    await click(button('Remove 2 sessions'))
+    expect(claude.remove).toHaveBeenCalledWith('s2', true)
+    expect(claude.remove).toHaveBeenCalledWith('s3', true)
+    expect(claude.remove).not.toHaveBeenCalledWith('s1', expect.anything())
+  })
+
+  it('an attached project session never offers to delete its folder', async () => {
+    useStore.setState({ claudeSessions: [session({ external: true, workspace: 'D:\\Downloads\\AgentHarness' })], claudeSelected: 's1' })
+    await render()
+    await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
+    await click(button('Remove session'))
+    expect(button('Remove and delete the folder')).toBeUndefined()
+  })
+
+  it('new session can reuse an existing workspace folder', async () => {
+    claude.folders.mockResolvedValue([{ name: 'bing-bong-jiggly', path: 'D:\\ws\\bing-bong-jiggly', mtime: 1, inUse: false }])
+    claude.start.mockResolvedValue({ ok: true, session: session({ id: 's5' }) })
+    await render()
+    await click(button('New'))
+    const name = host.querySelector('input[placeholder^="Session name"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'slop three')
+      name.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('bing-bong-jiggly'))
+    await click(button('Start'))
+    expect(claude.start).toHaveBeenCalledWith('slop three', undefined, 'bing-bong-jiggly')
   })
 })

@@ -28,6 +28,7 @@ import { claudeContextBlock, claudeTools } from './tools/claude'
 import type { ClaudeSessionManager } from './claude/manager'
 import { skillsBlock } from './prompts/skills'
 import { Speaker } from './speech/speaker'
+import { EdgeHealth } from './speech/edge-health'
 import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type KokoroBackend, type TtsEngine } from './speech/tts'
 import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
@@ -140,7 +141,6 @@ const MAX_EMPTY_RESUMES = 2
 /** A transcript normally lands well under 2 s after speech ends; past this the ears are stuck. */
 export const FINAL_OVERDUE_MS = 25_000
 /** How long turns stay on the fallback voice after Edge failed before Edge is tried again. */
-const EDGE_RETRY_AFTER_MS = 60_000
 
 export class Agent {
   readonly sm: StateMachine
@@ -149,7 +149,8 @@ export class Agent {
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
   /** After Edge degrades a turn, later turns skip straight to the fallback voice until then. */
-  private edgeDownUntil = 0
+  /** Edge TTS health: once it fails the local voice is kept until a background probe succeeds. */
+  private edgeHealth = new EdgeHealth()
   private location = new LocationProvider()
   private sessionId = ''
   private messages: ChatMessage[] = []
@@ -598,7 +599,7 @@ export class Agent {
           this.turn.chunks.set(chunk.seq, { seq: chunk.seq, text: chunk.text, kind: chunk.kind })
           this.deps.emitAudio({ ...chunk, emittedAt: Date.now() })
         },
-        onDegraded: () => this.edgeDegraded(),
+        onDegraded: (reason) => this.edgeDegraded(reason),
         log: this.deps.log,
         trace: (ev, data) => this.tr(ev, data)
       },
@@ -630,6 +631,7 @@ export class Agent {
     const speaker = this.newSpeaker(turnId, settings, !speakThisTurn, controller)
     // Open the Edge socket while the model thinks so the first sentence skips the handshake.
     const engine = this.engineFor(settings)
+    this.probeEdge(settings)
     if (speakThisTurn && engine === this.edge) {
       const t0 = Date.now()
       void this.edge.warm(settings.voice.voice).then((ok) => {
@@ -1017,7 +1019,7 @@ export class Agent {
         emit: (c) => {
           if (this.readTurn?.id === id) this.deps.emitAudio(c)
         },
-        onDegraded: () => this.edgeDegraded(),
+        onDegraded: (reason) => this.edgeDegraded(reason),
         log: this.deps.log
       },
       controller.signal
@@ -1073,19 +1075,36 @@ export class Agent {
   private engineFor(s: Settings): TtsEngine {
     if (s.voice.engine === 'system') return this.system
     if (s.voice.engine === 'kokoro') return this.kokoro ?? this.system
-    return Date.now() < this.edgeDownUntil ? this.fallbackEngine() : this.edge
+    return this.edgeHealth.down ? this.fallbackEngine() : this.edge
   }
 
   private fallbackEngine(): TtsEngine {
     return this.kokoro ?? this.system
   }
 
-  private edgeDegraded(): void {
-    const wasDown = Date.now() < this.edgeDownUntil
-    this.edgeDownUntil = Date.now() + EDGE_RETRY_AFTER_MS
-    this.tr('tts.edge_down', { retryInMs: EDGE_RETRY_AFTER_MS, fallback: this.fallbackEngine().name })
+  private edgeDegraded(reason: string): void {
+    const wasDown = this.edgeHealth.down
+    if (wasDown) return // a turn that started on Edge just before a probe marked it down again
+    const retryInMs = this.edgeHealth.fail(reason)
+    this.tr('tts.edge_down', { retryInMs, reason: reason.slice(0, 120), fallback: this.fallbackEngine().name })
     if (this.kokoro) void this.deps.kokoro?.start()
-    if (!wasDown) this.toast('warn', this.kokoro ? "Edge TTS is unreachable; switching to the local Kokoro voice (the Windows voice covers while it loads)." : 'Edge TTS is failing; using the system voice for now.')
+    const why = /\b429\b/.test(reason) ? 'Edge TTS is rate-limiting us' : 'Edge TTS is unreachable'
+    this.toast('warn', this.kokoro
+      ? `${why}; using the local Kokoro voice until it recovers (the Windows voice covers while Kokoro loads).`
+      : `${why}; using the system voice until it recovers.`)
+  }
+
+  /** Between turns: check quietly whether Edge works again, and switch back for the NEXT reply if so. */
+  private probeEdge(s: Settings): void {
+    if (s.voice.engine !== 'edge' || !this.edgeHealth.probeDue()) return
+    const check = async () => {
+      const buf = await this.edge.synth({ text: 'OK.', voice: s.voice.voice, rate: s.voice.rate, pitch: s.voice.pitch }, AbortSignal.timeout(10_000))
+      if (!buf?.length) throw new Error('empty audio')
+    }
+    void this.edgeHealth.probe(check).then((r) => {
+      this.tr('tts.edge_probe', { ok: r.ok, reason: r.reason?.slice(0, 120), retryInMs: r.waitMs })
+      if (r.ok) this.toast('info', 'Edge voice is back.')
+    })
   }
 
   private style(s: Settings): PromptStyle {

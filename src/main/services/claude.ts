@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { net, shell } from 'electron'
+import { BrowserWindow, dialog, net, shell } from 'electron'
 import type { CcResult, CcSession } from '@shared/claude'
 import type { Settings } from '@shared/types'
 import { resolveInside } from '@core/claude/files'
@@ -51,6 +51,14 @@ export class ClaudeService {
     const s = this.manager.get(id)
     if (!s) return null
     return rel ? resolveInside(s.workspace, rel) : s.workspace
+  }
+
+  /** Native folder picker for "work in this folder", starting in the workspace root. */
+  async pickFolder(): Promise<string | null> {
+    const win = BrowserWindow.getFocusedWindow()
+    const opts = { title: 'Choose the folder this session works in', defaultPath: this.settings().claude.workspaceRoot, properties: ['openDirectory' as const, 'createDirectory' as const] }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
   }
 
   async open(id: string, rel: string, how: 'default' | 'reveal' | 'code'): Promise<CcResult> {
