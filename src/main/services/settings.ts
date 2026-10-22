@@ -25,7 +25,8 @@ export const DEFAULT_SETTINGS: Settings = {
   behaviour: { confirmBeforeSave: false, fillerBeforeTools: true, loadingSound: true, speakTypedReplies: true, listenOnLaunch: false },
   location: { mode: 'manual', manual: '' },
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
-  mcp: { enabled: true }
+  mcp: { enabled: true },
+  claude: { enabled: false, workspaceRoot: 'D:\\Downloads\\VoiceAgentWorkspaces', model: '', maxSessions: 4, approveShell: true }
 }
 
 const ENV_KEYS: Record<Provider, string[]> = {

@@ -13,6 +13,8 @@ export interface PromptContext {
   skillsBlock: string
   toolNames: string[]
   fillerEnabled: boolean
+  /** Live summary of Claude Code sessions; present only when voice control of Claude is on. */
+  claudeBlock?: string
 }
 
 const PERSONA = `You are {agent_name}, a voice assistant talking with {user_name} out loud through a speaker. Everything you write is spoken by a text-to-speech engine the moment a sentence ends, so write the way a sharp, friendly person talks, not the way documents look.
@@ -52,6 +54,15 @@ const TOOL_RULES = `Tools
 - After a tool returns, answer from its result in your normal style. Mention a source in words ("according to the BBC") rather than pasting URLs, unless the style allows markdown links.
 - If a tool fails or returns nothing useful, say so plainly and answer from what you know, flagging the uncertainty.`
 
+const CLAUDE_RULES = `Claude Code sessions (you manage them for {user_name}; they run in the background in sandboxed workspaces)
+- Current sessions, always up to date:
+{claude}
+- You talk, they work. Use claude_start for a new job, claude_send to add to an existing one (it queues if busy), claude_status to report what happened, claude_interrupt to stop what it is doing, claude_stop to shut it down.
+- Write the brief you hand to a session as a complete, self-contained instruction; it cannot hear this conversation.
+- When a session is WAITING ON THE USER, tell {user_name} what it asks in one or two plain sentences with the options numbered, then wait. When they answer ("the second one", "yes go ahead", "no, use Postgres"), call claude_answer. Never answer for them and never guess; if their reply is ambiguous, ask once.
+- If {user_name} says stop, hold on or cancel about a session, call claude_interrupt right away, then confirm in a few words.
+- Report results briefly and spoken-friendly: what was done and what to look at, not file listings or code. Sessions can only touch their own workspace; if one says an action was blocked, say so plainly.`
+
 const FILLER_ON = `Do not announce that you are about to use a tool; the app already says "let me check" for you. Just call it.`
 const FILLER_OFF = `Before a tool call that may take a moment, say in a few words what you are doing, then call it.`
 
@@ -83,10 +94,12 @@ export function composeSystemPrompt(style: PromptStyle, ctx: PromptContext): str
       .replaceAll('{filler_rule}', ctx.fillerEnabled ? FILLER_ON : FILLER_OFF)
       .replaceAll('{memory}', ctx.memoryBlock)
       .replaceAll('{skills}', ctx.skillsBlock)
+      .replaceAll('{claude}', ctx.claudeBlock ?? '')
 
   const parts = [fill(PERSONA), `Style: ${style.label}\n${fill(style.body)}`, fill(style.format === 'plain' ? PLAIN_RULES : MARKDOWN_RULES)]
   if (ctx.toolNames.length) parts.push(fill(TOOL_RULES))
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
+  if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))
   parts.push(fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : ''))
   if (ctx.memoryBlock.trim()) parts.push(fill(MEMORY))
   return parts.join('\n\n')

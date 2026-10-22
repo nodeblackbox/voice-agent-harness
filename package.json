@@ -24,6 +24,7 @@
     "lab:interrupt": "tsx lab/claude-sdk/01-interrupt.ts",
     "lab:ask-user": "tsx lab/claude-sdk/02-ask-user.ts",
     "lab:permissions": "tsx lab/claude-sdk/03-permissions.ts",
+    "lab:manager": "tsx lab/claude-sdk/05-manager.ts",
     "lab:fence": "tsx lab/claude-sdk/04-fence.ts"
   },
   "dependencies": {

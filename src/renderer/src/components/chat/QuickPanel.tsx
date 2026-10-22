@@ -10,7 +10,8 @@ const SERVICE_LABELS: Record<ServiceName, string> = {
   tts: 'Voice (Edge TTS)',
   llm: 'Brain',
   searxng: 'SearXNG',
-  mcp: 'MCP'
+  mcp: 'MCP',
+  claude: 'Claude Code'
 }
 
 const ORDER: ServiceName[] = ['sidecar', 'tts', 'llm', 'searxng', 'mcp']

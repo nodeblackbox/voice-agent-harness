@@ -2,6 +2,7 @@ import type { ToolActivity, ToolSource } from '@shared/types'
 
 export function toolKind(name: string): ToolActivity['kind'] {
   if (name.startsWith('mcp__')) return 'mcp'
+  if (name.startsWith('claude_')) return 'claude'
   if (name === 'web_search' || name === 'research') return 'search'
   if (name === 'read_page') return 'read'
   if (name === 'remember' || name === 'recall' || name === 'forget' || name === 'search_history' || name === 'update_memory') return 'memory'
@@ -41,6 +42,18 @@ export function describeInput(name: string, input: unknown): string {
       return i.id !== undefined ? `#${String(i.id)}` : ''
     case 'current_time':
       return ''
+    case 'claude_start':
+      return typeof i.name === 'string' ? `${i.name}${typeof i.task === 'string' && i.task ? ` · ${str(i.task, 70)}` : ''}` : ''
+    case 'claude_send':
+      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${str(i.prompt, 80)}${i.mode === 'now' ? ' (now)' : ''}`
+    case 'claude_answer':
+      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${Array.isArray(i.choice) ? `option ${i.choice.join(', ')}` : typeof i.text === 'string' ? `“${str(i.text, 60)}”` : i.approve === true ? 'approve' : i.approve === false ? 'deny' : ''}`
+    case 'claude_list':
+      return ''
+    case 'claude_status':
+    case 'claude_interrupt':
+    case 'claude_stop':
+      return typeof i.session === 'string' ? i.session : ''
     default: {
       const entries = Object.entries(i)
       return entries.length ? entries.map(([k, v]) => `${k}=${str(v, 40)}`).join(' ') : ''
@@ -95,6 +108,20 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     }
     case 'current_time':
       return { detail: (o as { now?: string })?.now }
+    case 'claude_list':
+      return { detail: `${((o as { sessions?: unknown[] })?.sessions ?? []).length} sessions` }
+    case 'claude_start':
+    case 'claude_send':
+    case 'claude_answer':
+    case 'claude_interrupt':
+    case 'claude_stop': {
+      const r = o as { status?: string; error?: string; session?: unknown } | undefined
+      return { detail: r?.error ?? r?.status }
+    }
+    case 'claude_status': {
+      const r = o as { status?: string; error?: string } | undefined
+      return { detail: r?.error ?? r?.status }
+    }
     default:
       return { detail: str(o, 90) }
   }

@@ -43,7 +43,14 @@ export function toolLabel(toolName: string): string {
       remember: 'Saving to memory',
       update_memory: 'Updating memory',
       forget: 'Asking to forget',
-      current_time: 'Checking the time'
+      current_time: 'Checking the time',
+      claude_list: 'Listing sessions',
+      claude_start: 'Starting a session',
+      claude_send: 'Sending to Claude',
+      claude_status: 'Checking on Claude',
+      claude_answer: 'Answering Claude',
+      claude_interrupt: 'Stopping Claude',
+      claude_stop: 'Shutting down a session'
     }[toolName] ?? toolName
   )
 }

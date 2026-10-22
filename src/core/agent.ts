@@ -24,6 +24,8 @@ import { findModel } from './providers/models'
 import { SentenceChunker } from './speech/chunker'
 import { toolLabel } from './speech/fillers'
 import { describeInput, describeOutput, mcpServerOf, toolKind } from './tools/describe'
+import { claudeContextBlock, claudeTools } from './tools/claude'
+import type { ClaudeSessionManager } from './claude/manager'
 import { skillsBlock } from './prompts/skills'
 import { Speaker } from './speech/speaker'
 import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type KokoroBackend, type TtsEngine } from './speech/tts'
@@ -59,6 +61,8 @@ export interface AgentDeps {
   skills: () => Skill[]
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
+  /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
+  claude?: ClaudeSessionManager
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
@@ -688,6 +692,7 @@ export class Agent {
       projectName: this.projectName(settings),
       memoryBlock: memory.block,
       skillsBlock: skillsBlock(this.deps.skills()),
+      claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -891,6 +896,7 @@ export class Agent {
     this.deps.emit({ type: 'cue', on: false })
     this.sm.done()
     this.deps.emit({ type: 'context', snapshot: this.snapshot() })
+    this.pumpAnnouncements()
   }
 
   private applySpokenSplit(t: ActiveTurn, a: ChatMessage, cut: CutPoint | null): void {
@@ -1141,7 +1147,83 @@ export class Agent {
     }
     if (this.deps.search.configured()) Object.assign(tools, searchTools(this.deps.search))
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
+    if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))
     return tools
+  }
+
+  private claudeOn(s: Settings): boolean {
+    return !!this.deps.claude && s.claude.enabled
+  }
+
+  // ---- proactive speech (Claude session events) --------------------------------------------
+  private announceQueue: string[] = []
+  private announceTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Say something unprompted (a session has a question, a job finished). Waits for a quiet moment; never cuts anyone off. */
+  announce(text: string): void {
+    const clean = text.trim()
+    if (!clean) return
+    this.announceQueue.push(clean)
+    this.tr('announce.queued', { text: clean, queued: this.announceQueue.length })
+    this.pumpAnnouncements()
+  }
+
+  private pumpAnnouncements(): void {
+    if (this.announceTimer || !this.announceQueue.length) return
+    const quiet = !this.turn && (this.sm.state === 'idle' || this.sm.state === 'listening')
+    if (quiet) {
+      void this.speakAnnouncement(this.announceQueue.splice(0).join(' '))
+      return
+    }
+    this.announceTimer = setTimeout(() => {
+      this.announceTimer = null
+      this.pumpAnnouncements()
+    }, 800)
+    this.announceTimer.unref?.()
+  }
+
+  private async speakAnnouncement(text: string): Promise<void> {
+    const settings = this.deps.settings()
+    const turnId = crypto.randomUUID()
+    const controller = new AbortController()
+    const silent = !this.micOn && !settings.behaviour.speakTypedReplies
+    const speaker = this.newSpeaker(turnId, settings, silent, controller)
+    const assistant: ChatMessage = { id: crypto.randomUUID(), turnId, sessionId: this.sessionId, role: 'assistant', text, createdAt: Date.now() }
+    const turn: ActiveTurn = {
+      id: turnId,
+      controller,
+      assistant,
+      chunks: new Map(),
+      startedSeqs: new Set(),
+      finishedSeqs: new Set(),
+      speaker,
+      llmDone: false,
+      drained: false,
+      startedAt: Date.now(),
+      ttsDroppedBefore: edgeTtsStats.droppedFrames
+    }
+    this.turn = turn
+    this.mergeable = null
+    this.upsert(assistant)
+    this.sm.think()
+    this.deps.ears.agentSpeaking(true)
+    this.tr('turn.announce', { text })
+
+    const filter = new SpeakableFilter(this.style(settings).format)
+    const chunker = new SentenceChunker(settings.speech.maxChars, settings.speech.firstMinWords)
+    for (const sentence of chunker.feed(filter.feed(text))) speaker.say(sentence)
+    for (const sentence of chunker.flush()) speaker.say(sentence)
+    try {
+      await speaker.finish()
+      if (this.turn !== turn) return
+      turn.llmDone = true
+      if (silent || turn.drained) this.finishTurn(turn)
+      else this.armDrainTimeout(turn)
+    } catch (e) {
+      if (this.turn !== turn) return
+      this.deps.log(`announcement failed: ${(e as Error).message}`)
+      this.finishTurn(turn)
+    }
   }
 
   private upsert(m: ChatMessage): void {

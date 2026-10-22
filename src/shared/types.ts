@@ -1,6 +1,7 @@
 // Shared contracts between main, preload, renderer and the agent core.
 // Everything crossing an IPC boundary is defined here.
 
+import type { CcManagerEvent } from './claude'
 import type { TuningValues } from './tuning'
 
 export type Provider = 'anthropic' | 'groq' | 'google' | 'xai'
@@ -30,7 +31,7 @@ export type AgentState =
   | 'speaking'
   | 'interrupted'
 
-export type ServiceName = 'sidecar' | 'searxng' | 'mcp' | 'tts' | 'llm'
+export type ServiceName = 'sidecar' | 'searxng' | 'mcp' | 'tts' | 'llm' | 'claude'
 export type ServiceState = 'off' | 'starting' | 'ready' | 'error' | 'reconnecting'
 
 export interface ServiceStatus {
@@ -63,7 +64,7 @@ export interface ToolSource {
 export interface ToolActivity {
   name: string
   label: string
-  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'other'
+  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'claude' | 'other'
   status: ToolStatus
   startedAt: number
   endedAt?: number
@@ -363,6 +364,18 @@ export interface LocationSettings {
   manual: string
 }
 
+export interface ClaudeSettings {
+  /** Voice control of Claude Code sessions (adds the claude_* tools and the Claude view). */
+  enabled: boolean
+  /** Every session workspace is created directly under this folder; sessions cannot leave their own. */
+  workspaceRoot: string
+  /** Model for sessions; empty = the Claude Code default. */
+  model: string
+  maxSessions: number
+  /** Ask by voice before a session runs a shell command. */
+  approveShell: boolean
+}
+
 export interface Settings {
   modelId: string
   fallbackModelId: string
@@ -386,6 +399,7 @@ export interface Settings {
   location: LocationSettings
   searxng: { url: string; autostart: boolean }
   mcp: { enabled: boolean }
+  claude: ClaudeSettings
 }
 
 export interface KeyStatus {
@@ -463,6 +477,7 @@ export type AgentEvent =
   | { type: 'context'; snapshot: ContextSnapshot }
   | { type: 'skills-changed' }
   | { type: 'mcp-changed' }
+  | { type: 'claude'; event: CcManagerEvent }
 
 export interface AudioChunk {
   turnId: string

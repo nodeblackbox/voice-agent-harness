@@ -84,6 +84,16 @@ const api: VoiceAgentApi = {
     searxngEnsure: () => invoke(IPC.searxngEnsure),
     sidecarRestart: () => invoke(IPC.sidecarRestart)
   },
+  claude: {
+    list: () => invoke(IPC.claudeList),
+    events: (id, n) => invoke(IPC.claudeEvents, id, n),
+    start: (name, task) => invoke(IPC.claudeStart, name, task),
+    send: (id, text, now) => invoke(IPC.claudeSend, id, text, now),
+    answer: (id, answer) => invoke(IPC.claudeAnswer, id, answer),
+    interrupt: (id, clearQueue) => invoke(IPC.claudeInterrupt, id, clearQueue),
+    stop: (id) => invoke(IPC.claudeStop, id),
+    dequeue: (id, index) => invoke(IPC.claudeDequeue, id, index)
+  },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },
   log: { write: (level, scope, msg) => ipcRenderer.send(IPC.logWrite, level, scope, msg) },

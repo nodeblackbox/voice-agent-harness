@@ -11,6 +11,8 @@ import type { SettingsService } from '../services/settings'
 import type { SidecarService } from '../services/sidecar'
 import type { SearxngService } from '../services/searxng'
 import type { McpService } from '../services/mcp'
+import type { ClaudeService } from '../services/claude'
+import type { CcAnswer } from '@shared/claude'
 import { log, logAt } from '../services/log'
 import { diagnosticsReport, lastTurn, listLogs, openLogsFolder, readTrace, sessionAnalysis, suggestTuning, tailLog } from '../services/diagnostics'
 
@@ -24,6 +26,7 @@ export interface IpcDeps {
   sidecar: SidecarService
   searxng: SearxngService
   mcp: McpService
+  claude: ClaudeService
   services: () => ServiceStatus[]
   broadcastSettings(s: Settings): void
 }
@@ -154,6 +157,14 @@ export function registerIpc(d: IpcDeps): void {
   })
 
   h(IPC.servicesStatus, () => d.services())
+  h(IPC.claudeList, () => d.claude.manager.list())
+  h(IPC.claudeEvents, (_e, id: string, n?: number) => d.claude.manager.events(id, n))
+  h(IPC.claudeStart, (_e, name: string, task?: string) => d.claude.manager.start(name, task))
+  h(IPC.claudeSend, (_e, id: string, text: string, now?: boolean) => d.claude.manager.send(id, text, { now: !!now }))
+  h(IPC.claudeAnswer, (_e, id: string, answer: CcAnswer) => d.claude.manager.answer(id, answer))
+  h(IPC.claudeInterrupt, (_e, id: string, clearQueue?: boolean) => d.claude.manager.interrupt(id, { clearQueue: !!clearQueue }))
+  h(IPC.claudeStop, (_e, id: string) => d.claude.manager.stop(id))
+  h(IPC.claudeDequeue, (_e, id: string, index: number) => d.claude.manager.dequeue(id, index))
   h(IPC.mcpStatus, () => d.mcp.statuses())
   h(IPC.mcpReload, () => d.mcp.reload())
   h(IPC.mcpConfig, () => d.mcp.config())

@@ -1,3 +1,4 @@
+import type { CcAnswer, CcEvent, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -113,6 +114,17 @@ export interface VoiceAgentApi {
     mcpSetConfig(servers: McpServerConfig[]): Promise<McpServerStatus[]>
     searxngEnsure(): Promise<ServiceStatus>
     sidecarRestart(): Promise<void>
+  }
+  /** Claude Code sessions managed by the voice agent. Live changes arrive as `{type:'claude'}` events. */
+  claude: {
+    list(): Promise<CcSession[]>
+    events(id: string, n?: number): Promise<CcEvent[]>
+    start(name: string, task?: string): Promise<CcResult<{ session: CcSession }>>
+    send(id: string, text: string, now?: boolean): Promise<CcResult<{ queued: boolean }>>
+    answer(id: string, answer: CcAnswer): Promise<CcResult<{ said: string }>>
+    interrupt(id: string, clearQueue?: boolean): Promise<CcResult>
+    stop(id: string): Promise<CcResult>
+    dequeue(id: string, index: number): Promise<CcResult>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }

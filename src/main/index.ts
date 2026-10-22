@@ -12,6 +12,8 @@ import { SettingsService } from './services/settings'
 import { SidecarService } from './services/sidecar'
 import { SearxngService } from './services/searxng'
 import { KokoroService } from './services/kokoro'
+import { ClaudeService } from './services/claude'
+import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { setupTraining } from './training'
@@ -194,6 +196,8 @@ app.whenReady().then(async () => {
     onStatus
   })
 
+  const claude = new ClaudeService(userData, () => settings.get())
+
   const agent = new Agent({
     store,
     settings: () => training?.settings(settings.get()) ?? settings.get(),
@@ -201,6 +205,7 @@ app.whenReady().then(async () => {
     customStyles: () => (training ? [...settings.styles(), ...training.styles] : settings.styles()),
     skills: () => settings.skills(),
     mcp,
+    claude: claude.manager,
     search: { baseUrl: () => searxng.baseUrl(), ensure: () => searxng.ensure(), configured: () => searxng.configured() },
     ears: {
       agentSpeaking: (on) => sidecar.agentSpeaking(on),
@@ -263,6 +268,7 @@ app.whenReady().then(async () => {
     sidecar,
     searxng,
     mcp,
+    claude,
     services,
     broadcastSettings: (s) => emit({ type: 'settings-changed', settings: s })
   })
@@ -277,6 +283,13 @@ app.whenReady().then(async () => {
   // the dev replay harnesses wait for the ears, so they start them too
   if (settings.get().behaviour.listenOnLaunch || (isDev && (process.env.VA_WAV || process.env.VA_MIC))) sidecar.start()
   void mcp.reload()
+  // Claude session events: stream to the UI, and speak the ones that need the user (a question, an approval, a finished job)
+  claude.manager.on((event) => {
+    emit({ type: 'claude', event })
+    if (!claude.enabled()) return
+    const line = announcement(event)
+    if (line) agent.announce(line)
+  })
   if (isDev && process.env.VA_SAY) setTimeout(() => void agent.send(process.env.VA_SAY!), 4000)
   if (isDev && process.env.VA_VIEW) {
     // switch to a rail view by its label (e.g. Diagnostics) before a VA_SCREENSHOT is taken
@@ -334,6 +347,7 @@ app.whenReady().then(async () => {
     kokoro.stop()
     searxng.stop()
     void mcp.stop()
+    void claude.stop()
     store.close()
   })
 })
