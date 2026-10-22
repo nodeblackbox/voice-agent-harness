@@ -1,8 +1,8 @@
 /** Types for voice-managed Claude Code sessions. Electron-free: shared by the manager, tools and IPC. */
 
-import type { CcAnswer, CcEvent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
 
-export type { CcAnswer, CcEvent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
+export type { CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
 
 // ---- SDK seam (real implementation in sdk.ts, a scripted fake in tests) ----
 

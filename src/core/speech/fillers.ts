@@ -50,7 +50,9 @@ export function toolLabel(toolName: string): string {
       claude_status: 'Checking on Claude',
       claude_answer: 'Answering Claude',
       claude_interrupt: 'Stopping Claude',
-      claude_stop: 'Shutting down a session'
+      claude_stop: 'Shutting down a session',
+      claude_reset: 'Starting it fresh',
+      claude_files: 'Looking at its files'
     }[toolName] ?? toolName
   )
 }

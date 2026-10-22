@@ -163,3 +163,46 @@ select:focus {
 input[type='range'] {
   accent-color: #4fd1ff;
 }
+
+/* Claude Code view */
+@keyframes vaClaudeBreathe {
+  0%,
+  100% {
+    transform: scale(0.88);
+    filter: drop-shadow(0 0 0 rgba(217, 119, 87, 0));
+  }
+  50% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 6px rgba(217, 119, 87, 0.55));
+  }
+}
+
+.va-claude-working {
+  animation: vaClaudeBreathe 1.8s ease-in-out infinite;
+}
+
+.va-claude-spin {
+  transform-origin: 0 0;
+  animation: vaSpin 9s linear infinite;
+}
+
+.va-term {
+  background: #07080a;
+  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+}
+
+.va-code-line:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.va-tree-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.va-tool-card {
+  transition: border-color 0.15s ease;
+}
+
+.va-tool-card:hover {
+  border-color: #2f343b !important;
+}

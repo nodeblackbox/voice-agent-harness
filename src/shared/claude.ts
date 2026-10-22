@@ -18,7 +18,32 @@ export interface CcEvent {
   t: number
   kind: 'user' | 'text' | 'tool' | 'tool_result' | 'denied' | 'result' | 'error' | 'status' | 'interrupt'
   text: string
+  /** tool / tool_result: the SDK tool_use id that pairs a call with its output. */
+  toolId?: string
+  /** tool: the tool name and its input (long strings clipped), for rich rendering. */
+  tool?: string
+  input?: Record<string, unknown>
+  /** tool_result: the tool reported a failure. */
+  isError?: boolean
+  /** result: how the turn went. */
+  durationMs?: number
+  costUsd?: number
+  turns?: number
 }
+
+/** One entry of a session's workspace listing; `path` is relative with forward slashes. */
+export interface CcFile {
+  path: string
+  dir: boolean
+  size: number
+  mtime: number
+  /** A folder that is not listed (node_modules, .git, …) or the listing hit its cap. */
+  skipped?: boolean
+}
+
+export type CcFileContent =
+  | { kind: 'text'; text: string; size: number; truncated: boolean }
+  | { kind: 'binary'; size: number }
 
 /** Serializable snapshot, safe to send over IPC. */
 export interface CcSession {
@@ -42,6 +67,7 @@ export type CcManagerEvent =
   | { type: 'event'; id: string; event: CcEvent }
   | { type: 'needs-input'; id: string; name: string; pending: CcPending }
   | { type: 'finished'; id: string; name: string; summary: string }
+  | { type: 'removed'; id: string }
 
 export type CcAnswer =
   | { kind: 'choice'; choices: number[]; text?: undefined } // 1-based option numbers

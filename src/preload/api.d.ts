@@ -1,4 +1,4 @@
-import type { CcAnswer, CcEvent, CcResult, CcSession } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -125,6 +125,15 @@ export interface VoiceAgentApi {
     interrupt(id: string, clearQueue?: boolean): Promise<CcResult>
     stop(id: string): Promise<CcResult>
     dequeue(id: string, index: number): Promise<CcResult>
+    rename(id: string, name: string): Promise<CcResult>
+    /** Fresh start: forget the conversation, keep the folder. */
+    reset(id: string): Promise<CcResult>
+    /** Drop from the list; the folder stays on disk. */
+    remove(id: string): Promise<CcResult>
+    files(id: string): Promise<CcFile[]>
+    read(id: string, rel: string): Promise<CcFileContent | { error: string }>
+    /** Open the workspace (rel '') or a file in it: default app, Explorer, or VS Code. */
+    open(id: string, rel: string, how: 'default' | 'reveal' | 'code'): Promise<CcResult>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }

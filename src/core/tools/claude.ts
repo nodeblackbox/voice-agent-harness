@@ -113,6 +113,28 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
         const r = await m.stop(f.session.id)
         return r.ok ? { status: 'stopped', session: f.session.name } : { status: 'failed', error: r.error }
       }
+    }),
+
+    claude_reset: tool({
+      description: 'Fresh start for a session: stop it and forget its conversation so the next instruction begins a new one. Its folder and files are kept. Use for "start over", "restart it", "clear its memory".',
+      inputSchema: z.object({ session: sessionRef }),
+      execute: async ({ session }) => {
+        const f = find(session)
+        if (!f.ok) return { status: 'failed', error: f.error }
+        const r = await m.reset(f.session.id)
+        return r.ok ? { status: 'fresh start', session: f.session.name } : { status: 'failed', error: r.error }
+      }
+    }),
+
+    claude_files: tool({
+      description: "The files in a session's workspace folder (newest first, with sizes). Use when the user asks what it made, what is in the folder, or which file changed.",
+      inputSchema: z.object({ session: sessionRef }),
+      execute: async ({ session }) => {
+        const f = find(session)
+        if (!f.ok) return { status: 'failed', error: f.error }
+        const files = m.files(f.session.id).filter((x) => !x.dir).sort((a, b) => b.mtime - a.mtime)
+        return { session: f.session.name, count: files.length, files: files.slice(0, 25).map((x) => ({ path: x.path, kb: Math.round(x.size / 102.4) / 10, modified: new Date(x.mtime).toLocaleTimeString() })) }
+      }
     })
   }
 }

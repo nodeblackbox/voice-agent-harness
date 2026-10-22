@@ -53,6 +53,8 @@ export function describeInput(name: string, input: unknown): string {
     case 'claude_status':
     case 'claude_interrupt':
     case 'claude_stop':
+    case 'claude_reset':
+    case 'claude_files':
       return typeof i.session === 'string' ? i.session : ''
     default: {
       const entries = Object.entries(i)
@@ -114,6 +116,7 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_send':
     case 'claude_answer':
     case 'claude_interrupt':
+    case 'claude_reset':
     case 'claude_stop': {
       const r = o as { status?: string; error?: string; session?: unknown } | undefined
       return { detail: r?.error ?? r?.status }
@@ -121,6 +124,10 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_status': {
       const r = o as { status?: string; error?: string } | undefined
       return { detail: r?.error ?? r?.status }
+    }
+    case 'claude_files': {
+      const r = o as { count?: number; error?: string } | undefined
+      return { detail: r?.error ?? `${r?.count ?? 0} files` }
     }
     default:
       return { detail: str(o, 90) }

@@ -244,6 +244,7 @@ export const useStore = create<Store>((set, get) => ({
           const next = applyClaudeEvent({ sessions: get().claudeSessions, output: get().claudeOutput }, e.event)
           set({ claudeSessions: next.sessions, claudeOutput: next.output })
           if (e.event.type === 'session' && !get().claudeSelected) set({ claudeSelected: e.event.session.id })
+          if (e.event.type === 'removed' && get().claudeSelected === e.event.id) set({ claudeSelected: next.sessions[0]?.id ?? null })
           if (e.event.type === 'needs-input') get().pushToast('warn', `${e.event.name} needs you`)
           break
         }

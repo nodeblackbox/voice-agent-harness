@@ -293,3 +293,39 @@ describe('digest', () => {
     expect(digest([{ t: 0, kind: 'result', text: 'x'.repeat(500) }], 50).length).toBeLessThanOrEqual(50)
   })
 })
+
+describe('rich events and session management', () => {
+  it('pairs tool calls with their output, clips big inputs, and records turn stats', async () => {
+    const { m, runs } = setup()
+    const id = (m.start('rich', 'go') as any).session.id
+    await tick()
+    runs[0]!.emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: 'a.html', content: 'x'.repeat(9000) } }] } })
+    runs[0]!.emit({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu1', content: [{ type: 'text', text: 'File created' }] }] } })
+    runs[0]!.emit({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu2', content: 'boom', is_error: true }] } })
+    runs[0]!.result('done', { duration_ms: 4200 })
+    await tick()
+    const ev = m.events(id)
+    const call = ev.find((e) => e.kind === 'tool')!
+    expect(call).toMatchObject({ tool: 'Write', toolId: 'tu1', text: 'Write a.html' })
+    expect(String(call.input!.content).length).toBeLessThan(8100)
+    expect(ev.filter((e) => e.kind === 'tool_result')).toMatchObject([{ toolId: 'tu1', text: 'File created' }, { toolId: 'tu2', text: 'boom', isError: true }])
+    expect(ev.find((e) => e.kind === 'result')).toMatchObject({ durationMs: 4200, costUsd: 0.01, turns: 1 })
+  })
+
+  it('rename, fresh start (forgets the conversation) and remove', async () => {
+    const { m, runs, events } = setup()
+    const id = (m.start('old', 'go') as any).session.id
+    await tick()
+    runs[0]!.init('sdk-x'); runs[0]!.result('ok'); await tick()
+    expect(m.rename(id, '  New name ')).toEqual({ ok: true })
+    expect(m.get(id)!.name).toBe('New name')
+    expect(await m.reset(id)).toEqual({ ok: true })
+    expect(m.get(id)).toMatchObject({ status: 'idle', sdkSessionId: undefined })
+    m.send(id, 'again'); await tick()
+    expect(runs[1]!.opts.resume).toBeUndefined()
+    expect(await m.remove(id)).toEqual({ ok: true })
+    expect(m.list()).toEqual([])
+    expect(events.some((e) => e.type === 'removed' && e.id === id)).toBe(true)
+    expect(await m.remove(id)).toMatchObject({ ok: false })
+  })
+})

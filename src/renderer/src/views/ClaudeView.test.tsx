@@ -12,6 +12,8 @@ const ok = { ok: true }
 const claude = {
   list: vi.fn(), events: vi.fn().mockResolvedValue([]), start: vi.fn(), send: vi.fn().mockResolvedValue({ ok: true, queued: false }),
   answer: vi.fn().mockResolvedValue({ ok: true, said: 'x' }), interrupt: vi.fn().mockResolvedValue(ok), stop: vi.fn().mockResolvedValue(ok), dequeue: vi.fn().mockResolvedValue(ok),
+  rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
+  files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
 }
 ;(globalThis as { window: { api?: unknown } }).window.api = { claude, settings: { set: vi.fn(async (p: object) => p) } }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -36,6 +38,7 @@ beforeEach(() => {
   // like the real manager, list() reflects whatever the test seeded into the store
   claude.list.mockImplementation(async () => useStore.getState().claudeSessions)
   claude.events.mockResolvedValue([])
+  claude.files.mockResolvedValue([])
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -147,5 +150,92 @@ describe('ClaudeView', () => {
     await render()
     expect(button('Send now')).toBeTruthy()
     expect(button('Queue')).toBeTruthy()
+  })
+
+  it('draws tool calls by kind: a terminal with its output, an edit as a diff, a todo list', async () => {
+    const out = [
+      { t: 1, kind: 'tool' as const, text: 'PowerShell npm test', tool: 'PowerShell', toolId: 'a', input: { command: 'npm test' } },
+      { t: 2, kind: 'tool_result' as const, text: '3 passing', toolId: 'a' },
+      { t: 3, kind: 'tool' as const, text: 'Edit x', tool: 'Edit', toolId: 'b', input: { file_path: 'D:\ws\landing-page\style.css', old_string: 'color: red', new_string: 'color: blue' } },
+      { t: 4, kind: 'tool' as const, text: 'TodoWrite', tool: 'TodoWrite', input: { todos: [{ content: 'Build hero', status: 'completed' }, { content: 'Add form', status: 'in_progress' }] } },
+      { t: 5, kind: 'text' as const, text: 'Made it **blue**.' },
+      { t: 6, kind: 'result' as const, text: 'Made it **blue**.', durationMs: 65_000, costUsd: 0.05, turns: 3 }
+    ]
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1', claudeOutput: { s1: out } })
+    await render()
+    expect(host.textContent).toContain('PS> npm test')
+    expect(host.textContent).toContain('3 passing')
+    expect(host.textContent).toContain('style.css')
+    expect(host.textContent).toContain('−1 +1')
+    expect(host.textContent).toContain('Add form')
+    expect(host.querySelector('b')?.textContent).toBe('blue')
+    expect(host.textContent).toContain('done · 1m 05s · $0.050 · 3 turns')
+    // the final summary repeats the last reply, so it is shown once
+    expect(host.textContent!.split('Made it').length - 1).toBe(1)
+  })
+
+  it('the Files tab shows the tree with changed files marked, and opens a file', async () => {
+    claude.files.mockResolvedValue([
+      { path: 'src', dir: true, size: 0, mtime: 1 },
+      { path: 'src/app.js', dir: false, size: 20, mtime: 1 },
+      { path: 'index.html', dir: false, size: 50, mtime: 1 }
+    ])
+    claude.read.mockResolvedValue({ kind: 'text', text: '<h1>Slop</h1>', size: 13, truncated: false })
+    const out = [{ t: 1, kind: 'tool' as const, text: 'Write index.html', tool: 'Write', input: { file_path: 'index.html', content: '<h1>Slop</h1>' } }]
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1', claudeOutput: { s1: out } })
+    await render()
+    await click(button('Files'))
+    expect(host.textContent).toContain('index.html')
+    expect(host.textContent).toContain('A')
+    await click(button('index.html'))
+    expect(claude.read).toHaveBeenCalledWith('s1', 'index.html')
+    expect(host.textContent).toContain('<h1>Slop</h1>')
+    await click(button('VS Code'))
+    expect(claude.open).toHaveBeenCalledWith('s1', 'index.html', 'code')
+  })
+
+  it('the Preview tab frames the page from the workspace in a sandbox', async () => {
+    claude.files.mockResolvedValue([{ path: 'index.html', dir: false, size: 50, mtime: 1 }])
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(button('Preview'))
+    const frame = host.querySelector('iframe')!
+    expect(frame.getAttribute('src')).toMatch(/^ccws:\/\/s1\/index\.html\?v=/)
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms allow-pointer-lock')
+  })
+
+  it('the session menu asks twice before a fresh start or removal', async () => {
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
+    await click(button('Remove session'))
+    expect(claude.remove).not.toHaveBeenCalled()
+    await click(button('Click again to remove'))
+    expect(claude.remove).toHaveBeenCalledWith('s1')
+    await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
+    await click(button('Fresh start'))
+    await click(button('Click again to start fresh'))
+    expect(claude.reset).toHaveBeenCalledWith('s1')
+  })
+
+  it('renames a session inline', async () => {
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(host.querySelector('button[title="Rename"]') ?? undefined)
+    const input = host.querySelector('input[aria-label="Session name"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Slop site')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    expect(claude.rename).toHaveBeenCalledWith('s1', 'Slop site')
+  })
+
+  it('removing the selected session moves the selection on', async () => {
+    useStore.setState({ claudeSessions: [session(), session({ id: 's2', name: 'B' })], claudeSelected: 's1' })
+    const { applyClaudeEvent } = await import('../state/claude')
+    const next = applyClaudeEvent({ sessions: useStore.getState().claudeSessions, output: { s1: [] } }, { type: 'removed', id: 's1' })
+    expect(next.sessions.map((x) => x.id)).toEqual(['s2'])
+    expect(next.output.s1).toBeUndefined()
   })
 })

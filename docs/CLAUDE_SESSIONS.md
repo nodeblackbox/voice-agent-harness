@@ -17,10 +17,26 @@ Claude Code view (rail) → Settings.
 | the session asks a question → the agent reads it out with numbered options; "the second one" / "use Postgres" | `claude_answer` (option number or free text) |
 | a shell command needs approval → "Is that okay?" → "yes" / "no" | `claude_answer` approve true/false |
 | "shut down landing page" | `claude_stop` (workspace and history kept; the next send resumes it) |
+| "start landing page over" | `claude_reset` → fresh conversation, same folder |
+| "what files did it make?" | `claude_files` → newest files with sizes |
 
 When a session needs you, or finishes, the agent speaks up on its own (`Agent.announce`): it waits for
 a quiet moment and never cuts you off. The system prompt always carries a live one-line-per-session
 summary, so "answer it" works without you naming the session when only one is waiting.
+
+## The Claude Code view
+
+- **Sessions** (left): one card per session with a live Claude mark, status, last line, cost/turns/age and queue size.
+- **Header**: rename inline, open the folder, live stats, Interrupt / Stop, and a menu with Open in VS Code,
+  Copy path, **Fresh start** and **Remove** (both ask twice; Remove keeps the folder on disk).
+- **Activity**: the session's timeline. Each tool call is drawn for what it is: shell commands as a terminal with
+  their output, edits as a red/green diff, new files as code, to-do lists as checklists, plans as Markdown, blocked
+  actions in red. A side panel shows the plan's progress, the files it changed and where its tool calls went.
+- **Files**: a live tree of the workspace (created `A` / modified `M` by Claude), a code/Markdown/image viewer,
+  and Open / VS Code / Show in Explorer.
+- **Preview**: web pages it builds, served read-only from the workspace over `ccws://` in a sandboxed frame
+  (scripts run; no access to the app, no popups, no top navigation). Desktop/tablet/phone widths; reloads by
+  itself when a tool finishes.
 
 ## Safety: the workspace fence
 
@@ -54,7 +70,9 @@ use; use API-key auth before shipping this to other people.
 | voice tools + prompt block | `src/core/tools/claude.ts`, `src/core/prompts/compose.ts` |
 | service (persistence, quit), IPC | `src/main/services/claude.ts`, `src/main/ipc/register.ts` |
 | shared types | `src/shared/claude.ts` |
-| UI | `src/renderer/src/views/ClaudeView.tsx`, `state/claude.ts` |
+| workspace listing/reading (fenced) | `src/core/claude/files.ts` |
+| `ccws://` preview protocol, open in Explorer/VS Code | `src/main/services/claude.ts` (`serve`, `open`) |
+| UI | `src/renderer/src/views/ClaudeView.tsx`, `views/claude/*` (Activity, Files, Preview, Inspector, feed logic), `state/claude.ts` |
 
 Sessions persist in `userData/claude-sessions.json`. After a restart nothing is running; the next send
 to a session resumes it by SDK session id, and a dropped connection (status `error`) recovers the same way.

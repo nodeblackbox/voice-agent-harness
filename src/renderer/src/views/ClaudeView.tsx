@@ -1,29 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Ban, Check, Octagon, Play, Plus, Send, Square, X, Zap } from 'lucide-react'
+import {
+  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderOpen, FolderTree, Octagon, Pencil, Play, Plus, RotateCcw, Send, Square,
+  Trash2, Wrench, X, Zap, type LucideIcon
+} from 'lucide-react'
 import type { CcAnswer, CcEvent, CcPending, CcQuestion, CcSession } from '@shared/claude'
 import type { ClaudeSettings } from '@shared/types'
 import { T } from '../theme'
 import { useStore } from '../state/store'
 import { statusColor, statusLabel, waitingOnUser } from '../state/claude'
 import { Btn, Card, Dot, Empty, Page, SectionTitle, Tag, TextInput, Toggle } from '../components/primitives'
+import { Activity as ActivityFeed } from './claude/Activity'
+import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
+import { Files, useWorkspaceFiles } from './claude/Files'
+import { Inspector } from './claude/Inspector'
+import { Preview } from './claude/Preview'
+import { ago, isHtml, touchedFiles, turnStart } from './claude/feed'
 
-const KIND_STYLE: Record<CcEvent['kind'], { label: string; color: string }> = {
-  user: { label: 'you', color: T.cyan },
-  text: { label: '', color: T.text },
-  tool: { label: 'tool', color: T.violet },
-  tool_result: { label: 'result', color: T.text3 },
-  denied: { label: 'blocked', color: T.red },
-  result: { label: 'done', color: T.green },
-  error: { label: 'error', color: T.red },
-  status: { label: '', color: T.text3 },
-  interrupt: { label: 'stopped', color: T.amber }
-}
+const EMPTY: CcEvent[] = []
+const isBusy = (s: CcSession) => s.status === 'running' || s.status === 'needs_input' || s.status === 'needs_permission'
 
 function useAnswer(id: string) {
   const pushToast = useStore((s) => s.pushToast)
   return async (answer: CcAnswer) => {
     const r = await window.api.claude.answer(id, answer)
     if (!r.ok) pushToast('error', r.error)
+  }
+}
+
+/** Run a session action and toast its error, if any. */
+function useCheck() {
+  const pushToast = useStore((s) => s.pushToast)
+  return async (p: Promise<{ ok: boolean; error?: string }>) => {
+    const r = await p
+    if (!r.ok) pushToast('error', r.error ?? 'Failed')
+    return r.ok
   }
 }
 
@@ -88,7 +98,10 @@ function PendingCard({ session, pending }: { session: CcSession; pending: CcPend
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <code className="text-xs rounded-lg p-2.5 break-all" style={{ background: T.bg, border: `1px solid ${T.border}`, color: T.text, fontFamily: T.mono }}>{pending.summary}</code>
+          <div className="va-term rounded-lg px-3 py-2 text-xs break-all" style={{ border: `1px solid ${T.border}`, color: '#E6EDF3' }}>
+            <span style={{ color: T.green }}>{pending.toolName === 'PowerShell' ? 'PS> ' : '$ '}</span>
+            {pending.summary.replace(/^Run:\s*/, '')}
+          </div>
           <div className="flex gap-1.5">
             <Btn small primary icon={Check} onClick={() => void answer({ kind: 'allow' })}>Approve</Btn>
             <Btn small danger icon={Ban} onClick={() => void answer({ kind: 'deny' })}>Deny</Btn>
@@ -99,43 +112,115 @@ function PendingCard({ session, pending }: { session: CcSession; pending: CcPend
   )
 }
 
-function OutputLog({ events }: { events: CcEvent[] }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const stick = useRef(true)
-  useEffect(() => {
-    const el = ref.current
-    if (el && stick.current) el.scrollTop = el.scrollHeight
-  }, [events])
+function StatusPill({ status }: { status: CcSession['status'] }) {
+  const c = statusColor(status, T)
   return (
-    <div
-      ref={ref}
-      onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40 }}
-      className="va-scroll flex-1 overflow-y-auto rounded-xl p-3 flex flex-col gap-1"
-      style={{ background: T.bg, border: `1px solid ${T.border}`, minHeight: 160, fontSize: 12.5, lineHeight: 1.5 }}
-    >
-      {events.length === 0 && <Empty>Nothing yet. Give it a task by voice or below.</Empty>}
-      {events.map((e, i) => {
-        const k = KIND_STYLE[e.kind]
-        return (
-          <div key={`${e.t}-${i}`} className="flex gap-2">
-            <span style={{ color: k.color, minWidth: 54, fontFamily: T.mono, fontSize: 11, paddingTop: 1 }}>{k.label}</span>
-            <span style={{ color: e.kind === 'tool' ? T.text2 : k.color, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: e.kind === 'tool' ? T.mono : undefined }}>{e.text}</span>
-          </div>
-        )
-      })}
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs" style={{ background: `${c}17`, color: c, border: `1px solid ${c}40`, flexShrink: 0 }}>
+      <Dot color={c} size={6} pulse={status === 'running' || status === 'needs_input' || status === 'needs_permission'} />
+      {statusLabel(status)}
+    </span>
+  )
+}
+
+function SessionMenu({ session, onClose }: { session: CcSession; onClose: () => void }) {
+  const pushToast = useStore((s) => s.pushToast)
+  const check = useCheck()
+  const [confirm, setConfirm] = useState<'reset' | 'remove' | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.parentElement?.contains(e.target as Node)) onClose() }
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', h)
+    document.addEventListener('keydown', k)
+    return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k) }
+  }, [onClose])
+  const run = (p: Promise<{ ok: boolean; error?: string }>) => { void check(p); onClose() }
+  const item = (Icon: LucideIcon, title: string, sub: string, onClick: () => void, color: string = T.text) => (
+    <button type="button" onClick={onClick} className="va-tree-row w-full flex items-start gap-2.5 px-3 py-2 text-left" style={{ cursor: 'pointer', background: 'transparent' }}>
+      <Icon size={14} style={{ color, marginTop: 2, flexShrink: 0 }} />
+      <span className="flex flex-col min-w-0">
+        <span className="text-sm" style={{ color }}>{title}</span>
+        <span className="text-xs truncate" style={{ color: T.text3 }}>{sub}</span>
+      </span>
+    </button>
+  )
+  return (
+    <div ref={ref} className="absolute rounded-xl shadow-2xl overflow-hidden va-fade py-1" style={{ top: 'calc(100% + 6px)', right: 0, width: 280, background: T.raised, border: `1px solid ${T.border}`, zIndex: 40 }}>
+      {item(FolderOpen, 'Open folder', 'In File Explorer', () => run(window.api.claude.open(session.id, '', 'default')))}
+      {item(Code, 'Open in VS Code', 'Look at or edit the files yourself', () => run(window.api.claude.open(session.id, '', 'code')))}
+      {item(Copy, 'Copy folder path', session.workspace, () => { void navigator.clipboard?.writeText(session.workspace); pushToast('info', 'Path copied'); onClose() })}
+      <div style={{ height: 1, background: T.border, margin: '4px 0' }} />
+      {confirm === 'reset'
+        ? item(RotateCcw, 'Click again to start fresh', 'Forgets the conversation. Files stay.', () => run(window.api.claude.reset(session.id)), T.amber)
+        : item(RotateCcw, 'Fresh start', 'New conversation, same folder', () => setConfirm('reset'))}
+      {confirm === 'remove'
+        ? item(Trash2, 'Click again to remove', 'The folder stays on disk.', () => run(window.api.claude.remove(session.id)), T.red)
+        : item(Trash2, 'Remove session', 'Take it off the list (folder kept)', () => setConfirm('remove'), T.red)}
     </div>
   )
 }
 
-function Detail({ session }: { session: CcSession }) {
-  const events = useStore((s) => s.claudeOutput[session.id]) ?? []
-  const pushToast = useStore((s) => s.pushToast)
-  const [text, setText] = useState('')
-  const busy = session.status === 'running' || session.status === 'needs_input' || session.status === 'needs_permission'
-  const check = async <T extends { ok: boolean }>(p: Promise<T>) => {
-    const r = (await p) as { ok: boolean; error?: string }
-    if (!r.ok) pushToast('error', r.error ?? 'Failed')
+function Header({ session, touched, toolCalls }: { session: CcSession; touched: number; toolCalls: number }) {
+  const check = useCheck()
+  const [menu, setMenu] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(session.name)
+  const rename = () => {
+    setEditing(false)
+    if (name.trim() && name.trim() !== session.name) void check(window.api.claude.rename(session.id, name.trim()))
+    else setName(session.name)
   }
+  return (
+    <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid ${T.border}`, background: 'linear-gradient(180deg, rgba(217,119,87,.07), transparent)' }}>
+      <div className="flex items-center justify-center rounded-xl" style={{ width: 40, height: 40, background: 'rgba(217,119,87,.10)', border: '1px solid rgba(217,119,87,.25)', flexShrink: 0 }}>
+        <ClaudeMark size={24} working={session.status === 'running'} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0">
+          {editing ? (
+            <input
+              autoFocus
+              aria-label="Session name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={rename}
+              onKeyDown={(e) => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') { setName(session.name); setEditing(false) } }}
+              className="text-base font-semibold rounded px-1"
+              style={{ background: T.bg, color: T.text, border: `1px solid ${T.border}`, minWidth: 0 }}
+            />
+          ) : (
+            <button type="button" onClick={() => { setName(session.name); setEditing(true) }} title="Rename" className="group inline-flex items-center gap-1.5 min-w-0" style={{ cursor: 'text', background: 'transparent' }}>
+              <span className="text-base font-semibold truncate" style={{ color: T.text }}>{session.name}</span>
+              <Pencil size={11} className="opacity-0 group-hover:opacity-100" style={{ color: T.text3, flexShrink: 0 }} />
+            </button>
+          )}
+          <StatusPill status={session.status} />
+        </div>
+        <button type="button" onClick={() => void check(window.api.claude.open(session.id, '', 'default'))} className="text-xs truncate block max-w-full text-left" style={{ color: T.text3, fontFamily: T.mono, cursor: 'pointer', background: 'transparent' }} title="Open folder">
+          {session.workspace}
+        </button>
+      </div>
+      <div className="hidden lg:flex items-center gap-3 text-xs" style={{ color: T.text3, fontFamily: T.mono }}>
+        <span title="Cost so far" className="inline-flex items-center gap-1"><Coins size={11} />${session.costUsd.toFixed(3)}</span>
+        <span title="Files changed" className="inline-flex items-center gap-1"><FileCode size={11} />{touched}</span>
+        <span title="Tool calls" className="inline-flex items-center gap-1"><Wrench size={11} />{toolCalls}</span>
+      </div>
+      <Btn small danger icon={Octagon} disabled={!isBusy(session)} onClick={() => void check(window.api.claude.interrupt(session.id, false))}>Interrupt</Btn>
+      <Btn small icon={Square} disabled={session.status === 'stopped'} onClick={() => void check(window.api.claude.stop(session.id))}>Stop</Btn>
+      <div className="relative">
+        <button type="button" aria-label="More session actions" onClick={() => setMenu(!menu)} className="inline-flex items-center justify-center rounded-lg" style={{ width: 28, height: 26, background: menu ? T.raised : T.surface, border: `1px solid ${T.border}`, color: T.text2, cursor: 'pointer' }}>
+          <Ellipsis size={14} />
+        </button>
+        {menu && <SessionMenu session={session} onClose={() => setMenu(false)} />}
+      </div>
+    </div>
+  )
+}
+
+function Composer({ session }: { session: CcSession }) {
+  const check = useCheck()
+  const [text, setText] = useState('')
+  const busy = isBusy(session)
   const send = (now: boolean) => {
     const t = text.trim()
     if (!t) return
@@ -143,50 +228,133 @@ function Detail({ session }: { session: CcSession }) {
     void check(window.api.claude.send(session.id, t, now))
   }
   return (
-    <div className="flex-1 min-w-0 flex flex-col gap-3 p-5 overflow-hidden">
-      <div className="flex items-center gap-3">
-        <Dot color={statusColor(session.status, T)} pulse={session.status === 'running'} size={9} />
-        <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold truncate" style={{ color: T.text }}>{session.name}</div>
-          <div className="text-xs truncate" style={{ color: T.text3, fontFamily: T.mono }} title={session.workspace}>{session.workspace}</div>
-        </div>
-        <Tag>{statusLabel(session.status)}</Tag>
-        <span className="text-xs" style={{ color: T.text3 }}>${session.costUsd.toFixed(3)}</span>
-        <Btn small danger icon={Octagon} disabled={!busy} onClick={() => void check(window.api.claude.interrupt(session.id, false))}>Interrupt</Btn>
-        <Btn small icon={Square} disabled={session.status === 'stopped'} onClick={() => void check(window.api.claude.stop(session.id))}>Stop</Btn>
-      </div>
-
-      {session.pending && <PendingCard session={session} pending={session.pending} />}
-
-      <OutputLog events={events} />
-
+    <div className="px-4 pb-4 pt-2 flex flex-col gap-2" style={{ borderTop: `1px solid ${T.border}` }}>
       {session.queued.length > 0 && (
         <div className="flex flex-col gap-1">
           <SectionTitle>Queued ({session.queued.length}) · runs in order when the current task finishes</SectionTitle>
           {session.queued.map((q, i) => (
-            <div key={`${i}-${q}`} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm" style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text2 }}>
-              <span style={{ color: T.text3, fontFamily: T.mono }}>{i + 1}</span>
+            <div key={`${i}-${q}`} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm va-fade" style={{ background: T.surface, border: `1px dashed ${T.border}`, color: T.text2 }}>
+              <span className="inline-flex items-center justify-center rounded-full text-xs" style={{ width: 18, height: 18, background: T.raised, color: T.text3, fontFamily: T.mono, flexShrink: 0 }}>{i + 1}</span>
               <span className="flex-1 truncate">{q}</span>
               <button type="button" aria-label="Remove queued prompt" onClick={() => void check(window.api.claude.dequeue(session.id, i))} style={{ color: T.text3, cursor: 'pointer' }}><X size={14} /></button>
             </div>
           ))}
         </div>
       )}
-
-      <form className="flex gap-1.5 items-end" onSubmit={(e) => { e.preventDefault(); send(false) }}>
+      <form className="flex gap-2 items-end rounded-xl p-2" style={{ background: T.surface, border: `1px solid ${busy ? 'rgba(217,119,87,.35)' : T.border}` }} onSubmit={(e) => { e.preventDefault(); send(false) }}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false) } }}
           rows={2}
           placeholder={busy ? 'Add to the queue, or switch it to something else…' : 'Tell this session what to do…'}
-          className="flex-1 rounded-lg p-2.5 text-sm resize-none"
-          style={{ background: T.surface, color: T.text, border: `1px solid ${T.border}` }}
+          className="flex-1 p-1.5 text-sm resize-none"
+          style={{ background: 'transparent', color: T.text, border: 'none' }}
         />
-        <Btn small primary type="submit" icon={Send} disabled={!text.trim()}>{busy ? 'Queue' : 'Send'}</Btn>
-        {busy && <Btn small icon={Zap} disabled={!text.trim()} onClick={() => send(true)}>Send now</Btn>}
+        <div className="flex gap-1.5 items-end">
+          {busy && <Btn small icon={Zap} disabled={!text.trim()} onClick={() => send(true)}>Send now</Btn>}
+          <Btn small primary type="submit" icon={Send} disabled={!text.trim()}>{busy ? 'Queue' : 'Send'}</Btn>
+        </div>
       </form>
     </div>
+  )
+}
+
+type Tab = 'activity' | 'files' | 'preview'
+
+function Detail({ session }: { session: CcSession }) {
+  const events = useStore((s) => s.claudeOutput[session.id]) ?? EMPTY
+  const [tab, setTab] = useState<Tab>('activity')
+  const [file, setFile] = useState<string | null>(null)
+  const [page, setPage] = useState<string | null>(null)
+  const touched = useMemo(() => touchedFiles(events, session.workspace), [events, session.workspace])
+  const toolCalls = useMemo(() => events.filter((e) => e.kind === 'tool').length, [events])
+  // bumps whenever a tool finishes or a turn ends: the file tree and the preview refresh on it
+  const pulse = useMemo(() => events.filter((e) => e.kind === 'tool_result' || e.kind === 'result').length, [events])
+  const { files, refresh } = useWorkspaceFiles(session.id, pulse)
+  const openFile = (rel: string) => { setFile(rel); setTab('files') }
+  const fileCount = (files ?? []).filter((f) => !f.dir).length
+  const hasPage = (files ?? []).some((f) => !f.dir && isHtml(f.path))
+  const tabs: Array<{ id: Tab; label: string; icon: LucideIcon; badge?: string }> = [
+    { id: 'activity', label: 'Activity', icon: Activity, badge: toolCalls ? String(toolCalls) : undefined },
+    { id: 'files', label: 'Files', icon: FolderTree, badge: files ? String(fileCount) : undefined },
+    { id: 'preview', label: 'Preview', icon: Eye, badge: hasPage ? 'live' : undefined }
+  ]
+  return (
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <Header session={session} touched={touched.length} toolCalls={toolCalls} />
+      {session.pending && <div className="px-5 pt-3"><PendingCard session={session} pending={session.pending} /></div>}
+      <div className="flex items-center gap-1 px-4" style={{ borderBottom: `1px solid ${T.border}` }} role="tablist">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 text-sm"
+            style={{ color: tab === t.id ? T.text : T.text3, borderBottom: `2px solid ${tab === t.id ? CLAUDE_ORANGE : 'transparent'}`, marginBottom: -1, cursor: 'pointer', background: 'transparent' }}
+          >
+            <t.icon size={14} />
+            {t.label}
+            {t.badge && <span className="text-xs rounded-full px-1.5" style={{ background: t.badge === 'live' ? 'rgba(74,222,128,.12)' : T.raised, color: t.badge === 'live' ? T.green : T.text3 }}>{t.badge}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 min-h-0 flex">
+        {tab === 'activity' && (
+          <>
+            <div className="flex-1 min-w-0 flex flex-col">
+              <ActivityFeed events={events} running={isBusy(session)} waiting={!!session.pending} since={turnStart(events)} workspace={session.workspace} onOpenFile={openFile} />
+            </div>
+            <Inspector session={session} events={events} touched={touched} onOpenFile={openFile} />
+          </>
+        )}
+        {tab === 'files' && (
+          <Files id={session.id} files={files} refresh={() => void refresh()} touched={touched} selected={file} onSelect={setFile} onPreview={(rel) => { setPage(rel); setTab('preview') }} />
+        )}
+        {tab === 'preview' && <Preview id={session.id} files={files} page={page} onPage={setPage} pulse={pulse} />}
+      </div>
+      <Composer session={session} />
+    </div>
+  )
+}
+
+function SessionCard({ s, active, onClick }: { s: CcSession; active: boolean; onClick: () => void }) {
+  const working = s.status === 'running'
+  const c = statusColor(s.status, T)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-xl p-3 flex flex-col gap-1.5 va-fade"
+      style={{
+        cursor: 'pointer',
+        background: active ? T.raised : T.surface,
+        border: `1px solid ${s.pending ? T.amber : active ? 'rgba(217,119,87,.45)' : T.border}`,
+        boxShadow: active ? '0 0 0 3px rgba(217,119,87,.08)' : undefined
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <ClaudeMark size={16} working={working} color={s.status === 'stopped' ? T.text3 : undefined} />
+        <span className="text-sm font-medium truncate flex-1" style={{ color: T.text }}>{s.name}</span>
+        <span className="text-xs inline-flex items-center gap-1" style={{ color: c, flexShrink: 0 }}>
+          <Dot color={c} size={6} pulse={working || !!s.pending} />
+          {statusLabel(s.status)}
+        </span>
+      </div>
+      <div className="text-xs" style={{ color: s.pending ? T.amber : T.text3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.45 }}>
+        {s.pending ? (s.pending.kind === 'question' ? 'Asking: ' : '') + s.pending.summary : s.lastSummary || (s.status === 'idle' ? 'Ready for a task' : statusLabel(s.status))}
+      </div>
+      <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3, fontFamily: T.mono, fontSize: 10.5 }}>
+        <span>${s.costUsd.toFixed(2)}</span>
+        <span>·</span>
+        <span>{s.turns} turns</span>
+        <span>·</span>
+        <span>{ago(s.updatedAt)}</span>
+        {s.queued.length > 0 && <span className="ml-auto rounded-full px-1.5" style={{ background: T.bg, color: T.text2 }}>+{s.queued.length}</span>}
+      </div>
+    </button>
   )
 }
 
@@ -202,7 +370,7 @@ function NewSession({ onDone }: { onDone: () => void }) {
     onDone()
   }
   return (
-    <Card pad={12} className="flex flex-col gap-2">
+    <Card pad={12} className="flex flex-col gap-2" style={{ border: '1px solid rgba(217,119,87,.4)' }}>
       <TextInput value={name} onChange={setName} placeholder="Session name, e.g. landing page" autoFocus />
       <textarea value={task} onChange={(e) => setTask(e.target.value)} rows={3} placeholder="First task (optional)" className="w-full rounded-lg p-2 text-sm resize-none" style={{ background: T.bg, color: T.text, border: `1px solid ${T.border}` }} />
       <div className="flex gap-1.5 justify-end">
@@ -243,16 +411,22 @@ const EXAMPLES: Array<[string, string]> = [
   ['“How is landing page going?”', 'A short spoken summary of what just happened.'],
   ['“The second one.” / “Yes, go ahead.”', 'Answers its question or approval when it asks you.'],
   ['“Hold on, stop that.”', 'Interrupts it; it keeps its context and can carry on.'],
+  ['“What files did it make?”', 'Lists what is in its folder. The Files tab shows them all.'],
+  ['“Start landing page over.”', 'Fresh conversation in the same folder.'],
   ['“Shut down landing page.”', 'Stops it; send it anything later to resume.']
 ]
 
 function HowTo({ root }: { root: string }) {
   return (
     <Card pad={16} className="flex flex-col gap-3">
-      <div className="text-sm font-medium" style={{ color: T.text }}>How it works</div>
+      <div className="flex items-center gap-2 text-sm font-medium" style={{ color: T.text }}>
+        <ClaudeMark size={18} /> How it works
+      </div>
       <div className="text-xs" style={{ color: T.text2, lineHeight: 1.6 }}>
         Turn on <b style={{ color: T.violet }}>Claude</b> (button next to Voice in chat, or here). Then just talk: the voice agent starts and steers Claude Code sessions for you,
-        reads out their questions, and tells you when they finish. Each session can only touch its own folder inside <code style={{ fontFamily: T.mono, color: T.text }}>{root}</code>.
+        reads out their questions, and tells you when they finish. Watch each one work in <b style={{ color: T.text }}>Activity</b>, browse its folder in{' '}
+        <b style={{ color: T.text }}>Files</b>, and see web pages it builds live in <b style={{ color: T.text }}>Preview</b>. Each session can only touch its own folder inside{' '}
+        <code style={{ fontFamily: T.mono, color: T.text }}>{root}</code>.
       </div>
       <div className="flex flex-col gap-2">
         {EXAMPLES.map(([say, does]) => (
@@ -303,13 +477,23 @@ export function ClaudeView() {
     )
   }
 
+  const running = sessions.filter((s) => s.status === 'running').length
   return (
     <div className="flex flex-1 min-w-0">
-      <aside className="flex flex-col gap-2 p-3 overflow-y-auto va-scroll" style={{ width: 290, background: T.rail, borderRight: `1px solid ${T.border}` }}>
-        <div className="flex items-center justify-between px-1">
-          <span className="text-sm font-medium" style={{ color: T.text }}>Sessions</span>
+      <aside className="flex flex-col gap-2 p-3 overflow-y-auto va-scroll" style={{ width: 280, background: T.rail, borderRight: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div className="flex items-center justify-between px-1 pb-1">
+          <span className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: T.text }}>
+            <ClaudeMark size={16} working={running > 0} /> Sessions
+          </span>
           <Btn small icon={Plus} onClick={() => setCreating(true)}>New</Btn>
         </div>
+        {sessions.length > 0 && (
+          <div className="flex items-center gap-3 px-1 text-xs" style={{ color: T.text3 }}>
+            <span>{sessions.length} total</span>
+            {running > 0 && <span style={{ color: T.violet }}>{running} working</span>}
+            <span className="ml-auto" style={{ fontFamily: T.mono }}>${sessions.reduce((n, s) => n + s.costUsd, 0).toFixed(2)}</span>
+          </div>
+        )}
         {waiting.length > 0 && (
           <div className="rounded-lg px-3 py-2 text-xs" style={{ background: T.amberTint, color: T.amber, border: `1px solid ${T.amber}` }}>
             {waiting.length} waiting on you
@@ -317,18 +501,7 @@ export function ClaudeView() {
         )}
         {creating && <NewSession onDone={() => setCreating(false)} />}
         {sessions.length === 0 && !creating && <Empty>No sessions yet. Say “start a session called landing page” or tap New.</Empty>}
-        {sessions.map((s) => (
-          <Card key={s.id} pad={10} active={s.id === current?.id} onClick={() => selectClaude(s.id)} className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Dot color={statusColor(s.status, T)} pulse={s.status === 'running' || !!s.pending} />
-              <span className="text-sm font-medium truncate flex-1" style={{ color: T.text }}>{s.name}</span>
-              {s.queued.length > 0 && <span className="text-xs" style={{ color: T.text3 }}>+{s.queued.length}</span>}
-            </div>
-            <div className="text-xs truncate" style={{ color: s.pending ? T.amber : T.text3 }}>
-              {s.pending ? (s.pending.kind === 'question' ? 'Asking: ' : '') + s.pending.summary : s.lastSummary || statusLabel(s.status)}
-            </div>
-          </Card>
-        ))}
+        {sessions.map((s) => <SessionCard key={s.id} s={s} active={s.id === current?.id} onClick={() => selectClaude(s.id)} />)}
         <div className="flex-1" />
         <button type="button" className="text-xs flex items-center gap-1 px-1" style={{ color: T.text3, cursor: 'pointer' }} onClick={() => setShowSettings(!showSettings)}>
           {showSettings ? 'Hide settings' : 'Settings'}

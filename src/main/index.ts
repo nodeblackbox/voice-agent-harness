@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, protocol, session, shell } from 'electron'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { IPC } from '@shared/ipc'
@@ -23,6 +23,8 @@ const projectRoot = resolve(here, '..', '..')
 const isDev = !app.isPackaged
 
 app.setName('Voice Agent')
+// Live preview of Claude Code workspaces (served read-only by ClaudeService.serve)
+protocol.registerSchemesAsPrivileged([{ scheme: 'ccws', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let win: BrowserWindow | null = null
@@ -197,6 +199,7 @@ app.whenReady().then(async () => {
   })
 
   const claude = new ClaudeService(userData, () => settings.get())
+  protocol.handle('ccws', (req) => claude.serve(req))
 
   const agent = new Agent({
     store,
@@ -295,7 +298,7 @@ app.whenReady().then(async () => {
       }
     } else if (event.type === 'needs-input') trace({ ev: 'cc.needs_input', sid: agent.currentSessionId, session: event.name, kind: event.pending.kind, summary: event.pending.summary.slice(0, 160) })
     else if (event.type === 'finished') trace({ ev: 'cc.finished', sid: agent.currentSessionId, session: event.name, chars: event.summary.length })
-    else if (event.event.kind === 'denied') trace({ ev: 'cc.denied', sid: agent.currentSessionId, reason: event.event.text.slice(0, 200) })
+    else if (event.type === 'event' && event.event.kind === 'denied') trace({ ev: 'cc.denied', sid: agent.currentSessionId, reason: event.event.text.slice(0, 200) })
     if (!claude.enabled()) return
     const line = announcement(event)
     if (line) agent.announce(line)

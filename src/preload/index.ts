@@ -92,7 +92,13 @@ const api: VoiceAgentApi = {
     answer: (id, answer) => invoke(IPC.claudeAnswer, id, answer),
     interrupt: (id, clearQueue) => invoke(IPC.claudeInterrupt, id, clearQueue),
     stop: (id) => invoke(IPC.claudeStop, id),
-    dequeue: (id, index) => invoke(IPC.claudeDequeue, id, index)
+    dequeue: (id, index) => invoke(IPC.claudeDequeue, id, index),
+    rename: (id, name) => invoke(IPC.claudeRename, id, name),
+    reset: (id) => invoke(IPC.claudeReset, id),
+    remove: (id) => invoke(IPC.claudeRemove, id),
+    files: (id) => invoke(IPC.claudeFiles, id),
+    read: (id, rel) => invoke(IPC.claudeRead, id, rel),
+    open: (id, rel, how) => invoke(IPC.claudeOpen, id, rel, how)
   },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },

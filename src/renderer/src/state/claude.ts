@@ -15,6 +15,10 @@ export function applyClaudeEvent(s: ClaudeState, e: CcManagerEvent): ClaudeState
     const sessions = i >= 0 ? s.sessions.map((x, j) => (j === i ? e.session : x)) : [...s.sessions, e.session]
     return { ...s, sessions }
   }
+  if (e.type === 'removed') {
+    const { [e.id]: _gone, ...output } = s.output
+    return { sessions: s.sessions.filter((x) => x.id !== e.id), output }
+  }
   if (e.type === 'event') {
     const prev = s.output[e.id] ?? []
     const next = prev.length >= OUTPUT_CAP ? [...prev.slice(prev.length - OUTPUT_CAP + 1), e.event] : [...prev, e.event]

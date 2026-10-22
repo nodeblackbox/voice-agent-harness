@@ -1,8 +1,9 @@
-import { Bot, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { statusColor, statusLabel } from '../../state/claude'
 import { Dot } from '../primitives'
+import { ClaudeMark, CLAUDE_ORANGE } from '../../views/claude/ClaudeMark'
 
 /**
  * Claude Code at a glance, above the chat input while Claude control is on: one chip per session
@@ -20,8 +21,8 @@ export function ClaudeStrip() {
 
   return (
     <div className="flex items-center gap-1.5 px-1 flex-wrap va-fade" aria-label="Claude Code sessions">
-      <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: T.violet }}>
-        <Bot size={13} /> Claude Code
+      <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: CLAUDE_ORANGE }}>
+        <ClaudeMark size={13} working={sessions.some((s) => s.status === 'running')} /> Claude Code
       </span>
       {sessions.length === 0 && (
         <span className="text-xs" style={{ color: T.text3 }}>

@@ -12,9 +12,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { digest } from './digest'
 import { checkToolUse } from './fence'
+import { listWorkspace, readWorkspaceFile } from './files'
 import { Pushable } from './pushable'
 import type {
-  CcAnswer, CcEvent, CcManagerEvent, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
+  CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
 
 export interface ManagerDeps {
@@ -72,6 +73,11 @@ export class ClaudeSessionManager {
   get(id: string): CcSession | undefined { const r = this.rts.get(id); return r && this.snap(r) }
   events(id: string, n = 40): CcEvent[] { return (this.rts.get(id)?.events ?? []).slice(-n) }
   digest(id: string): string { return digest(this.rts.get(id)?.events ?? []) }
+  files(id: string): CcFile[] { const r = this.rts.get(id); return r ? listWorkspace(r.s.workspace) : [] }
+  readFile(id: string, rel: string): CcFileContent | { error: string } {
+    const r = this.rts.get(id)
+    return r ? readWorkspaceFile(r.s.workspace, rel) : { error: 'No such session.' }
+  }
 
   /** Voice-friendly lookup: id, exact name, slug, or a unique case-insensitive partial name. */
   find(ref: string | undefined): CcResult<{ session: CcSession }> {
@@ -205,6 +211,38 @@ export class ClaudeSessionManager {
     return { ok: true, said: Object.values(answers).join('; ') }
   }
 
+  rename(id: string, name: string): CcResult {
+    const r = this.rts.get(id)
+    if (!r) return { ok: false, error: 'No such session.' }
+    if (!name.trim()) return { ok: false, error: 'Empty name.' }
+    r.s.name = name.trim()
+    this.changed(r)
+    return { ok: true }
+  }
+
+  /** Fresh start: stop it and forget the conversation, so the next prompt begins a new one. Files stay. */
+  async reset(id: string): Promise<CcResult> {
+    const r = this.rts.get(id)
+    if (!r) return { ok: false, error: 'No such session.' }
+    await this.stop(id)
+    r.s.sdkSessionId = undefined
+    r.s.status = 'idle'
+    r.s.lastSummary = ''
+    this.log(r, 'status', 'Fresh start: new conversation, same folder.')
+    this.changed(r)
+    return { ok: true }
+  }
+
+  /** Stop it and drop it from the list. Its workspace folder is left on disk. */
+  async remove(id: string): Promise<CcResult> {
+    if (!this.rts.has(id)) return { ok: false, error: 'No such session.' }
+    await this.stop(id)
+    this.rts.delete(id)
+    this.d.persist?.(this.list())
+    this.emit({ type: 'removed', id })
+    return { ok: true }
+  }
+
   /** Remove a queued prompt (index 0-based). */
   dequeue(id: string, index: number): CcResult {
     const r = this.rts.get(id)
@@ -227,8 +265,8 @@ export class ClaudeSessionManager {
     this.d.persist?.(this.list())
   }
 
-  private log(r: Rt, kind: CcEvent['kind'], text: string): void {
-    const e: CcEvent = { t: this.now(), kind, text }
+  private log(r: Rt, kind: CcEvent['kind'], text: string, extra: Partial<CcEvent> = {}): void {
+    const e: CcEvent = { t: this.now(), kind, text, ...extra }
     r.events.push(e)
     const cap = this.d.eventBuffer ?? 200
     if (r.events.length > cap) r.events.splice(0, r.events.length - cap)
@@ -306,7 +344,11 @@ export class ClaudeSessionManager {
     } else if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
         if (b.type === 'text' && b.text?.trim()) { r.lastText = b.text; this.log(r, 'text', b.text) }
-        else if (b.type === 'tool_use') this.log(r, 'tool', `${b.name} ${briefInput(b.input)}`)
+        else if (b.type === 'tool_use') this.log(r, 'tool', `${b.name} ${briefInput(b.input)}`, { tool: String(b.name), toolId: b.id, input: clipInput(b.input) })
+      }
+    } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
+      for (const b of m.message.content) {
+        if (b?.type === 'tool_result') this.log(r, 'tool_result', clip(resultText(b.content), 6000), { toolId: b.tool_use_id, ...(b.is_error ? { isError: true } : {}) })
       }
     } else if (m.type === 'result') this.onResult(r, m)
   }
@@ -325,7 +367,7 @@ export class ClaudeSessionManager {
     } else {
       r.s.status = 'idle'
       r.s.lastSummary = String(m.result ?? r.lastText ?? '')
-      this.log(r, 'result', r.s.lastSummary)
+      this.log(r, 'result', r.s.lastSummary, { durationMs: Number(m.duration_ms) || undefined, costUsd: Number(m.total_cost_usd) || undefined, turns: Number(m.num_turns) || undefined })
     }
     this.changed(r)
     if (!aborted && !m.is_error) this.emit({ type: 'finished', id: r.s.id, name: r.s.name, summary: r.s.lastSummary })
@@ -368,6 +410,25 @@ function briefInput(input: unknown): string {
   const i = (input ?? {}) as Record<string, unknown>
   const v = i.command ?? i.file_path ?? i.path ?? i.pattern ?? i.description ?? ''
   return String(v).slice(0, 100)
+}
+
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n… (${s.length - n} more characters)` : s)
+
+/** Tool input for display: long strings (file contents, edits) clipped so events stay small. */
+function clipInput(input: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries((input ?? {}) as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = clip(v, 8000)
+    else if (Array.isArray(v)) out[k] = v.slice(0, 60).map((x) => (x && typeof x === 'object' ? clipInput(x) : x))
+    else out[k] = v && typeof v === 'object' ? clipInput(v) : v
+  }
+  return out
+}
+
+function resultText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map((c: any) => (c?.type === 'text' ? String(c.text ?? '') : c?.type === 'image' ? '[image]' : '')).filter(Boolean).join('\n')
 }
 
 function parseQuestions(input: Record<string, unknown>): CcQuestion[] {
