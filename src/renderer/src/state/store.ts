@@ -17,13 +17,15 @@ import type {
   Toast,
   TurnMetrics
 } from '@shared/types'
+import type { CcEvent, CcSession } from '@shared/claude'
 import { playback, type Speaking } from '../audio/playback'
+import { applyClaudeEvent } from './claude'
 import { cue } from '../audio/cue'
 import type { ChunkText } from '../lib/spoken'
 import { listDevices, pickDefaults } from '../audio/devices'
 import { rlog } from '../lib/rlog'
 
-export type View = 'chat' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
+export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
 
 const MUTED_KEY = 'va.muted'
 const LEFT_KEY = 'va.leftOpen'
@@ -77,6 +79,10 @@ interface Store {
   micMuted: boolean
   memoryVersion: number
   mcpVersion: number
+  /** Claude Code sessions managed by voice, with their recent output. */
+  claudeSessions: CcSession[]
+  claudeOutput: Record<string, CcEvent[]>
+  claudeSelected: string | null
   /** The sentence being played right now, for the live highlight in the transcript. */
   speaking: Speaking | null
   /** Sentence chunks per turn (last few turns), for mapping reply text to audio. */
@@ -93,6 +99,8 @@ interface Store {
   reloadSessions(): Promise<void>
   reloadKeys(): Promise<void>
   reloadServices(): Promise<void>
+  reloadClaude(): Promise<void>
+  selectClaude(id: string | null): void
   reloadContext(): Promise<void>
   selectSession(id: string): Promise<void>
   newSession(): Promise<void>
@@ -135,6 +143,9 @@ export const useStore = create<Store>((set, get) => ({
   micMuted: false,
   memoryVersion: 0,
   mcpVersion: 0,
+  claudeSessions: [],
+  claudeOutput: {},
+  claudeSelected: null,
   speaking: null,
   chunkTexts: {},
 
@@ -229,6 +240,13 @@ export const useStore = create<Store>((set, get) => ({
           void get().reloadSkills()
           void get().reloadContext()
           break
+        case 'claude': {
+          const next = applyClaudeEvent({ sessions: get().claudeSessions, output: get().claudeOutput }, e.event)
+          set({ claudeSessions: next.sessions, claudeOutput: next.output })
+          if (e.event.type === 'session' && !get().claudeSelected) set({ claudeSelected: e.event.session.id })
+          if (e.event.type === 'needs-input') get().pushToast('warn', `${e.event.name} needs you`)
+          break
+        }
         case 'mcp-changed':
           set({ mcpVersion: get().mcpVersion + 1 })
           void get().reloadServices()
@@ -269,6 +287,7 @@ export const useStore = create<Store>((set, get) => ({
     })
     playback.configure(settings.playback)
     void playback.setOutput(settings.audio.outputDeviceId)
+    void get().reloadClaude()
 
     try {
       const devices = await listDevices()
@@ -316,6 +335,18 @@ export const useStore = create<Store>((set, get) => ({
   async reloadKeys() {
     set({ keys: await window.api.keys.status() })
   },
+  async reloadClaude() {
+    try {
+      const sessions = await window.api.claude.list()
+      const output = { ...get().claudeOutput }
+      await Promise.all(sessions.map(async (s) => { if (!output[s.id]?.length) output[s.id] = await window.api.claude.events(s.id, 200) }))
+      const selected = get().claudeSelected
+      set({ claudeSessions: sessions, claudeOutput: output, claudeSelected: selected && sessions.some((s) => s.id === selected) ? selected : (sessions[0]?.id ?? null) })
+    } catch {
+      // Claude control not available (older main process, or tests without the API)
+    }
+  },
+  selectClaude: (id) => set({ claudeSelected: id }),
   async reloadServices() {
     const services = await window.api.services.status()
     const svc: Partial<Record<ServiceName, ServiceStatus>> = {}

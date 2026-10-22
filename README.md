@@ -144,7 +144,7 @@ prompt. Off by default; it lives in `src/main/training/`. See `docs/TRAINING_REC
 
 ## Roadmap
 
-- Claude Code session control from voice (attach, get read the result, answer "needs input" prompts).
+- Claude Code: playbooks/triggers ("when session X finishes…", auto-answer rules), stacked-prompt templates, image hand-off to a session, reconnect supervisor UI. The core (voice-managed sessions) has shipped: see docs/CLAUDE_SESSIONS.md.
 - Resumable sessions with summarised context.
 - Expose the agent itself as an MCP server.
 - Semantic memory behind the same `recall` interface.

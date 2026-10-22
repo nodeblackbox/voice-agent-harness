@@ -284,8 +284,18 @@ app.whenReady().then(async () => {
   if (settings.get().behaviour.listenOnLaunch || (isDev && (process.env.VA_WAV || process.env.VA_MIC))) sidecar.start()
   void mcp.reload()
   // Claude session events: stream to the UI, and speak the ones that need the user (a question, an approval, a finished job)
+  const lastCcStatus = new Map<string, string>()
   claude.manager.on((event) => {
     emit({ type: 'claude', event })
+    if (event.type === 'session') {
+      const s = event.session
+      if (lastCcStatus.get(s.id) !== s.status) {
+        lastCcStatus.set(s.id, s.status)
+        trace({ ev: 'cc.status', sid: agent.currentSessionId, session: s.name, status: s.status, queued: s.queued.length, costUsd: Number(s.costUsd.toFixed(4)) })
+      }
+    } else if (event.type === 'needs-input') trace({ ev: 'cc.needs_input', sid: agent.currentSessionId, session: event.name, kind: event.pending.kind, summary: event.pending.summary.slice(0, 160) })
+    else if (event.type === 'finished') trace({ ev: 'cc.finished', sid: agent.currentSessionId, session: event.name, chars: event.summary.length })
+    else if (event.event.kind === 'denied') trace({ ev: 'cc.denied', sid: agent.currentSessionId, reason: event.event.text.slice(0, 200) })
     if (!claude.enabled()) return
     const line = announcement(event)
     if (line) agent.announce(line)

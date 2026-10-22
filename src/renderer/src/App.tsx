@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
-import { Activity, AlignLeft, Brain, FolderKanban, MessageSquare, Settings, Zap } from 'lucide-react'
+import { Activity, AlignLeft, Bot, Brain, FolderKanban, MessageSquare, Settings, Zap } from 'lucide-react'
 import { T } from './theme'
 import { useStore, type View } from './state/store'
 import { IconBtn } from './components/primitives'
 import { Toasts } from './components/Toasts'
 import { ChatView } from './views/ChatView'
+import { ClaudeView } from './views/ClaudeView'
 import { PromptsView } from './views/PromptsView'
 import { SkillsView } from './views/SkillsView'
 import { MemoryView } from './views/MemoryView'
@@ -15,6 +16,7 @@ import { toggleListening } from './audio/voice'
 
 const NAV: Array<{ id: View; icon: typeof MessageSquare; label: string }> = [
   { id: 'chat', icon: MessageSquare, label: 'Chat' },
+  { id: 'claude', icon: Bot, label: 'Claude Code' },
   { id: 'prompts', icon: AlignLeft, label: 'Prompts' },
   { id: 'skills', icon: Zap, label: 'Skills' },
   { id: 'memory', icon: Brain, label: 'Memory' },
@@ -60,6 +62,7 @@ export default function App() {
       ) : (
         <>
           {view === 'chat' && <ChatView />}
+          {view === 'claude' && <ClaudeView />}
           {view === 'prompts' && <PromptsView />}
           {view === 'skills' && <SkillsView />}
           {view === 'memory' && <MemoryView />}
