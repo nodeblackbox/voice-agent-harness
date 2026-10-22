@@ -98,7 +98,10 @@ const api: VoiceAgentApi = {
     remove: (id) => invoke(IPC.claudeRemove, id),
     files: (id) => invoke(IPC.claudeFiles, id),
     read: (id, rel) => invoke(IPC.claudeRead, id, rel),
-    open: (id, rel, how) => invoke(IPC.claudeOpen, id, rel, how)
+    open: (id, rel, how) => invoke(IPC.claudeOpen, id, rel, how),
+    external: () => invoke(IPC.claudeExternal),
+    externalEvents: (sessionId, cwd) => invoke(IPC.claudeExternalEvents, sessionId, cwd),
+    attach: (x) => invoke(IPC.claudeAttach, x)
   },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },

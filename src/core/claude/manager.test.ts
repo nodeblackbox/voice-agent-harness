@@ -329,3 +329,43 @@ describe('rich events and session management', () => {
     expect(await m.remove(id)).toMatchObject({ ok: false })
   })
 })
+
+describe('saved sessions (browse and attach)', () => {
+  const history = (cwd: string) => ({
+    list: async () => [
+      { sessionId: 'old-1', title: 'Fix the build', cwd, lastModified: 5 },
+      { sessionId: 'mine', title: 'ours', cwd: path.join(ROOT, 'x'), lastModified: 4 }
+    ],
+    messages: async () => [
+      { type: 'user', message: { content: 'Fix the build' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Fixed.' }] } }
+    ]
+  })
+  const PROJECT = path.resolve('.')
+
+  it('lists saved sessions except the ones in our own workspace root', async () => {
+    const { m } = setup({ history: history(PROJECT) })
+    expect((await m.external()).map((x) => x.sessionId)).toEqual(['old-1'])
+    expect((await m.externalEvents('old-1')).map((e) => e.kind)).toEqual(['user', 'text'])
+  })
+
+  it('attach brings it in with its transcript; the first run forks, later runs resume the fork; shell always asks', async () => {
+    const { m, runs } = setup({ history: history(PROJECT), approveShell: false })
+    const r = await m.attach({ sessionId: 'old-1', title: 'Fix the build', cwd: PROJECT })
+    expect(r.ok).toBe(true)
+    const id = (r as any).session.id
+    expect(m.get(id)).toMatchObject({ external: true, workspace: PROJECT, sdkSessionId: 'old-1', forkOnResume: true, status: 'idle' })
+    expect(m.events(id).map((e) => e.kind)).toEqual(['user', 'text', 'status'])
+    expect((await m.external()).map((x) => x.sessionId)).toEqual([]) // already in the list
+    m.send(id, 'carry on'); await tick()
+    expect(runs[0]!.opts).toMatchObject({ resume: 'old-1', fork: true, cwd: PROJECT })
+    runs[0]!.init('forked-9'); await tick()
+    expect(m.get(id)).toMatchObject({ sdkSessionId: 'forked-9', forkOnResume: undefined })
+    // shell approval even though approveShell is off
+    void runs[0]!.opts.canUseTool('PowerShell', { command: 'npm test' })
+    await tick()
+    expect(m.get(id)!.status).toBe('needs_permission')
+    // a missing folder is refused
+    expect(await m.attach({ sessionId: 'gone', title: 'x', cwd: path.join(PROJECT, 'does-not-exist') })).toMatchObject({ ok: false })
+  })
+})

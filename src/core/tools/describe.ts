@@ -55,6 +55,7 @@ export function describeInput(name: string, input: unknown): string {
     case 'claude_stop':
     case 'claude_reset':
     case 'claude_files':
+    case 'claude_attach':
       return typeof i.session === 'string' ? i.session : ''
     default: {
       const entries = Object.entries(i)
@@ -128,6 +129,14 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_files': {
       const r = o as { count?: number; error?: string } | undefined
       return { detail: r?.error ?? `${r?.count ?? 0} files` }
+    }
+    case 'claude_recent': {
+      const r = o as { count?: number } | undefined
+      return { detail: `${r?.count ?? 0} saved sessions` }
+    }
+    case 'claude_attach': {
+      const r = o as { status?: string; error?: string } | undefined
+      return { detail: r?.error ?? r?.status }
     }
     default:
       return { detail: str(o, 90) }

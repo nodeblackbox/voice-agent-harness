@@ -31,6 +31,17 @@ export interface CcEvent {
   turns?: number
 }
 
+/** A saved Claude Code session elsewhere on this machine (CLI, IDE, other apps). */
+export interface CcExternal {
+  sessionId: string
+  title: string
+  cwd: string
+  branch?: string
+  lastModified: number
+  createdAt?: number
+  size?: number
+}
+
 /** One entry of a session's workspace listing; `path` is relative with forward slashes. */
 export interface CcFile {
   path: string
@@ -53,6 +64,10 @@ export interface CcSession {
   status: CcStatus
   /** SDK session id, used to resume after a restart or disconnect. */
   sdkSessionId?: string
+  /** Attached from a saved Claude Code session: works in that real project folder, not a sandbox. */
+  external?: boolean
+  /** The next run forks the conversation (attached sessions leave the original transcript untouched). */
+  forkOnResume?: boolean
   pending?: CcPending
   queued: string[]
   lastSummary: string

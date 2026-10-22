@@ -1,4 +1,4 @@
-import type { CcAnswer, CcEvent, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -134,6 +134,11 @@ export interface VoiceAgentApi {
     read(id: string, rel: string): Promise<CcFileContent | { error: string }>
     /** Open the workspace (rel '') or a file in it: default app, Explorer, or VS Code. */
     open(id: string, rel: string, how: 'default' | 'reveal' | 'code'): Promise<CcResult>
+    /** Your other saved Claude Code sessions on this machine, newest first. */
+    external(): Promise<CcExternal[]>
+    externalEvents(sessionId: string, cwd?: string): Promise<CcEvent[]>
+    /** Continue a saved session here (forks it; works in its own project folder). */
+    attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }

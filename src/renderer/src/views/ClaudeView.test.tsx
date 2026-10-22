@@ -14,6 +14,7 @@ const claude = {
   answer: vi.fn().mockResolvedValue({ ok: true, said: 'x' }), interrupt: vi.fn().mockResolvedValue(ok), stop: vi.fn().mockResolvedValue(ok), dequeue: vi.fn().mockResolvedValue(ok),
   rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
+  external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
 }
 ;(globalThis as { window: { api?: unknown } }).window.api = { claude, settings: { set: vi.fn(async (p: object) => p) } }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -237,5 +238,58 @@ describe('ClaudeView', () => {
     const next = applyClaudeEvent({ sessions: useStore.getState().claudeSessions, output: { s1: [] } }, { type: 'removed', id: 's1' })
     expect(next.sessions.map((x) => x.id)).toEqual(['s2'])
     expect(next.output.s1).toBeUndefined()
+  })
+
+  it('says to restart (instead of showing an empty folder) when the running app has no file browser yet', async () => {
+    const saved = claude.files
+    delete (claude as Partial<typeof claude>).files
+    try {
+      useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+      await render()
+      await click(button('Files'))
+      expect(host.textContent).toContain('Restart the app to load the file browser')
+      await click(button('Preview'))
+      expect(host.textContent).toContain('Restart the app to load the live preview')
+    } finally {
+      claude.files = saved
+    }
+  })
+
+  it('the files header counts files, folders and size, and opens the last file Claude touched', async () => {
+    claude.files.mockResolvedValue([
+      { path: 'css', dir: true, size: 0, mtime: 1 },
+      { path: 'css/site.css', dir: false, size: 1024, mtime: 1 },
+      { path: 'index.html', dir: false, size: 1024, mtime: 1 }
+    ])
+    const out = [{ t: 1, kind: 'tool' as const, text: 'Edit', tool: 'Edit', input: { file_path: 'css/site.css', old_string: 'a', new_string: 'b' } }]
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1', claudeOutput: { s1: out } })
+    await render()
+    await click(button('Files'))
+    expect(host.textContent).toContain('landing-page')
+    expect(host.textContent).toContain('2 files · 1 folder · 2.0 KB')
+    expect(host.textContent).toContain('site.css') // folder opened on first load
+    expect(claude.read).toHaveBeenCalledWith('s1', 'css/site.css')
+  })
+
+  it('browses saved sessions, reads one, and continues it here', async () => {
+    claude.external.mockResolvedValue([
+      { sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\Downloads\\AgentHarness', branch: 'main', lastModified: Date.now() - 60_000 },
+      { sessionId: 'x2', title: 'Voice clone', cwd: 'D:\\Downloads\\fish', lastModified: Date.now() - 120_000 }
+    ])
+    claude.externalEvents.mockResolvedValue([{ t: 1, kind: 'user', text: 'Why is the build red?' }, { t: 2, kind: 'text', text: 'A missing import.' }])
+    claude.attach.mockResolvedValue({ ok: true, session: session({ id: 's9', name: 'Fix the build', external: true }) })
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(button('Your other sessions'))
+    expect(host.textContent).toContain('Fix the build')
+    expect(host.textContent).toContain('AgentHarness')
+    await click(button('Voice clone'))
+    expect(claude.externalEvents).toHaveBeenCalledWith('x2', 'D:\\Downloads\\fish')
+    await click(button('Fix the build'))
+    expect(host.textContent).toContain('Why is the build red?')
+    expect(host.textContent).toContain('real project folder')
+    await click(button('Continue here'))
+    expect(claude.attach).toHaveBeenCalledWith({ sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\Downloads\\AgentHarness' })
+    expect(useStore.getState().claudeSelected).toBe('s9')
   })
 })

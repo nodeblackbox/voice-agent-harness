@@ -7,7 +7,7 @@ import type { CcResult, CcSession } from '@shared/claude'
 import type { Settings } from '@shared/types'
 import { resolveInside } from '@core/claude/files'
 import { ClaudeSessionManager } from '@core/claude/manager'
-import { realSdk } from '@core/claude/sdk'
+import { realHistory, realSdk } from '@core/claude/sdk'
 import { log, logError } from './log'
 
 const MIME: Record<string, string> = {
@@ -34,6 +34,7 @@ export class ClaudeService {
     const s = () => this.settings().claude
     this.manager = new ClaudeSessionManager({
       sdk: realSdk,
+      history: realHistory,
       workspaceRoot: s().workspaceRoot,
       config: () => ({ workspaceRoot: s().workspaceRoot, model: s().model, maxSessions: s().maxSessions, approveShell: s().approveShell }),
       persist: (sessions) => this.scheduleSave(sessions)

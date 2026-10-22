@@ -1,8 +1,8 @@
 /** Types for voice-managed Claude Code sessions. Electron-free: shared by the manager, tools and IPC. */
 
-import type { CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
 
-export type { CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
+export type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
 
 // ---- SDK seam (real implementation in sdk.ts, a scripted fake in tests) ----
 
@@ -14,6 +14,8 @@ export interface CcRunOpts {
   cwd: string
   model?: string
   resume?: string
+  /** With resume: continue in a new session id, leaving the original transcript as it was. */
+  fork?: boolean
   /** Streaming prompt: the manager pushes user messages here. */
   input: AsyncIterable<unknown>
   canUseTool: (toolName: string, input: Record<string, unknown>) => Promise<CcPermissionResult>
@@ -28,3 +30,9 @@ export interface CcRun {
 }
 
 export type CcSdk = (opts: CcRunOpts) => CcRun
+
+/** Saved sessions on this machine (real: the SDK's listSessions/getSessionMessages). */
+export interface CcHistory {
+  list(limit: number): Promise<CcExternal[]>
+  messages(sessionId: string, cwd?: string): Promise<unknown[]>
+}

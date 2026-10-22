@@ -126,6 +126,31 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
       }
     }),
 
+    claude_recent: tool({
+      description: "The user's OTHER Claude Code sessions on this computer (from the terminal, the IDE, other apps), newest first, with their project folder. Use when they ask about their other or earlier sessions, or want to pick one up.",
+      inputSchema: z.object({ search: z.string().default('').describe('Optional words to filter titles or project folders') }),
+      execute: async ({ search }) => {
+        const q = search.trim().toLowerCase()
+        const all = (await m.external(80)).filter((x) => !q || `${x.title} ${x.cwd}`.toLowerCase().includes(q))
+        return { count: all.length, sessions: all.slice(0, 12).map((x) => ({ title: x.title, project: x.cwd, branch: x.branch, last_active: new Date(x.lastModified).toLocaleString() })) }
+      }
+    }),
+
+    claude_attach: tool({
+      description:
+        "Continue one of the user's other saved Claude Code sessions here, so it can be steered by voice. It runs in that session's REAL project folder (not a sandbox): it can edit files there, deletes and anything outside the folder stay blocked, and every shell command asks first. The original session is left untouched (this continues a copy). Only call after the user clearly said yes to continuing that specific session.",
+      inputSchema: z.object({ session: z.string().min(1).describe('Title (or part of it) of the saved session, as listed by claude_recent') }),
+      execute: async ({ session }) => {
+        const q = session.trim().toLowerCase()
+        const all = await m.external(80)
+        const hits = all.filter((x) => x.title.toLowerCase().includes(q) || x.cwd.toLowerCase().includes(q))
+        if (hits.length !== 1) return { status: 'failed', error: hits.length ? `"${session}" matches ${hits.slice(0, 4).map((x) => x.title).join(', ')}` : `No saved session matching "${session}".` }
+        const x = hits[0]!
+        const r = await m.attach({ sessionId: x.sessionId, title: x.title, cwd: x.cwd })
+        return r.ok ? { status: 'attached', session: r.session.name, project: x.cwd } : { status: 'failed', error: r.error }
+      }
+    }),
+
     claude_files: tool({
       description: "The files in a session's workspace folder (newest first, with sizes). Use when the user asks what it made, what is in the folder, or which file changed.",
       inputSchema: z.object({ session: sessionRef }),

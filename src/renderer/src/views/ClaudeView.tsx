@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderOpen, FolderTree, Octagon, Pencil, Play, Plus, RotateCcw, Send, Square,
-  Trash2, Wrench, X, Zap, type LucideIcon
+  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, Octagon, Pencil, Play, Plus, RotateCcw, Send,
+  Square, Trash2, Wrench, X, Zap, type LucideIcon
 } from 'lucide-react'
 import type { CcAnswer, CcEvent, CcPending, CcQuestion, CcSession } from '@shared/claude'
 import type { ClaudeSettings } from '@shared/types'
@@ -10,8 +10,9 @@ import { useStore } from '../state/store'
 import { statusColor, statusLabel, waitingOnUser } from '../state/claude'
 import { Btn, Card, Dot, Empty, Page, SectionTitle, Tag, TextInput, Toggle } from '../components/primitives'
 import { Activity as ActivityFeed } from './claude/Activity'
+import { Browse } from './claude/Browse'
 import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
-import { Files, useWorkspaceFiles } from './claude/Files'
+import { Files, RestartNotice, useWorkspaceFiles } from './claude/Files'
 import { Inspector } from './claude/Inspector'
 import { Preview } from './claude/Preview'
 import { ago, isHtml, touchedFiles, turnStart } from './claude/feed'
@@ -195,6 +196,11 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
             </button>
           )}
           <StatusPill status={session.status} />
+          {session.external && (
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" title="Continued from one of your saved sessions: it works in this real project folder (fenced to it; shell commands always ask)" style={{ background: 'rgba(138,164,200,.10)', color: '#8AA4C8', border: '1px solid rgba(138,164,200,.3)', flexShrink: 0 }}>
+              <FolderGit2 size={11} /> your project
+            </span>
+          )}
         </div>
         <button type="button" onClick={() => void check(window.api.claude.open(session.id, '', 'default'))} className="text-xs truncate block max-w-full text-left" style={{ color: T.text3, fontFamily: T.mono, cursor: 'pointer', background: 'transparent' }} title="Open folder">
           {session.workspace}
@@ -271,13 +277,13 @@ function Detail({ session }: { session: CcSession }) {
   const toolCalls = useMemo(() => events.filter((e) => e.kind === 'tool').length, [events])
   // bumps whenever a tool finishes or a turn ends: the file tree and the preview refresh on it
   const pulse = useMemo(() => events.filter((e) => e.kind === 'tool_result' || e.kind === 'result').length, [events])
-  const { files, refresh } = useWorkspaceFiles(session.id, pulse)
+  const { files, refresh, unavailable } = useWorkspaceFiles(session.id, pulse)
   const openFile = (rel: string) => { setFile(rel); setTab('files') }
   const fileCount = (files ?? []).filter((f) => !f.dir).length
   const hasPage = (files ?? []).some((f) => !f.dir && isHtml(f.path))
   const tabs: Array<{ id: Tab; label: string; icon: LucideIcon; badge?: string }> = [
     { id: 'activity', label: 'Activity', icon: Activity, badge: toolCalls ? String(toolCalls) : undefined },
-    { id: 'files', label: 'Files', icon: FolderTree, badge: files ? String(fileCount) : undefined },
+    { id: 'files', label: 'Files', icon: FolderTree, badge: unavailable ? '!' : files ? String(fileCount) : undefined },
     { id: 'preview', label: 'Preview', icon: Eye, badge: hasPage ? 'live' : undefined }
   ]
   return (
@@ -311,9 +317,19 @@ function Detail({ session }: { session: CcSession }) {
           </>
         )}
         {tab === 'files' && (
-          <Files id={session.id} files={files} refresh={() => void refresh()} touched={touched} selected={file} onSelect={setFile} onPreview={(rel) => { setPage(rel); setTab('preview') }} />
+          <Files
+            id={session.id}
+            workspace={session.workspace}
+            files={files}
+            refresh={() => void refresh()}
+            unavailable={unavailable}
+            touched={touched}
+            selected={file}
+            onSelect={setFile}
+            onPreview={(rel) => { setPage(rel); setTab('preview') }}
+          />
         )}
-        {tab === 'preview' && <Preview id={session.id} files={files} page={page} onPage={setPage} pulse={pulse} />}
+        {tab === 'preview' && (unavailable ? <RestartNotice what="the live preview" /> : <Preview id={session.id} files={files} page={page} onPage={setPage} pulse={pulse} />)}
       </div>
       <Composer session={session} />
     </div>
@@ -338,6 +354,7 @@ function SessionCard({ s, active, onClick }: { s: CcSession; active: boolean; on
       <div className="flex items-center gap-2">
         <ClaudeMark size={16} working={working} color={s.status === 'stopped' ? T.text3 : undefined} />
         <span className="text-sm font-medium truncate flex-1" style={{ color: T.text }}>{s.name}</span>
+        {s.external && <FolderGit2 size={12} style={{ color: '#8AA4C8', flexShrink: 0 }} aria-label="your project" />}
         <span className="text-xs inline-flex items-center gap-1" style={{ color: c, flexShrink: 0 }}>
           <Dot color={c} size={6} pulse={working || !!s.pending} />
           {statusLabel(s.status)}
@@ -448,6 +465,7 @@ export function ClaudeView() {
   const reloadClaude = useStore((s) => s.reloadClaude)
   const [creating, setCreating] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
 
   useEffect(() => { void reloadClaude() }, [reloadClaude])
   const waiting = useMemo(() => waitingOnUser(sessions), [sessions])
@@ -501,14 +519,28 @@ export function ClaudeView() {
         )}
         {creating && <NewSession onDone={() => setCreating(false)} />}
         {sessions.length === 0 && !creating && <Empty>No sessions yet. Say “start a session called landing page” or tap New.</Empty>}
-        {sessions.map((s) => <SessionCard key={s.id} s={s} active={s.id === current?.id} onClick={() => selectClaude(s.id)} />)}
+        {sessions.map((s) => <SessionCard key={s.id} s={s} active={!browsing && s.id === current?.id} onClick={() => { setBrowsing(false); selectClaude(s.id) }} />)}
+        <button
+          type="button"
+          onClick={() => setBrowsing(!browsing)}
+          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left mt-1"
+          style={{ cursor: 'pointer', background: browsing ? 'rgba(217,119,87,.10)' : 'transparent', border: `1px dashed ${browsing ? 'rgba(217,119,87,.5)' : T.border}` }}
+        >
+          <History size={15} style={{ color: '#D97757', flexShrink: 0 }} />
+          <span className="flex flex-col min-w-0">
+            <span className="text-sm" style={{ color: T.text }}>Your other sessions</span>
+            <span className="text-xs" style={{ color: T.text3 }}>From the terminal, IDE and other apps</span>
+          </span>
+        </button>
         <div className="flex-1" />
         <button type="button" className="text-xs flex items-center gap-1 px-1" style={{ color: T.text3, cursor: 'pointer' }} onClick={() => setShowSettings(!showSettings)}>
           {showSettings ? 'Hide settings' : 'Settings'}
         </button>
         {showSettings && <ClaudeSettingsCard s={settings.claude} />}
       </aside>
-      {current ? (
+      {browsing ? (
+        <Browse onClose={() => setBrowsing(false)} onAttached={(id) => { selectClaude(id); setBrowsing(false) }} />
+      ) : current ? (
         <Detail key={current.id} session={current} />
       ) : (
         <div className="va-scroll flex-1 overflow-y-auto p-6">

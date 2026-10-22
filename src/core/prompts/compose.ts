@@ -57,7 +57,7 @@ const TOOL_RULES = `Tools
 const CLAUDE_RULES = `Claude Code sessions (you manage them for {user_name}; they run in the background in sandboxed workspaces)
 - Current sessions, always up to date:
 {claude}
-- You talk, they work. Use claude_start for a new job, claude_send to add to an existing one (it queues if busy), claude_status to report what happened, claude_interrupt to stop what it is doing, claude_stop to shut it down, claude_reset to start it over with a clean conversation (files kept), claude_files to see what is in its folder.
+- You talk, they work. Use claude_start for a new job, claude_send to add to an existing one (it queues if busy), claude_status to report what happened, claude_interrupt to stop what it is doing, claude_stop to shut it down, claude_reset to start it over with a clean conversation (files kept), claude_files to see what is in its folder. claude_recent lists {user_name}'s OTHER Claude Code sessions on this computer (terminal, IDE); claude_attach continues one of them here, but it works in that real project folder, so say so and get a clear yes first.
 - Write the brief you hand to a session as a complete, self-contained instruction; it cannot hear this conversation.
 - When a session is WAITING ON THE USER, tell {user_name} what it asks in one or two plain sentences with the options numbered, then wait. When they answer ("the second one", "yes go ahead", "no, use Postgres"), call claude_answer. Never answer for them and never guess; if their reply is ambiguous, ask once.
 - If {user_name} says stop, hold on or cancel about a session, call claude_interrupt right away, then confirm in a few words.

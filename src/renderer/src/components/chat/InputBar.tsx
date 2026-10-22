@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AlignLeft, Bot, ChevronDown, Folder, Headphones, HeadphoneOff, Lock, MessageSquare, Mic, MicOff, Send, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
 import type { Mode } from '@shared/types'
 import { T } from '../../theme'
@@ -62,6 +62,20 @@ export function InputBar() {
   const setView = useStore((s) => s.setView)
   const [open, setOpen] = useState<Menu>(null)
   const [draft, setDraft] = useState('')
+  const barRef = useRef<HTMLDivElement>(null)
+  // The bar floats over the transcript and grows (Claude strip, chips, multi-line drafts): publish its
+  // height so the transcript can keep its last message clear of it.
+  useEffect(() => {
+    const el = barRef.current
+    const host = el?.parentElement
+    if (!el || !host || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      host.style.setProperty('--va-input-h', `${Math.ceil(el.getBoundingClientRect().height)}px`)
+      window.dispatchEvent(new Event('va-input-resize'))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const claudeAvailable = !!settings?.claude && !!window.api.claude
   const claudeOn = claudeAvailable && !!settings?.claude?.enabled
   const toggleClaude = () => {
@@ -102,7 +116,11 @@ export function InputBar() {
   )
 
   return (
-    <div className="absolute left-0 right-0 flex justify-center px-6" style={{ bottom: 20, pointerEvents: 'none' }}>
+    <div
+      ref={barRef}
+      className="absolute left-0 right-0 flex justify-center px-6"
+      style={{ bottom: 0, paddingTop: 28, paddingBottom: 20, pointerEvents: 'none', background: `linear-gradient(to top, ${T.bg} 0%, ${T.bg} 72%, rgba(11,13,16,0) 100%)` }}
+    >
       <div className="w-full flex flex-col gap-2" style={{ maxWidth: 720, pointerEvents: 'auto' }}>
         {claudeOn && <ClaudeStrip />}
         <div className="flex items-center gap-2 px-1">

@@ -1,6 +1,6 @@
 /** The real Agent SDK behind the `CcSdk` seam. Everything else in core/claude is SDK-free and tested with a fake. */
-import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { CcSdk } from './types'
+import { getSessionMessages, listSessions, query } from '@anthropic-ai/claude-agent-sdk'
+import type { CcHistory, CcSdk } from './types'
 
 /**
  * Sessions ride the ambient `claude` login. A stale ANTHROPIC_API_KEY in the environment (the voice app's own
@@ -17,6 +17,7 @@ export const realSdk: CcSdk = (o) => {
       cwd: o.cwd,
       model: o.model,
       resume: o.resume,
+      forkSession: o.fork || undefined,
       env: sessionEnv(),
       settingSources: [], // no user/project settings or CLAUDE.md from the host machine
       permissionMode: 'default',
@@ -38,4 +39,18 @@ export const realSdk: CcSdk = (o) => {
     interrupt: async () => { await q.interrupt() },
     close: () => q.close(),
   }
+}
+
+export const realHistory: CcHistory = {
+  async list(limit) {
+    // interactive sessions only (like the CLI's /resume), not programmatic ones such as our own
+    const all = await listSessions({ limit, includeProgrammatic: false })
+    return all
+      .filter((s) => !!s.cwd)
+      .map((s) => ({
+        sessionId: s.sessionId, title: s.customTitle || s.summary || s.firstPrompt || 'Untitled', cwd: s.cwd!, branch: s.gitBranch,
+        lastModified: s.lastModified, createdAt: s.createdAt, size: s.fileSize,
+      }))
+  },
+  messages: (sessionId, cwd) => getSessionMessages(sessionId, { dir: cwd }),
 }

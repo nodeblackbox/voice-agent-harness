@@ -292,6 +292,16 @@ export function Transcript() {
     if (el && pinned.current) el.scrollTop = el.scrollHeight
   }, [messages.length, lastKey, partial, agentState])
 
+  // the floating input bar changed height: stay pinned to the newest message
+  useEffect(() => {
+    const h = () => {
+      const el = scrollRef.current
+      if (el && pinned.current) el.scrollTop = el.scrollHeight
+    }
+    window.addEventListener('va-input-resize', h)
+    return () => window.removeEventListener('va-input-resize', h)
+  }, [])
+
   const onScroll = () => {
     const el = scrollRef.current
     if (!el) return
@@ -317,7 +327,7 @@ export function Transcript() {
   const hidden = from
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className="va-scroll flex-1 overflow-y-auto px-6 pt-6" style={{ paddingBottom: 200 }}>
+    <div ref={scrollRef} onScroll={onScroll} className="va-scroll flex-1 overflow-y-auto px-6 pt-6" style={{ paddingBottom: 'calc(var(--va-input-h, 170px) + 28px)' }}>
       <div className="mx-auto flex flex-col gap-5" style={{ maxWidth: 720 }}>
         {messages.length === 0 && (
           <div className="text-sm mt-16 text-center" style={{ color: T.text3, lineHeight: 1.6 }}>

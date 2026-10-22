@@ -22,7 +22,7 @@ const Q = { questions: [{ question: 'Pick one?', header: 'p', multiSelect: false
 describe('claude voice tools', () => {
   it('exposes the seven tools', () => {
     expect(Object.keys(claudeTools(setup().m)).sort()).toEqual(
-      ['claude_answer', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
+      ['claude_answer', 'claude_attach', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_recent', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
   })
 
   it('start -> list -> status flow returns immediately with speakable fields', async () => {

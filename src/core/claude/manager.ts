@@ -11,15 +11,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { digest } from './digest'
+import { historyEvents, messageEvents } from './events'
 import { checkToolUse } from './fence'
 import { listWorkspace, readWorkspaceFile } from './files'
 import { Pushable } from './pushable'
 import type {
-  CcAnswer, CcEvent, CcFile, CcFileContent, CcManagerEvent, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
+  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
 
 export interface ManagerDeps {
   sdk: CcSdk
+  /** The machine's saved Claude Code sessions (CLI, IDE, other apps), for browsing and attaching. */
+  history?: CcHistory
   /** Every session workspace lives directly under this folder. */
   workspaceRoot: string
   model?: string
@@ -211,6 +214,46 @@ export class ClaudeSessionManager {
     return { ok: true, said: Object.values(answers).join('; ') }
   }
 
+  /** Saved Claude Code sessions elsewhere on this machine, newest first (not ones already in the list). */
+  async external(limit = 80): Promise<CcExternal[]> {
+    if (!this.d.history) return []
+    const mine = new Set([...this.rts.values()].map((r) => r.s.sdkSessionId).filter(Boolean))
+    const root = path.resolve(this.cfg.workspaceRoot).toLowerCase()
+    return (await this.d.history.list(limit)).filter((x) => !mine.has(x.sessionId) && !(x.cwd && path.resolve(x.cwd).toLowerCase().startsWith(root)))
+  }
+
+  /** A saved session's transcript as events (read-only preview). */
+  async externalEvents(sessionId: string, cwd?: string): Promise<CcEvent[]> {
+    if (!this.d.history) return []
+    return historyEvents(await this.d.history.messages(sessionId, cwd))
+  }
+
+  /**
+   * Bring a saved session into the list so it can be continued by voice. It works in its own project
+   * folder (fenced to it; shell commands always ask) and its first run forks the conversation, so the
+   * original transcript is left as it was.
+   */
+  async attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>> {
+    const max = this.cfg.maxSessions ?? 4
+    if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
+    if (!x.cwd || !fs.existsSync(x.cwd)) return { ok: false, error: 'Its project folder no longer exists.' }
+    const dup = [...this.rts.values()].find((r) => r.s.sdkSessionId === x.sessionId)
+    if (dup) return { ok: true, session: this.snap(dup) }
+    const t = this.now()
+    const s: CcSession = {
+      id: `cc${++this.seq}-${t.toString(36)}`, name: x.title.trim().slice(0, 60) || path.basename(x.cwd), workspace: path.resolve(x.cwd), status: 'idle',
+      sdkSessionId: x.sessionId, forkOnResume: true, external: true, queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
+    }
+    const r: Rt = { s, events: [], lastText: '' }
+    try {
+      r.events = (await this.externalEvents(x.sessionId, x.cwd)).slice(-(this.d.eventBuffer ?? 200)).map((e) => ({ ...e, t }))
+    } catch { /* the transcript is only context; attaching still works */ }
+    this.rts.set(s.id, r)
+    this.log(r, 'status', `Continued here from ${path.basename(x.cwd)} (a copy: the original session is untouched)`)
+    this.changed(r)
+    return { ok: true, session: this.snap(r) }
+  }
+
   rename(id: string, name: string): CcResult {
     const r = this.rts.get(id)
     if (!r) return { ok: false, error: 'No such session.' }
@@ -266,7 +309,10 @@ export class ClaudeSessionManager {
   }
 
   private log(r: Rt, kind: CcEvent['kind'], text: string, extra: Partial<CcEvent> = {}): void {
-    const e: CcEvent = { t: this.now(), kind, text, ...extra }
+    this.push(r, { t: this.now(), kind, text, ...extra })
+  }
+
+  private push(r: Rt, e: CcEvent): void {
     r.events.push(e)
     const cap = this.d.eventBuffer ?? 200
     if (r.events.length > cap) r.events.splice(0, r.events.length - cap)
@@ -294,6 +340,7 @@ export class ClaudeSessionManager {
       cwd: r.s.workspace,
       model: this.cfg.model || undefined,
       resume: r.s.sdkSessionId,
+      fork: r.s.forkOnResume && !!r.s.sdkSessionId,
       input,
       canUseTool: (name, inp) => this.canUseTool(r, name, inp),
       gate: (name, inp) => {
@@ -338,17 +385,13 @@ export class ClaudeSessionManager {
 
   private handle(r: Rt, m: any): void {
     if (m.type === 'system' && m.subtype === 'init' && m.session_id) {
-      if (r.s.sdkSessionId !== m.session_id) { r.s.sdkSessionId = m.session_id; this.changed(r) }
+      if (r.s.sdkSessionId !== m.session_id || r.s.forkOnResume) { r.s.sdkSessionId = m.session_id; r.s.forkOnResume = undefined; this.changed(r) }
     } else if (m.type === 'system' && m.subtype === 'permission_denied') {
       this.log(r, 'denied', String(m.message ?? m.tool_name ?? 'Permission denied'))
-    } else if (m.type === 'assistant') {
-      for (const b of m.message?.content ?? []) {
-        if (b.type === 'text' && b.text?.trim()) { r.lastText = b.text; this.log(r, 'text', b.text) }
-        else if (b.type === 'tool_use') this.log(r, 'tool', `${b.name} ${briefInput(b.input)}`, { tool: String(b.name), toolId: b.id, input: clipInput(b.input) })
-      }
-    } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
-      for (const b of m.message.content) {
-        if (b?.type === 'tool_result') this.log(r, 'tool_result', clip(resultText(b.content), 6000), { toolId: b.tool_use_id, ...(b.is_error ? { isError: true } : {}) })
+    } else if (m.type === 'assistant' || m.type === 'user') {
+      for (const e of messageEvents(m, this.now())) {
+        if (e.kind === 'text') r.lastText = e.text
+        this.push(r, e)
       }
     } else if (m.type === 'result') this.onResult(r, m)
   }
@@ -387,7 +430,8 @@ export class ClaudeSessionManager {
         summary: questions.map((q) => q.question).join(' '),
       }, 'needs_input')
     }
-    if (SHELL.has(toolName) && (this.cfg.approveShell ?? true)) {
+    // a session attached to a real project folder always asks before running commands
+    if (SHELL.has(toolName) && (r.s.external || (this.cfg.approveShell ?? true))) {
       const cmd = String(input.command ?? '')
       return this.block(r, input, { id: `${r.s.id}-p${++this.seq}`, kind: 'permission', toolName, summary: `Run: ${cmd}` }, 'needs_permission')
     }
@@ -404,31 +448,6 @@ export class ClaudeSessionManager {
       this.emit({ type: 'needs-input', id: r.s.id, name: r.s.name, pending })
     })
   }
-}
-
-function briefInput(input: unknown): string {
-  const i = (input ?? {}) as Record<string, unknown>
-  const v = i.command ?? i.file_path ?? i.path ?? i.pattern ?? i.description ?? ''
-  return String(v).slice(0, 100)
-}
-
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}\n… (${s.length - n} more characters)` : s)
-
-/** Tool input for display: long strings (file contents, edits) clipped so events stay small. */
-function clipInput(input: unknown): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries((input ?? {}) as Record<string, unknown>)) {
-    if (typeof v === 'string') out[k] = clip(v, 8000)
-    else if (Array.isArray(v)) out[k] = v.slice(0, 60).map((x) => (x && typeof x === 'object' ? clipInput(x) : x))
-    else out[k] = v && typeof v === 'object' ? clipInput(v) : v
-  }
-  return out
-}
-
-function resultText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content.map((c: any) => (c?.type === 'text' ? String(c.text ?? '') : c?.type === 'image' ? '[image]' : '')).filter(Boolean).join('\n')
 }
 
 function parseQuestions(input: Record<string, unknown>): CcQuestion[] {
