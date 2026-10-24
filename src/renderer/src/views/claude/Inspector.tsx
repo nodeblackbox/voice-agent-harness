@@ -2,6 +2,7 @@
 import { CircleCheck, CircleDot, Circle } from 'lucide-react'
 import type { CcEvent, CcSession } from '@shared/claude'
 import { T } from '../../theme'
+import { costNote } from './Account'
 import { FAMILY } from './Activity'
 import { ago, latestTodos, toolStats, type Touched } from './feed'
 
@@ -23,12 +24,12 @@ export function Inspector({ session, events, touched, onOpenFile }: { session: C
     <aside className="va-scroll hidden xl:flex flex-col gap-5 p-4 overflow-y-auto" style={{ width: 250, borderLeft: `1px solid ${T.border}`, background: T.rail }}>
       <div className="grid grid-cols-2 gap-2">
         {[
-          ['Cost', `$${session.costUsd.toFixed(2)}`],
+          [session.billing === 'api-key' ? 'Cost' : 'Usage', `$${session.costUsd.toFixed(2)}`, costNote(session)],
           ['Turns', String(session.turns)],
           ['Files', String(touched.length)],
           ['Tool calls', String(stats.reduce((n, s) => n + s.count, 0))]
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-lg px-2.5 py-2" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+        ].map(([k, v, note]) => (
+          <div key={k} title={note} className="rounded-lg px-2.5 py-2" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
             <div style={{ color: T.text3, fontSize: 10.5 }}>{k}</div>
             <div className="text-sm font-semibold" style={{ color: T.text, fontFamily: T.mono }}>{v}</div>
           </div>

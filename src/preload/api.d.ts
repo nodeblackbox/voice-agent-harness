@@ -1,4 +1,4 @@
-import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
+import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -144,6 +144,8 @@ export interface VoiceAgentApi {
     folders(): Promise<Array<{ name: string; path: string; mtime: number; inUse: boolean }>>
     /** Native folder picker; null when cancelled. */
     pickFolder(): Promise<string | null>
+    /** Who sessions run as (asked of the CLI, no usage); `fresh` skips the cached answer. */
+    account(fresh?: boolean): Promise<CcAccount>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }

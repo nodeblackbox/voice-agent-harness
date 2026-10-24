@@ -3,11 +3,11 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, dialog, net, shell } from 'electron'
-import type { CcResult, CcSession } from '@shared/claude'
+import type { CcAccount, CcResult, CcSession } from '@shared/claude'
 import type { Settings } from '@shared/types'
 import { resolveInside } from '@core/claude/files'
 import { ClaudeSessionManager } from '@core/claude/manager'
-import { realHistory, realSdk } from '@core/claude/sdk'
+import { realAccount, realHistory, realSdk } from '@core/claude/sdk'
 import { log, logError } from './log'
 
 const MIME: Record<string, string> = {
@@ -28,6 +28,7 @@ export class ClaudeService {
   private readonly file: string
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private latest: CcSession[] = []
+  private who: Promise<CcAccount> | null = null
 
   constructor(userData: string, private settings: () => Settings) {
     this.file = join(userData, 'claude-sessions.json')
@@ -51,6 +52,20 @@ export class ClaudeService {
     const s = this.manager.get(id)
     if (!s) return null
     return rel ? resolveInside(s.workspace, rel) : s.workspace
+  }
+
+  /** Who sessions run as. Cached: it starts a CLI process (no prompt, so no usage) and takes a few seconds. */
+  account(fresh = false): Promise<CcAccount> {
+    if (!this.who || fresh) {
+      const root = this.settings().claude.workspaceRoot
+      mkdirSync(root, { recursive: true })
+      this.who = realAccount(root).then((a) => {
+        log('claude', `account: ${a.billing}${a.plan ? ` (${a.plan})` : ''}${a.keySource ? ` key=${a.keySource}` : ''}${a.error ? ` error=${a.error}` : ''}`)
+        if (a.error) this.who = null
+        return a
+      })
+    }
+    return this.who
   }
 
   /** Native folder picker for "work in this folder", starting in the workspace root. */

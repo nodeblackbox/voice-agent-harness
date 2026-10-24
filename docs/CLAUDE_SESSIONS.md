@@ -77,9 +77,22 @@ The SDK's own sandbox is macOS/Linux only, so this hook is the real gate. On top
 your approval by voice (`Settings → Ask before running shell commands`). `permissionMode` is always
 `default`; `bypassPermissions` and bare `allowedTools` are never used (a bare entry skips `canUseTool`).
 
-Sessions use your ambient `claude` login (same five-hour window as interactive Claude Code), with
-`ANTHROPIC_API_KEY` stripped from their environment so a stale key can't break them. Fine for personal
-use; use API-key auth before shipping this to other people.
+### Billing: your subscription, never the API key
+
+Sessions run on your own `claude` login (your plan's limits, the same five-hour window as interactive Claude
+Code), not pay-per-token API credit. This machine has `ANTHROPIC_API_KEY` set for the voice agent's own LLM,
+and the CLI prefers an env key over the login, so three things keep sessions on the subscription:
+
+- `sessionEnv()` (`src/core/claude/sdk.ts`) strips `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider switches from every session's environment.
+- Every turn's `init` message reports `apiKeySource`. Anything other than `none` (e.g. an `apiKeyHelper`)
+  stops the run before it does anything and marks the session errored ("about to bill an API key").
+- The sidebar badge asks the CLI who it runs as (`accountInfo()`, no prompt, so no usage): green "Claude Max
+  subscription · email", or amber if a key would be billed or the login can't be checked.
+
+Verified live with `pnpm lab:auth` on 2026-10-24: scrubbed → `Claude Max`, your email, no key; with `--raw`
+(no scrub) → `apiKeySource: ANTHROPIC_API_KEY`. The `$` figures in the view are usage priced at API rates,
+covered by the plan, not charges. Use API-key auth before shipping this to other people.
 
 ## Layout
 

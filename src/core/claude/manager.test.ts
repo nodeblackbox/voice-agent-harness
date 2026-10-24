@@ -369,3 +369,29 @@ describe('saved sessions (browse and attach)', () => {
     expect(await m.attach({ sessionId: 'gone', title: 'x', cwd: path.join(PROJECT, 'does-not-exist') })).toMatchObject({ ok: false })
   })
 })
+
+describe('billing', () => {
+  it('records that a run is on the Claude subscription', async () => {
+    const { m, last } = setup()
+    const id = (m.start('Sub', 'hi') as any).session.id
+    await tick()
+    last()!.emit({ type: 'system', subtype: 'init', session_id: 'sdk-1', apiKeySource: 'none' })
+    await tick()
+    expect(m.get(id)!.billing).toBe('subscription')
+  })
+
+  it('stops a run that would bill an API key before it does anything', async () => {
+    const { m, last } = setup()
+    const id = (m.start('Keyed', 'hi') as any).session.id
+    await tick()
+    const run = last()!
+    run.emit({ type: 'system', subtype: 'init', session_id: 'sdk-1', apiKeySource: 'ANTHROPIC_API_KEY' })
+    run.say('should never be seen')
+    await tick(); await tick()
+    const s = m.get(id)!
+    expect(run.closed).toBe(true)
+    expect(s).toMatchObject({ status: 'error', billing: 'api-key' })
+    expect(s.lastSummary).toContain('API key')
+    expect(m.events(id).some((e) => e.kind === 'text')).toBe(false)
+  })
+})

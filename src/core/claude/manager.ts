@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { billingOf } from './account'
 import { digest } from './digest'
 import { historyEvents, messageEvents } from './events'
 import { checkToolUse, insideRoot } from './fence'
@@ -42,6 +43,8 @@ export interface ManagerDeps {
 
 interface Rt {
   s: CcSession
+  /** A run refused for billing an API key; its remaining messages are dropped. */
+  refused?: CcRun
   events: CcEvent[]
   input?: Pushable<unknown>
   run?: CcRun
@@ -443,7 +446,10 @@ export class ClaudeSessionManager {
 
   private async pump(r: Rt, run: CcRun): Promise<void> {
     try {
-      for await (const m of run.messages) this.handle(r, m)
+      for await (const m of run.messages) {
+        if (r.refused === run) continue // stopped for billing a key: nothing more from this run counts
+        this.handle(r, m, run)
+      }
     } catch (e) {
       if (r.run === run) {
         this.log(r, 'error', (e as Error).message)
@@ -462,9 +468,21 @@ export class ClaudeSessionManager {
     }
   }
 
-  private handle(r: Rt, m: any): void {
+  private handle(r: Rt, m: any, run?: CcRun): void {
     if (m.type === 'system' && m.subtype === 'init' && m.session_id) {
-      if (r.s.sdkSessionId !== m.session_id || r.s.forkOnResume) { r.s.sdkSessionId = m.session_id; r.s.forkOnResume = undefined; this.changed(r) }
+      const billing = billingOf(m.apiKeySource)
+      if (billing === 'api-key') {
+        // Sessions must run on the user's Claude subscription, never a pay-per-token key: stop before the turn costs anything.
+        const why = `Stopped: it was about to bill an API key (${m.apiKeySource}) instead of your Claude subscription.`
+        r.s.billing = billing
+        r.refused = run
+        this.log(r, 'error', why)
+        void this.stop(r.s.id).then(() => { r.s.status = 'error'; r.s.lastSummary = why; this.changed(r) })
+        return
+      }
+      if (billing !== 'unknown') r.s.billing = billing
+      if (r.s.sdkSessionId !== m.session_id || r.s.forkOnResume) { r.s.sdkSessionId = m.session_id; r.s.forkOnResume = undefined }
+      this.changed(r)
     } else if (m.type === 'system' && m.subtype === 'permission_denied') {
       this.log(r, 'denied', String(m.message ?? m.tool_name ?? 'Permission denied'))
     } else if (m.type === 'assistant' || m.type === 'user') {

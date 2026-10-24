@@ -103,7 +103,8 @@ const api: VoiceAgentApi = {
     externalEvents: (sessionId, cwd) => invoke(IPC.claudeExternalEvents, sessionId, cwd),
     attach: (x) => invoke(IPC.claudeAttach, x),
     folders: () => invoke(IPC.claudeFolders),
-    pickFolder: () => invoke(IPC.claudePickFolder)
+    pickFolder: () => invoke(IPC.claudePickFolder),
+    account: (fresh) => invoke(IPC.claudeAccount, fresh)
   },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },

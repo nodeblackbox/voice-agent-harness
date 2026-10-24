@@ -9,6 +9,7 @@ import { T } from '../theme'
 import { useStore } from '../state/store'
 import { statusColor, statusLabel, waitingOnUser } from '../state/claude'
 import { Btn, Card, Dot, Empty, Page, SectionTitle, Tag, TextInput, Toggle } from '../components/primitives'
+import { AccountBadge, costNote, useClaudeAccount } from './claude/Account'
 import { Activity as ActivityFeed } from './claude/Activity'
 import { Browse } from './claude/Browse'
 import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
@@ -212,7 +213,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
         </button>
       </div>
       <div className="hidden lg:flex items-center gap-3 text-xs" style={{ color: T.text3, fontFamily: T.mono }}>
-        <span title="Cost so far" className="inline-flex items-center gap-1"><Coins size={11} />${session.costUsd.toFixed(3)}</span>
+        <span title={costNote(session)} className="inline-flex items-center gap-1"><Coins size={11} />${session.costUsd.toFixed(3)}</span>
         <span title="Files changed" className="inline-flex items-center gap-1"><FileCode size={11} />{touched}</span>
         <span title="Tool calls" className="inline-flex items-center gap-1"><Wrench size={11} />{toolCalls}</span>
       </div>
@@ -375,7 +376,7 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
         {s.pending ? (s.pending.kind === 'question' ? 'Asking: ' : '') + s.pending.summary : s.lastSummary || (s.status === 'idle' ? 'Ready for a task' : statusLabel(s.status))}
       </div>
       <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3, fontFamily: T.mono, fontSize: 10.5 }}>
-        <span>${s.costUsd.toFixed(2)}</span>
+        <span title={costNote(s)}>${s.costUsd.toFixed(2)}</span>
         <span>·</span>
         <span>{s.turns} turns</span>
         <span>·</span>
@@ -520,6 +521,7 @@ export function ClaudeView() {
   const [showSettings, setShowSettings] = useState(false)
   const [browsing, setBrowsing] = useState(false)
   const [picking, setPicking] = useState<Set<string> | null>(null)
+  const who = useClaudeAccount()
   const [deleteFolders, setDeleteFolders] = useState(false)
   const pushToast = useStore((s) => s.pushToast)
   const prune = async () => {
@@ -572,11 +574,12 @@ export function ClaudeView() {
             {!picking && <Btn small icon={Plus} onClick={() => setCreating(true)}>New</Btn>}
           </span>
         </div>
+        <AccountBadge {...who} />
         {sessions.length > 0 && (
           <div className="flex items-center gap-3 px-1 text-xs" style={{ color: T.text3 }}>
             <span>{sessions.length} total</span>
             {running > 0 && <span style={{ color: T.violet }}>{running} working</span>}
-            <span className="ml-auto" style={{ fontFamily: T.mono }}>${sessions.reduce((n, s) => n + s.costUsd, 0).toFixed(2)}</span>
+            <span className="ml-auto" title={costNote(null, who.account?.billing === 'subscription' ? who.account.plan ?? 'Claude' : undefined)} style={{ fontFamily: T.mono }}>${sessions.reduce((n, s) => n + s.costUsd, 0).toFixed(2)}</span>
           </div>
         )}
         {waiting.length > 0 && (

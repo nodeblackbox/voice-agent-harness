@@ -170,6 +170,7 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeRemove, (_e, id: string, deleteFolder?: boolean) => d.claude.manager.remove(id, { deleteFolder: !!deleteFolder }))
   h(IPC.claudeFolders, () => d.claude.manager.folders())
   h(IPC.claudePickFolder, () => d.claude.pickFolder())
+  h(IPC.claudeAccount, (_e, fresh?: boolean) => d.claude.account(!!fresh))
   h(IPC.claudeFiles, (_e, id: string) => d.claude.manager.files(id))
   h(IPC.claudeRead, (_e, id: string, rel: string) => d.claude.manager.readFile(id, rel))
   h(IPC.claudeExternal, () => d.claude.manager.external())

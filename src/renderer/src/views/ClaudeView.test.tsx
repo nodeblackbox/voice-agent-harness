@@ -16,6 +16,7 @@ const claude = {
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
   external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
   folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null),
+  account: vi.fn().mockResolvedValue({ billing: 'subscription', plan: 'Claude Max', email: 'me@example.com' }),
 }
 ;(globalThis as { window: { api?: unknown } }).window.api = { claude, settings: { set: vi.fn(async (p: object) => p) } }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -330,5 +331,18 @@ describe('ClaudeView', () => {
     await click(button('bing-bong-jiggly'))
     await click(button('Start'))
     expect(claude.start).toHaveBeenCalledWith('slop three', undefined, 'bing-bong-jiggly')
+  })
+
+  it('shows which login sessions bill: the Claude subscription', async () => {
+    await render()
+    expect(host.textContent).toContain('Claude Max subscription')
+    expect(host.textContent).toContain('me@example.com')
+  })
+
+  it('warns loudly when an API key would be billed', async () => {
+    claude.account.mockResolvedValueOnce({ billing: 'api-key', keySource: 'ANTHROPIC_API_KEY' })
+    await render()
+    expect(host.textContent).toContain('An API key would be billed')
+    expect(host.textContent).toContain('ANTHROPIC_API_KEY')
   })
 })

@@ -1,13 +1,24 @@
 /** The real Agent SDK behind the `CcSdk` seam. Everything else in core/claude is SDK-free and tested with a fake. */
 import { getSessionMessages, listSessions, query } from '@anthropic-ai/claude-agent-sdk'
+import type { CcAccount } from '@shared/claude'
+import { toAccount } from './account'
 import type { CcHistory, CcSdk } from './types'
 
 /**
- * Sessions ride the ambient `claude` login. A stale ANTHROPIC_API_KEY in the environment (the voice app's own
- * LLM keys can leak in via .env) makes the CLI answer "Invalid API key" instead, so it is stripped here.
+ * Anything here would make the CLI bill an API key or another provider instead of the user's `claude` login
+ * (their subscription). ANTHROPIC_API_KEY is set on this machine for the voice app's own LLM, so it would
+ * otherwise win.
  */
-function sessionEnv(): Record<string, string | undefined> {
-  return { ...process.env, ANTHROPIC_API_KEY: undefined }
+const NOT_THE_LOGIN = [
+  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
+]
+
+/** Sessions always ride the user's `claude` login (subscription), never the voice app's API key. */
+export function sessionEnv(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env }
+  for (const k of NOT_THE_LOGIN) env[k] = undefined
+  return env
 }
 
 export const realSdk: CcSdk = (o) => {
@@ -38,6 +49,25 @@ export const realSdk: CcSdk = (o) => {
     messages: q,
     interrupt: async () => { await q.interrupt() },
     close: () => q.close(),
+  }
+}
+
+/**
+ * Ask the CLI who it runs as, started exactly like a session (same env scrub). The prompt never yields, so no
+ * turn runs and nothing is used; the process is closed once it answers.
+ */
+export async function realAccount(cwd: string, timeoutMs = 30_000): Promise<CcAccount> {
+  const idle = { async *[Symbol.asyncIterator]() { await new Promise(() => {}) } }
+  const q = query({ prompt: idle as never, options: { cwd, env: sessionEnv(), settingSources: [] } })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const late = new Promise<never>((_, fail) => { timer = setTimeout(() => fail(new Error('Claude Code did not answer in time.')), timeoutMs) })
+    return toAccount(await Promise.race([q.accountInfo(), late]))
+  } catch (e) {
+    return { billing: 'unknown', error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    clearTimeout(timer)
+    q.close()
   }
 }
 

@@ -57,6 +57,23 @@ export type CcFileContent =
   | { kind: 'binary'; size: number }
 
 /** Serializable snapshot, safe to send over IPC. */
+/** 'subscription' = the user's Claude login (plan usage); 'api-key' = billed per token to an API key. */
+export type CcBilling = 'subscription' | 'api-key' | 'other'
+
+/** Who Claude Code sessions run as, asked of the CLI itself. */
+export interface CcAccount {
+  billing: CcBilling | 'unknown'
+  email?: string
+  organization?: string
+  /** e.g. "Claude Max" */
+  plan?: string
+  /** Where an API key came from, when one is in use (e.g. "ANTHROPIC_API_KEY", "apiKeyHelper"). */
+  keySource?: string
+  /** e.g. "bedrock", when not Anthropic directly */
+  provider?: string
+  error?: string
+}
+
 export interface CcSession {
   id: string
   name: string
@@ -68,6 +85,8 @@ export interface CcSession {
   external?: boolean
   /** The next run forks the conversation (attached sessions leave the original transcript untouched). */
   forkOnResume?: boolean
+  /** What the last run billed, from the CLI's own report: the user's Claude login, or an API key. */
+  billing?: CcBilling
   pending?: CcPending
   queued: string[]
   lastSummary: string

@@ -60,6 +60,7 @@ export const IPC = {
   claudeAttach: 'claude:attach',
   claudeFolders: 'claude:folders',
   claudePickFolder: 'claude:pick-folder',
+  claudeAccount: 'claude:account',
   mcpStatus: 'mcp:status',
   mcpReload: 'mcp:reload',
   mcpTestTool: 'mcp:test-tool',
