@@ -44,6 +44,8 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Chromium's PDF viewer, for PDFs a Claude session writes (shown in the workspace file viewer)
+      plugins: true,
       backgroundThrottling: false
     }
   })

@@ -96,7 +96,7 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 
 | key | default | old agent | what it does |
 |---|---|---|---|
-| `firstTokenTimeoutMs` | 8000 | 8000 | No first token after this → retry once → one turn on the fallback model. |
+| `firstTokenTimeoutMs` | 8000 | 8000 | Nothing at all from the model after this → straight to the next model in the chain (no same-model retry). Thinking or a streaming tool input counts as alive: silent thinking gets this plus `stallTimeoutMs`. The chain is the primary, your backup, then Claude Haiku 5.5 when there is an Anthropic key; a model that said its request is too big (Groq free tier: 8k tokens a minute) or that is rate-limited for more than 2.5 s is skipped up front, and the reasons are what the toast and the error say. |
 | `stallTimeoutMs` | 8000 | 8000 | Gap between tokens mid-stream that abandons the reply. Already-chunked sentences are still spoken and the transcript says "response cut short". |
 | `toolStallTimeoutMs` | 25000 | 25000 | Same, while a tool call is in flight. |
 | `retryBackoffMs` | 400 | 400 | Pause before the same-model retry on a transient error. |
@@ -111,6 +111,7 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `toolResultKeepChars` | 700 | 700 | Characters of each tool result kept in history for later turns. The model already consumed the full result when it ran; this keeps later turns lean. |
 | `temperature` | 0.6 | 0.6 | Sampling temperature. |
 | `maxTokens` | 1000 | 300 | Output cap per call. The old agent was voice-only and short; comprehensive styles need headroom. |
+| `claudeEffort` | low | — | How hard Sonnet 5+, Opus 5+ and Haiku 5.5 think before answering (`output_config.effort`). They think on every turn by default, silently; with a 13k-token voice prompt that pushed the first word past the 8 s first-token timeout. Haiku 4.5 takes no effort and is left alone. |
 | `groqReasoningEffort` | low | low | Reasoning budget for Groq reasoning models. Voice cannot wait for long thinking. |
 | `continuationWindowMs` | 2500 | — | A transcript that looks unfinished (ends on a filler word, fewer than `mergeMinWords`, a timeout on a low score, or dangling punctuation) is still answered, but if you start speaking again within this long the reply is cancelled silently and the two pieces become one turn ("and then I'll." + "finish it off."). In the stress test 36 turns were followed by a continuation within 4 s. 0 disables. Trace: `turn.mergeable`, `turn.continuation`, `turn.merged`. |
 | `mergeMinWords` | 4 | — | Transcripts shorter than this always count as unfinished ("Yeah, so basically"). |

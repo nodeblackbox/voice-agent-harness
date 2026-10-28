@@ -1,6 +1,7 @@
-import { stepCountIs, streamText, type LanguageModel, type ModelMessage, type ToolSet } from 'ai'
+import { stepCountIs, streamText, type LanguageModel, type ModelMessage, type SystemModelMessage, type ToolSet } from 'ai'
 import type { BrainSettings, ModelInfo, SpeechSettings, StyleFormat, TurnMetrics } from '@shared/types'
 import { MissingKeyError, type ModelFactory } from '../providers/factory'
+import { estimateTokens, isRateLimit, isTooLarge, retryAfterMs } from '../providers/capacity'
 import { SentenceChunker } from '../speech/chunker'
 import { SpeakableFilter } from '../prompts/speakable'
 import type { Speaker } from '../speech/speaker'
@@ -9,8 +10,10 @@ import { STEP_LIMIT_PHRASE, continuationFiller, fillerFor } from '../speech/fill
 export interface RunnerDeps {
   factory: ModelFactory
   model: ModelInfo
-  fallback: ModelInfo | null
-  system: string
+  /** Tried in order after the primary; duplicates and the primary itself are ignored. */
+  fallbacks: ModelInfo[]
+  /** A plain string, or stable + live parts so the stable part (and the tools before it) can be cached. */
+  system: string | { stable: string; live: string }
   messages: ModelMessage[]
   tools: ToolSet
   maxSteps: number
@@ -39,8 +42,6 @@ export interface RunnerResult {
   modelUsed: string
   hitStepLimit?: boolean
 }
-
-type Attempt = { model: ModelInfo; reason: string }
 
 const status = (e: unknown): number | undefined => (e as { statusCode?: number })?.statusCode
 const isTransient = (e: unknown): boolean => {
@@ -75,6 +76,32 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', done, { once: true })
   })
 
+/** Why a model in the chain didn't answer, in words fit for a toast and the "I couldn't get a reply" line. */
+type Miss = { model: ModelInfo; why: string }
+
+type ProviderOptions = NonNullable<Parameters<typeof streamText>[0]['providerOptions']>
+
+const isFirstTokenTimeout = (e: unknown): boolean => /^timeout: no response/.test(String((e as Error)?.message ?? ''))
+
+const seconds = (ms: number): string => `${Math.max(1, Math.round(ms / 1000))}s`
+
+function missReason(e: unknown, info: ModelInfo): string {
+  if (e instanceof MissingKeyError) return `has no API key (add one for ${info.providerLabel})`
+  if (isAuthError(e)) return `rejected the API key`
+  if (isTooLarge(e)) return `can't take a request this big`
+  if (isRateLimit(e)) {
+    const wait = retryAfterMs(e)
+    return wait ? `is rate-limited for ${seconds(wait)}` : 'is rate-limited'
+  }
+  if (isFirstTokenTimeout(e)) return "isn't responding"
+  const s = status(e)
+  if (s && s >= 500) return `isn't responding (${describe(e)})`
+  return `failed (${describe(e)})`
+}
+
+/** Waits shorter than this are worth sitting through (the turn is still young); longer ones skip to the next model. */
+const MAX_RATE_WAIT_MS = 2500
+
 export class TurnRunner {
   private text = ''
   private startedAt = performance.now()
@@ -83,58 +110,105 @@ export class TurnRunner {
 
   constructor(private readonly deps: RunnerDeps) {}
 
+  /**
+   * The primary model, then each backup in order. A model is skipped up front when it already told us the request
+   * is too big for it, or that it is rate-limited for longer than a short wait. A model that says nothing before
+   * the first-token timeout is not retried (slow now means slow a second later); an overloaded or dropped
+   * connection gets one same-model retry; a dead Groq key or a rate-limited one rotates to the next key.
+   */
   async run(signal: AbortSignal): Promise<RunnerResult> {
-    const attempts: Attempt[] = [
-      { model: this.deps.model, reason: 'primary' },
-      { model: this.deps.model, reason: 'retry' }
-    ]
-    if (this.deps.fallback && this.deps.fallback.id !== this.deps.model.id) attempts.push({ model: this.deps.fallback, reason: 'fallback' })
-
+    const chain = [this.deps.model, ...this.deps.fallbacks.filter((m, i, all) => m.id !== this.deps.model.id && all.findIndex((x) => x.id === m.id) === i)]
+    const capacity = this.deps.factory.capacity
+    const pool = this.deps.factory.groqPool
+    const estimate = estimateTokens(this.requestChars(), Object.keys(this.deps.tools).length)
+    const misses: Miss[] = []
     let lastError: unknown
-    let rotatingKey = false
-    for (let i = 0; i < attempts.length; i++) {
-      const attempt = attempts[i]!
-      if (signal.aborted) return { text: this.text, aborted: true, modelUsed: attempt.model.id }
-      if (!rotatingKey) {
-        if (attempt.reason === 'retry' && this.deps.brain.retryBackoffMs > 0) await sleep(this.deps.brain.retryBackoffMs, signal)
-        if (signal.aborted) return { text: this.text, aborted: true, modelUsed: attempt.model.id }
-        if (attempt.reason === 'fallback') this.deps.onNotice(`${this.deps.model.label} isn't responding, trying ${attempt.model.label}.`)
+
+    for (let k = 0; k < chain.length; k++) {
+      const info = chain[k]!
+      if (signal.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
+
+      const ceiling = capacity?.ceiling(info.id)
+      if (ceiling && estimate > ceiling) {
+        misses.push({ model: info, why: `can't take a request this big (about ${estimate} tokens, its limit is ${ceiling})` })
+        this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'too_large', estimate, ceiling })
+        continue
       }
-      rotatingKey = false
-      if (attempt.reason !== 'primary') this.deps.trace?.('turn.attempt', { reason: attempt.reason, model: attempt.model.id })
-      try {
-        const outcome = await this.attempt(attempt.model, signal)
-        return outcome
-      } catch (e) {
-        lastError = e
-        if (signal.aborted) return { text: this.text, aborted: true, modelUsed: attempt.model.id }
-        this.deps.log(`turn attempt (${attempt.reason}, ${attempt.model.id}) failed: ${describe(e)}`)
-        this.deps.trace?.('turn.attempt_failed', { reason: attempt.reason, model: attempt.model.id, error: describe(e), transient: isTransient(e) })
-        if (this.text.length > 0) break
-        // one dead key in the Groq pool shouldn't sink the turn: the pool benched it, try the next one
-        if (isAuthError(e) && attempt.model.provider === 'groq' && this.deps.factory.groqPool.hasUsable()) {
-          rotatingKey = true
-          i--
-          continue
-        }
-        if (e instanceof MissingKeyError || isAuthError(e)) {
-          if (attempt.reason !== 'fallback' && this.deps.fallback) {
-            // the key is bad, not the network: skip any same-model retry and go straight to fallback
-            const fallbackIndex = attempts.findIndex((a) => a.reason === 'fallback')
-            if (fallbackIndex > i) i = fallbackIndex - 1
+      const busyMs = info.provider === 'groq' ? pool.nextFreeInMs() : (capacity?.waitMs(info.id) ?? 0)
+      if (busyMs > MAX_RATE_WAIT_MS) {
+        misses.push({ model: info, why: `is rate-limited for another ${seconds(busyMs)}` })
+        this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'rate_limited', waitMs: busyMs })
+        continue
+      }
+      if (busyMs > 0) await sleep(busyMs, signal)
+      if (k > 0 && misses.length) {
+        const prev = misses[misses.length - 1]!
+        this.deps.onNotice(`${prev.model.label} ${prev.why}, trying ${info.label}.`)
+      }
+
+      let retried = false
+      let rotations = 0
+      for (;;) {
+        if (signal.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
+        if (k > 0 || retried || rotations > 0) this.deps.trace?.('turn.attempt', { reason: k > 0 ? 'fallback' : retried ? 'retry' : 'rotate', model: info.id })
+        try {
+          const outcome = await this.attempt(info, signal)
+          capacity?.ok(info.id)
+          return outcome
+        } catch (e) {
+          lastError = e
+          if (signal.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
+          // Groq limits belong to each key (often a separate account), so the pool tracks those; the model keeps only its size ceiling
+          capacity?.learn(info.id, e, info.provider !== 'groq')
+          this.deps.log(`turn attempt (${k === 0 ? (retried ? 'retry' : 'primary') : 'fallback'}, ${info.id}) failed: ${describe(e)}`)
+          this.deps.trace?.('turn.attempt_failed', { model: info.id, error: describe(e), transient: isTransient(e) })
+          // words already spoken can't be taken back: never restart the answer on another model
+          if (this.text.length > 0) return { text: this.text, aborted: false, error: describe(e), modelUsed: info.id }
+
+          const keys = info.provider === 'groq' ? pool.size() : 1
+          if (info.provider === 'groq' && (isAuthError(e) || isRateLimit(e)) && rotations + 1 < keys && pool.hasUsable()) {
+            rotations++ // the pool benched that key; the next one may be another account with its own limit
             continue
           }
+          const rateWait = retryAfterMs(e)
+          if (isRateLimit(e) && !retried && rateWait !== undefined && rateWait <= MAX_RATE_WAIT_MS) {
+            retried = true
+            await sleep(rateWait, signal)
+            continue
+          }
+          if (isTransient(e) && !isRateLimit(e) && !isFirstTokenTimeout(e) && !retried) {
+            retried = true
+            if (this.deps.brain.retryBackoffMs > 0) await sleep(this.deps.brain.retryBackoffMs, signal)
+            continue
+          }
+          misses.push({ model: info, why: missReason(e, info) })
           break
         }
-        if (!isTransient(e)) break
       }
     }
-    return { text: this.text, aborted: false, error: describe(lastError), modelUsed: this.deps.model.id }
+    return { text: this.text, aborted: false, error: misses.length ? misses.map((m) => `${m.model.label} ${m.why}`).join('; ') : describe(lastError), modelUsed: this.deps.model.id }
   }
 
-  private providerOptions(info: ModelInfo): Record<string, Record<string, string>> | undefined {
-    const effort = this.deps.brain.groqReasoningEffort
-    if (info.provider === 'groq' && info.reasoning && effort !== 'default') return { groq: { reasoningEffort: effort } }
+  private requestChars(): number {
+    const system = typeof this.deps.system === 'string' ? this.deps.system.length : this.deps.system.stable.length + this.deps.system.live.length
+    return system + JSON.stringify(this.deps.messages).length
+  }
+
+  /** The system prompt as the SDK takes it: the stable part marked as a cache breakpoint (tools + rules), the live part after it. */
+  private systemFor(): string | SystemModelMessage[] {
+    const s = this.deps.system
+    if (typeof s === 'string') return s
+    return [
+      { role: 'system', content: s.stable, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } },
+      { role: 'system', content: s.live }
+    ]
+  }
+
+  private providerOptions(info: ModelInfo): ProviderOptions | undefined {
+    const groqEffort = this.deps.brain.groqReasoningEffort
+    if (info.provider === 'groq' && info.reasoning && groqEffort !== 'default') return { groq: { reasoningEffort: groqEffort } }
+    const claudeEffort = this.deps.brain.claudeEffort
+    if (info.provider === 'anthropic' && info.effort && claudeEffort !== 'default') return { anthropic: { effort: claudeEffort } }
     return undefined
   }
 
@@ -193,7 +267,7 @@ export class TurnRunner {
       arm(this.deps.firstTokenTimeoutMs, 'no response from the model')
       const result = streamText({
         model: model as LanguageModel,
-        system: this.deps.system,
+        system: this.systemFor(),
         messages: this.deps.messages,
         tools: this.deps.tools,
         stopWhen: stepCountIs(this.deps.maxSteps),
@@ -205,6 +279,10 @@ export class TurnRunner {
       })
 
       for await (const part of result.fullStream) {
+        // the model is alive but not talking yet: thinking, or streaming a long tool input. Neither is a stall;
+        // silent thinking gets the stall budget on top of the first-token budget, every visible delta re-arms
+        if (!firstToken && (part.type === 'start-step' || part.type === 'reasoning-start')) arm(this.deps.firstTokenTimeoutMs + this.deps.stallTimeoutMs, 'no response from the model')
+        else if (part.type === 'reasoning-delta' || part.type === 'tool-input-start' || part.type === 'tool-input-delta') arm(this.deps.stallTimeoutMs, 'the model stopped mid-answer')
         switch (part.type) {
           case 'text-delta': {
             if (!firstToken) {
@@ -337,7 +415,7 @@ export class TurnRunner {
       this.deps.onCue(false)
       if (info.provider === 'groq') {
         const s = status(e)
-        if (s) this.deps.factory.groqPool.report(key, s)
+        if (s) this.deps.factory.groqPool.report(key, s, retryAfterMs(e))
       }
       if (outer.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
       if (inner.signal.aborted) {

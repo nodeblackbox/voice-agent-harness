@@ -10,6 +10,7 @@ import { Speaker } from '../speech/speaker'
 import { CONTINUATION, STEP_LIMIT_PHRASE } from '../speech/fillers'
 import type { ModelFactory } from '../providers/factory'
 import { GroqKeyPool } from '../providers/keys'
+import { ModelCapacity } from '../providers/capacity'
 import { findModel } from '../providers/models'
 
 const usage = (input: number, output: number) => ({
@@ -54,7 +55,7 @@ function harness(models: Record<string, MockLanguageModelV4>, over: Partial<Runn
       if (!model) throw new Error(`no mock for ${m.id}`)
       return { model, key: 'k' }
     },
-    groqPool: { report: vi.fn(), pick: () => 'k' }
+    groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }
   } as unknown as ModelFactory
   const speaker = new Speaker(
     'turn',
@@ -71,7 +72,7 @@ function harness(models: Record<string, MockLanguageModelV4>, over: Partial<Runn
   const deps: RunnerDeps = {
     factory,
     model: info('anthropic:claude-haiku-4-5'),
-    fallback: info('groq:openai/gpt-oss-20b'),
+    fallbacks: [info('groq:openai/gpt-oss-20b')],
     system: 'sys',
     messages: [{ role: 'user', content: 'hi' }],
     tools: {},
@@ -168,12 +169,22 @@ describe('TurnRunner', () => {
     expect(vi.mocked(h.deps.onMetrics).mock.calls[0]![0]).toMatchObject({ fallbackUsed: true })
   })
 
-  it('does not retry non-transient, non-auth errors', async () => {
+  it('does not retry a non-transient error on the same model, but still tries the backup', async () => {
     const malformed = Object.assign(new Error('bad request'), { statusCode: 400 })
-    const h = harness({ 'anthropic:claude-haiku-4-5': mockModel([malformed, textStream(['nope'])]), 'groq:openai/gpt-oss-20b': mockModel([textStream(['nope'])]) })
+    const primary = mockModel([malformed, textStream(['not again'])])
+    const h = harness({ 'anthropic:claude-haiku-4-5': primary, 'groq:openai/gpt-oss-20b': mockModel([textStream(['Backup.'])]) })
+    const r = await h.run()
+    expect(r.text).toBe('Backup.')
+    expect(primary.doStreamCalls).toHaveLength(1)
+  })
+
+  it('reports every model that failed, in plain words, when none answers', async () => {
+    const malformed = Object.assign(new Error('bad request'), { statusCode: 400 })
+    const tooBig = Object.assign(new Error('Request too large for model `openai/gpt-oss-20b` on tokens per minute (TPM): Limit 8000, Requested 8536'), { statusCode: 413 })
+    const h = harness({ 'anthropic:claude-haiku-4-5': mockModel([malformed]), 'groq:openai/gpt-oss-20b': mockModel([tooBig]) })
     const r = await h.run()
     expect(r.text).toBe('')
-    expect(r.error).toContain('400')
+    expect(r.error).toBe("Claude Haiku 4.5 failed (400: bad request); GPT-OSS 20B can't take a request this big")
   })
 
   it('skips straight to the fallback model on an invalid API key, without a wasted same-model retry', async () => {
@@ -183,7 +194,8 @@ describe('TurnRunner', () => {
     const r = await h.run()
     expect(r.text).toBe('Fallback.')
     expect(r.modelUsed).toBe('groq:openai/gpt-oss-20b')
-    expect(h.deps.onNotice).toHaveBeenCalledWith(expect.stringContaining("isn't responding"))
+    expect(primary.doStreamCalls).toHaveLength(1)
+    expect(h.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 rejected the API key, trying GPT-OSS 20B.')
   })
 
   it('rotates past a dead key in the Groq pool instead of failing the turn', async () => {
@@ -276,5 +288,80 @@ describe('TurnRunner', () => {
     const h = harness({ 'anthropic:claude-haiku-4-5': silent, 'groq:openai/gpt-oss-20b': mockModel([textStream(['Late.'])]) }, { firstTokenTimeoutMs: 300 })
     const r = await h.run()
     expect(r.text).toBe('Late.')
+    expect(silent.doStreamCalls).toHaveLength(1) // a slow model is still slow a second later: no same-model retry
+    expect(h.deps.onNotice).toHaveBeenCalledWith("Claude Haiku 4.5 isn't responding, trying GPT-OSS 20B.")
   }, 10_000)
+
+  it('keeps waiting while the model thinks silently past the first-token timeout', async () => {
+    const thinking: LanguageModelV4StreamPart[] = [
+      { type: 'stream-start', warnings: [] },
+      { type: 'reasoning-start', id: 'r' },
+      { type: 'reasoning-end', id: 'r' },
+      ...textStream(['Thought it through.']).slice(1)
+    ]
+    const slowThinker = new MockLanguageModelV4({
+      doStream: async () => ({ stream: simulateReadableStream({ chunks: thinking, initialDelayInMs: 0, chunkDelayInMs: 250 }) })
+    })
+    const h = harness({ 'anthropic:claude-haiku-4-5': slowThinker }, { firstTokenTimeoutMs: 400, stallTimeoutMs: 400 })
+    const r = await h.run()
+    expect(r.text).toBe('Thought it through.')
+  }, 10_000)
+
+  it('waits out a short rate limit on the same model', async () => {
+    const limited = Object.assign(new Error('Rate limit reached. Please try again in 50ms.'), { statusCode: 429 })
+    const primary = mockModel([limited, textStream(['After the wait.'])])
+    const h = harness({ 'anthropic:claude-haiku-4-5': primary }, { fallbacks: [] })
+    const r = await h.run()
+    expect(r.text).toBe('After the wait.')
+    expect(primary.doStreamCalls).toHaveLength(2)
+  })
+
+  it('skips a long rate limit straight away, and remembers it for the next turn', async () => {
+    const limited = Object.assign(new Error('Rate limit reached for model on tokens per minute (TPM): Limit 8000, Used 5232, Requested 5845. Please try again in 23.0775s.'), { statusCode: 429 })
+    const capacity = new ModelCapacity()
+    const models = { 'anthropic:claude-haiku-4-5': mockModel([limited]), 'groq:openai/gpt-oss-20b': mockModel([textStream(['Groq.']), textStream(['Groq again.'])]) }
+    const factory = { create: (m: ModelInfo) => ({ model: models[m.id as keyof typeof models], key: 'k' }), groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }, capacity } as unknown as ModelFactory
+    const first = harness(models, { factory })
+    expect((await first.run()).text).toBe('Groq.')
+    expect(first.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 is rate-limited for 23s, trying GPT-OSS 20B.')
+    const second = harness(models, { factory })
+    expect((await second.run()).text).toBe('Groq again.')
+    expect(models['anthropic:claude-haiku-4-5'].doStreamCalls).toHaveLength(1) // not asked again while it is still limited
+    expect(second.deps.onNotice).toHaveBeenCalledWith(expect.stringMatching(/^Claude Haiku 4\.5 is rate-limited for another \d+s, trying GPT-OSS 20B\.$/))
+  })
+
+  it("learns a model's size ceiling from a 413 and stops sending it requests that cannot fit", async () => {
+    const tooBig = Object.assign(new Error('Request too large for model `openai/gpt-oss-20b` on tokens per minute (TPM): Limit 8000, Requested 8536, please reduce your message size'), { statusCode: 413 })
+    const capacity = new ModelCapacity()
+    const groq = mockModel([tooBig])
+    const primary = mockModel([Object.assign(new Error('bad'), { statusCode: 400 })])
+    const models = { 'anthropic:claude-haiku-4-5': primary, 'groq:openai/gpt-oss-20b': groq }
+    const factory = { create: (m: ModelInfo) => ({ model: models[m.id as keyof typeof models], key: 'k' }), groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }, capacity } as unknown as ModelFactory
+    const big = 'x'.repeat(40_000) // ~10k tokens
+    await harness(models, { factory, system: big }).run()
+    expect(capacity.ceiling('groq:openai/gpt-oss-20b')).toBe(8000)
+    const r = await harness(models, { factory, system: big }).run()
+    expect(groq.doStreamCalls).toHaveLength(1) // the second, equally big turn never went to Groq
+    expect(r.error).toMatch(/GPT-OSS 20B can't take a request this big \(about \d+ tokens, its limit is 8000\)/)
+  })
+
+  it('marks the stable system part as a cache breakpoint and keeps the live part after it', async () => {
+    const model = mockModel([textStream(['Cached.'])])
+    const h = harness({ 'anthropic:claude-haiku-4-5': model }, { system: { stable: 'RULES', live: 'NOW: 10:00' } })
+    await h.run()
+    const prompt = model.doStreamCalls[0]!.prompt
+    expect(prompt.slice(0, 2)).toEqual([
+      { role: 'system', content: 'RULES', providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } },
+      { role: 'system', content: 'NOW: 10:00' }
+    ])
+  })
+
+  it('asks the newer Claude models for low effort, and leaves models without effort alone', async () => {
+    const sonnet = mockModel([textStream(['Quick.'])])
+    await harness({ 'anthropic:claude-sonnet-5': sonnet }, { model: info('anthropic:claude-sonnet-5') }).run()
+    expect(sonnet.doStreamCalls[0]!.providerOptions).toEqual({ anthropic: { effort: 'low' } })
+    const haiku = mockModel([textStream(['Quick.'])])
+    await harness({ 'anthropic:claude-haiku-4-5': haiku }).run()
+    expect(haiku.doStreamCalls[0]!.providerOptions?.anthropic).toBeUndefined()
+  })
 })

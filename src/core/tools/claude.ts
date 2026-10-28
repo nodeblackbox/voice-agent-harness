@@ -6,6 +6,7 @@ import type { CcEvent, CcPending, CcSession } from '../claude/types'
 
 const sessionRef = z.string().default('').describe('Session name (or part of it). Leave empty when there is only one session.')
 const modeEnum = z.enum(CC_MODES as [CcMode, ...CcMode[]])
+const isAll = (ref: string | undefined) => /^(all|every(one|thing| session)?|all sessions)$/i.test((ref ?? '').trim())
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
 const stepCount = (plan: string) => plan.split(/\r?\n/).filter((l) => /^\s*(\d+[.)]|[-*])\s/.test(l)).length
 
@@ -59,32 +60,46 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
 
     claude_start: tool({
       description:
-        'Start a NEW Claude Code session and optionally give it a first task. By default it gets a fresh sandbox folder of its own. Use "folder" when the user says where it should work: the name of an existing workspace folder (see claude_list) to continue in it, or the FULL path of one of their project folders. A project path means it works in their real files (fenced to that folder), so say that and get a clear yes first. Pick a short, spoken-friendly name (e.g. "landing page"). Set mode only when the user asks for one (e.g. "plan it first" = plan); otherwise leave it empty for the default.',
+        'Start a NEW Claude Code session and optionally give it a first task; to start several at once ("spin up three sessions"), put one entry per session in "more" in the same call instead of calling this again. By default each gets a fresh sandbox folder of its own. Use "folder" when the user says where it should work: the name of an existing workspace folder (see claude_list) to continue in it, or the FULL path of one of their project folders. A project path means it works in their real files (fenced to that folder), so say that and get a clear yes first. Pick short, spoken-friendly names (e.g. "landing page"). Set mode only when the user asks for one (e.g. "plan it first" = plan); otherwise leave it empty for the default.',
       inputSchema: z.object({
         name: z.string().min(1).describe('Short session name'),
         task: z.string().default('').describe('The first instruction for Claude Code. Full, self-contained, written as a clear brief.'),
         folder: z.string().default('').describe('Optional: an existing workspace folder name, or a full project path. Empty = a new sandbox folder.'),
-        mode: z.union([modeEnum, z.literal('')]).default('').describe('Optional: plan | ask | auto | bypass. Empty = the default mode.')
+        mode: z.union([modeEnum, z.literal('')]).default('').describe('Optional: plan | ask | auto | bypass, for every session started in this call. Empty = the default mode.'),
+        more: z
+          .array(z.object({ name: z.string().min(1), task: z.string().default(''), folder: z.string().default('') }))
+          .default([])
+          .describe('Further sessions to start in the same go, each with its own name, task and optional folder.')
       }),
-      execute: async ({ name, task, folder, mode }) => {
-        const r = m.start(name, task || undefined, { folder: folder || undefined, mode: mode || undefined })
-        return r.ok ? { status: 'started', session: brief(r.session, m) } : { status: 'failed', error: r.error }
+      execute: async ({ name, task, folder, mode, more }) => {
+        const results = [{ name, task, folder }, ...(more ?? [])].map((s) => {
+          const r = m.start(s.name, s.task || undefined, { folder: s.folder || undefined, mode: mode || undefined })
+          return r.ok ? { status: 'started', session: brief(r.session, m) } : { status: 'failed', name: s.name, error: r.error }
+        })
+        return results.length === 1 ? results[0] : { started: results.filter((r) => r.status === 'started').length, results }
       }
     }),
 
     claude_send: tool({
       description:
-        'Give an existing session another instruction. If it is busy the instruction is queued behind the current work (stacked prompts). Set mode "now" only when the user wants to stop what it is doing and switch to this instead.',
+        'Give an existing session another instruction. A stopped session (e.g. after the app restarted) wakes up and picks up its conversation where it left off. If it is busy the instruction is queued behind the current work (stacked prompts). session "all" sends the same instruction to every session ("all of you, carry on"). Set mode "now" only when the user wants to stop what it is doing and switch to this instead.',
       inputSchema: z.object({
-        session: sessionRef,
+        session: sessionRef.describe('Session name (or part of it), or "all" for every session. Leave empty when there is only one session.'),
         prompt: z.string().min(1).describe('The instruction, self-contained'),
         mode: z.enum(['queue', 'now']).default('queue')
       }),
       execute: async ({ session, prompt, mode }) => {
+        const sendTo = (s: CcSession) => {
+          const r = m.send(s.id, prompt, { now: mode === 'now' })
+          return r.ok ? { status: r.queued ? 'queued' : mode === 'now' ? 'redirecting' : 'sent', session: s.name } : { status: 'failed', session: s.name, error: r.error }
+        }
+        if (isAll(session)) {
+          const all = m.list()
+          return all.length ? { results: all.map(sendTo) } : { status: 'failed', error: 'There are no sessions.' }
+        }
         const f = find(session)
         if (!f.ok) return { status: 'failed', error: f.error }
-        const r = m.send(f.session.id, prompt, { now: mode === 'now' })
-        return r.ok ? { status: r.queued ? 'queued' : mode === 'now' ? 'redirecting' : 'sent', session: f.session.name } : { status: 'failed', error: r.error }
+        return sendTo(f.session)
       }
     }),
 
@@ -149,9 +164,14 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
     }),
 
     claude_interrupt: tool({
-      description: 'Stop a session mid-task without ending it ("hold on", "stop that"). It stays resumable and can be given a new instruction. clear_queue also drops any stacked prompts.',
-      inputSchema: z.object({ session: sessionRef, clear_queue: z.boolean().default(false) }),
+      description: 'Stop a session mid-task without ending it ("hold on", "stop that"). It stays resumable and can be given a new instruction. session "all" stops every busy session ("stop everything"). clear_queue also drops any stacked prompts.',
+      inputSchema: z.object({ session: sessionRef.describe('Session name (or part of it), or "all". Leave empty when there is only one session.'), clear_queue: z.boolean().default(false) }),
       execute: async ({ session, clear_queue }) => {
+        if (isAll(session)) {
+          const busy = m.list().filter((s) => s.status === 'running' || s.status === 'needs_permission' || s.status === 'needs_input')
+          await Promise.all(busy.map((s) => m.interrupt(s.id, { clearQueue: clear_queue })))
+          return { status: 'interrupted', sessions: busy.map((s) => s.name) }
+        }
         const f = find(session)
         if (!f.ok) return { status: 'failed', error: f.error }
         const r = await m.interrupt(f.session.id, { clearQueue: clear_queue })

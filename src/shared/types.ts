@@ -18,6 +18,8 @@ export interface ModelInfo {
   fast?: boolean
   /** Reasoning model: the reasoning-effort tuning applies. */
   reasoning?: boolean
+  /** Claude model that takes `effort` (thinks adaptively by default): the Claude effort tuning applies. */
+  effort?: boolean
 }
 
 export type Mode = 'ask' | 'agent'

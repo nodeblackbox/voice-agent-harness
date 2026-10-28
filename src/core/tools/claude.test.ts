@@ -34,6 +34,26 @@ describe('claude voice tools', () => {
     expect(await call('claude_status', { session: 'landing' })).toMatchObject({ name: 'Landing page' })
   })
 
+  it('starts several sessions in one call and says which ones did not start', async () => {
+    const { call, m } = setup()
+    const r = await call('claude_start', { name: 'Astro', task: 'video one', mode: 'bypass', more: [{ name: 'Nova', task: 'video two' }, { name: 'Flow', task: 'video three' }, { name: 'Extra', task: 'x' }, { name: 'Too many', task: 'y' }] })
+    expect(r.started).toBe(4)
+    expect(r.results[4]).toMatchObject({ status: 'failed', name: 'Too many', error: expect.stringContaining('limit of 4') })
+    expect(m.list().map((s) => [s.name, s.mode])).toEqual([['Astro', 'bypass'], ['Nova', 'bypass'], ['Flow', 'bypass'], ['Extra', 'bypass']])
+  })
+
+  it('sends one instruction to every session, and stops every busy one, with "all"', async () => {
+    const { call, m, runs } = setup()
+    await call('claude_start', { name: 'A', task: 'one' })
+    await call('claude_start', { name: 'B' })
+    const sent = await call('claude_send', { session: 'all', prompt: 'commit your work' })
+    expect(sent.results).toEqual([{ status: 'queued', session: 'A' }, { status: 'sent', session: 'B' }])
+    expect(runs).toHaveLength(2)
+    const stopped = await call('claude_interrupt', { session: 'everyone' })
+    expect(stopped).toEqual({ status: 'interrupted', sessions: ['A', 'B'] })
+    expect(m.list()).toHaveLength(2)
+  })
+
   it('claude_send queues while busy and reports it', async () => {
     const { call } = setup()
     await call('claude_start', { name: 'A', task: 'one' })

@@ -15,12 +15,12 @@ import type {
 } from '@shared/types'
 import { GLOBAL_SCOPE, type MemoryStore } from './memory/store'
 import { LocationProvider, relativeTime, timeContext } from './context'
-import { composeSystemPrompt } from './prompts/compose'
+import { composeSystemParts } from './prompts/compose'
 import { BUILTIN_STYLES, DEFAULT_STYLE_ID } from './prompts/styles'
 import { SpeakableFilter } from './prompts/speakable'
 import { ModelFactory } from './providers/factory'
 import type { KeySource } from './providers/keys'
-import { findModel } from './providers/models'
+import { DEFAULT_FALLBACK_MODEL_ID, findModel } from './providers/models'
 import { SentenceChunker } from './speech/chunker'
 import { toolLabel } from './speech/fillers'
 import { describeInput, describeOutput, mcpServerOf, toolKind } from './tools/describe'
@@ -683,9 +683,13 @@ export class Agent {
     const style = this.style(settings)
     const model = findModel(settings.modelId) ?? findModel('anthropic:claude-haiku-4-5')!
     const fallback = findModel(settings.fallbackModelId) ?? null
+    // the chosen backup, then Claude Haiku 5.5 as a last resort when there's an Anthropic key: fast, cheap and roomy,
+    // so a slow or rate-limited model never leaves a turn with nothing to say
+    const lastResort = this.deps.keys.keysFor('anthropic').length ? findModel(DEFAULT_FALLBACK_MODEL_ID) : undefined
+    const fallbacks = [fallback, lastResort].filter((m): m is NonNullable<typeof m> => !!m)
     const tools = this.tools(settings)
     const memory = this.memoryBlock(text, settings)
-    const system = composeSystemPrompt(style, {
+    const system = composeSystemParts(style, {
       agentName: settings.agentName,
       userName: settings.userName,
       aboutUser: settings.aboutUser,
@@ -720,7 +724,7 @@ export class Agent {
       memoryProfile: memory.profile,
       memoryRelevant: memory.relevant,
       memoryHistory: memory.history,
-      systemChars: system.length
+      systemChars: system.stable.length + system.live.length
     })
 
     const metrics: TurnMetrics = {}
@@ -749,7 +753,7 @@ export class Agent {
     const runner = new TurnRunner({
       factory: this.factory,
       model,
-      fallback,
+      fallbacks,
       system,
       messages: buildModelMessages(this.messages, turnId, text, { maxMessages: settings.brain.historyMessages, toolResultKeepChars: settings.brain.toolResultKeepChars }),
       tools,

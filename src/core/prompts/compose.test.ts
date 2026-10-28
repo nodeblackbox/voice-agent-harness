@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeSystemPrompt, type PromptContext } from './compose'
+import { composeSystemParts, composeSystemPrompt, type PromptContext } from './compose'
 import { BUILTIN_STYLES } from './styles'
 import { BUILTIN_SKILLS, mergeSkills, skillsBlock } from './skills'
 
@@ -71,6 +71,20 @@ describe('composeSystemPrompt', () => {
     expect(p).not.toContain('Tools')
     expect(p).not.toContain('What you remember')
     expect(p).not.toContain('Skills (')
+  })
+
+  it('keeps everything that changes per turn out of the cacheable part', () => {
+    const a = composeSystemParts(style('balanced'), { ...ctx, claudeBlock: '- vidgen [idle]' })
+    const b = composeSystemParts(style('balanced'), { ...ctx, now: 'Thursday, 09:00', memoryBlock: '- Something else', claudeBlock: '- vidgen [working]' })
+    expect(a.stable).toBe(b.stable) // clock, memory hints and the session list moved: the cached prefix did not
+    expect(a.stable).toContain('claude_answer')
+    for (const live of ['Now: Wednesday', 'Elephant & Castle', '- vidgen [idle]']) {
+      expect(a.live).toContain(live)
+      expect(a.stable).not.toContain(live)
+    }
+    expect(composeSystemPrompt(style('balanced'), ctx)).toBe(`${composeSystemParts(style('balanced'), ctx).stable}
+
+${composeSystemParts(style('balanced'), ctx).live}`)
   })
 
   it('includes enabled skills', () => {

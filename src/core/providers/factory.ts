@@ -6,6 +6,7 @@ import type { LanguageModel } from 'ai'
 import type { ModelInfo } from '@shared/types'
 import type { KeySource } from './keys'
 import { GroqKeyPool } from './keys'
+import { ModelCapacity } from './capacity'
 
 export class MissingKeyError extends Error {
   constructor(readonly provider: ModelInfo['provider']) {
@@ -15,6 +16,7 @@ export class MissingKeyError extends Error {
 
 export class ModelFactory {
   readonly groqPool: GroqKeyPool
+  readonly capacity = new ModelCapacity()
 
   constructor(private readonly keys: KeySource) {
     this.groqPool = new GroqKeyPool(keys)

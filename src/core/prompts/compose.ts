@@ -55,9 +55,8 @@ const TOOL_RULES = `Tools
 - If a tool fails or returns nothing useful, say so plainly and answer from what you know, flagging the uncertainty.`
 
 const CLAUDE_RULES = `Claude Code sessions (you manage them for {user_name}; each works in its own folder and runs in the background)
-- Current sessions, always up to date:
-{claude}
-- You talk, they work. Use claude_start for a new job, claude_send to add to an existing one (it queues if busy), claude_status to report what happened, claude_interrupt to stop what it is doing, claude_stop to shut it down, claude_reset to start it over with a clean conversation (files kept), claude_remove to take sessions off the list for good (several at once; their folders are kept unless {user_name} asks to delete the files too), claude_files to see what is in its folder. claude_recent lists {user_name}'s OTHER Claude Code sessions on this computer (terminal, IDE); claude_attach continues one of them here, but it works in that real project folder, so say so and get a clear yes first.
+- The current sessions are listed under "Claude Code sessions right now" at the end, always up to date.
+- You talk, they work. Use claude_start for a new job (several at once in one call), claude_send to add to an existing one (it queues if busy; a stopped session wakes up where it left off; "all" reaches every session), claude_status to report what happened, claude_interrupt to stop what it is doing, claude_stop to shut it down, claude_reset to start it over with a clean conversation (files kept), claude_remove to take sessions off the list for good (several at once; their folders are kept unless {user_name} asks to delete the files too), claude_files to see what is in its folder. claude_recent lists {user_name}'s OTHER Claude Code sessions on this computer (terminal, IDE); claude_attach continues one of them here, but it works in that real project folder, so say so and get a clear yes first.
 - Modes (claude_mode, or "mode" on claude_start): plan = it plans first and changes nothing until the plan is approved; ask = every command asks; auto = no questions inside its folder; bypass = no questions at all. "Plan it first" means plan. Bypass only when {user_name} clearly asks for it.
 - Keep this conversation light: statuses are short on purpose. Call claude_details only when {user_name} wants specifics (the full plan, its whole answer, its recent steps), and then sum it up instead of reading it out.
 - Write the brief you hand to a session as a complete, self-contained instruction; it cannot hear this conversation.
@@ -82,7 +81,14 @@ const MEMORY = `What you remember about {user_name}
 {memory}
 Treat these as facts unless the conversation contradicts them; they are also your best guide to what a mangled transcript was meant to say. They are hints from past sessions: use them if relevant, ignore them if not, and never read this block out loud or mention that it exists. Use the remember tool to save new stable preferences, facts or decisions the user states; never store guesses. To change or add detail to something already saved, use update_memory (append or replace) — never forget and re-save, and never delete anything the user did not ask to forget.`
 
-export function composeSystemPrompt(style: PromptStyle, ctx: PromptContext): string {
+const CLAUDE_NOW = `Claude Code sessions right now
+{claude}`
+
+/**
+ * The system prompt in two parts: `stable` (persona, style, rules, skills) changes only with settings, so providers
+ * can cache it together with the tool list; `live` (clock, place, memory, session list) changes every turn and goes last.
+ */
+export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { stable: string; live: string } {
   const fill = (s: string): string =>
     s
       .replaceAll('{agent_name}', ctx.agentName)
@@ -102,7 +108,14 @@ export function composeSystemPrompt(style: PromptStyle, ctx: PromptContext): str
   if (ctx.toolNames.length) parts.push(fill(TOOL_RULES))
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
   if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))
-  parts.push(fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : ''))
-  if (ctx.memoryBlock.trim()) parts.push(fill(MEMORY))
-  return parts.join('\n\n')
+  // memory is picked per turn (what's relevant to what was just said), so it lives with the clock, not the cache
+  const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '')]
+  if (ctx.memoryBlock.trim()) live.push(fill(MEMORY))
+  if (ctx.claudeBlock !== undefined) live.push(fill(CLAUDE_NOW))
+  return { stable: parts.join('\n\n'), live: live.join('\n\n') }
+}
+
+export function composeSystemPrompt(style: PromptStyle, ctx: PromptContext): string {
+  const { stable, live } = composeSystemParts(style, ctx)
+  return `${stable}\n\n${live}`
 }

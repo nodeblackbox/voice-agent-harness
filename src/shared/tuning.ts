@@ -93,7 +93,7 @@ export const TUNING = {
     segmentEveryMs: n(30000, 10000, 120000, 5000, 'ear', 'Segment every', 'While you keep talking, the older part of the utterance is transcribed every this often and shown in your bubble; the turn does not end. Lower = your words appear sooner; each segment costs one decode.', { unit: 'ms' })
   },
   brain: {
-    firstTokenTimeoutMs: n(8000, 2000, 30000, 500, 'core', 'First token timeout', 'Give up on a model that has produced nothing after this long; retry once, then the fallback model.', { unit: 'ms', old: 8000 }),
+    firstTokenTimeoutMs: n(8000, 2000, 30000, 500, 'core', 'First token timeout', 'Give up on a model that has produced nothing after this long and go straight to the backup model (no same-model retry: a slow model is usually still slow a second later).', { unit: 'ms', old: 8000 }),
     stallTimeoutMs: n(8000, 2000, 30000, 500, 'core', 'Stall timeout', 'Abandon a reply that stops mid-stream for this long. What was already spoken is kept and the transcript says the response was cut short.', { unit: 'ms', old: 8000 }),
     toolStallTimeoutMs: n(25000, 5000, 120000, 1000, 'core', 'Tool stall timeout', 'Stall timeout while a tool call is in flight; searches and page reads legitimately take longer than token gaps.', { unit: 'ms', old: 25000 }),
     retryBackoffMs: n(400, 0, 3000, 100, 'core', 'Retry backoff', 'Pause before retrying the same model after a transient error (overloaded, 5xx).', { unit: 'ms', old: 400 }),
@@ -104,6 +104,7 @@ export const TUNING = {
     toolResultKeepChars: n(700, 100, 4000, 50, 'core', 'Tool result keep', 'Characters of each tool result kept in history for later turns. The model already used the full result; this keeps context lean and fast.', { unit: 'chars', old: 700 }),
     temperature: n(0.6, 0, 1.5, 0.05, 'core', 'Temperature', 'Sampling temperature for the reply.', { old: 0.6 }),
     maxTokens: n(1000, 100, 4000, 50, 'core', 'Max tokens', 'Output token cap per model call. Spoken replies rarely need more than a few hundred; comprehensive styles need headroom.', { unit: 'tokens', old: 300 }),
+    claudeEffort: { kind: 'enum', default: 'low', options: ['low', 'medium', 'high', 'default'], scope: 'core', label: 'Claude effort', doc: 'How hard the newer Claude models (Sonnet 5 and later, Haiku 5.5) think before answering. They think on every turn by default, and that silent thinking was the slow first word; low keeps voice snappy, default lets the model decide.', old: 'default' },
     groqReasoningEffort: { kind: 'enum', default: 'low', options: ['low', 'medium', 'high', 'default'], scope: 'core', label: 'Groq reasoning effort', doc: 'Reasoning budget for Groq reasoning models (gpt-oss, qwen). Voice cannot wait for long thinking, so low is the default.', old: 'low' },
     continuationWindowMs: n(2500, 0, 6000, 250, 'core', 'Continuation window', 'If a transcript looks unfinished (ends on a filler word, fewer than "Merge min words", or a timeout on a low score) and you start speaking again within this long, the reply is cancelled silently and the two pieces become one turn. 0 disables merging.', { unit: 'ms' }),
     mergeMinWords: n(4, 1, 10, 1, 'core', 'Merge min words', 'Transcripts shorter than this always count as unfinished for the continuation window ("Yeah, so basically").', { unit: 'words' }),

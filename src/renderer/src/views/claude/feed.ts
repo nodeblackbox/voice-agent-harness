@@ -166,7 +166,12 @@ export const ago = (t: number, now = Date.now()) => {
   return s < 10 ? 'just now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`
 }
 export const ext = (p: string) => (p.includes('.') ? p.slice(p.lastIndexOf('.') + 1).toLowerCase() : '')
-export const isImage = (p: string) => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico'].includes(ext(p))
+export const isImage = (p: string) => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'avif', 'bmp'].includes(ext(p))
+export const isVideo = (p: string) => ['mp4', 'webm', 'mov', 'm4v', 'ogv'].includes(ext(p))
+export const isAudio = (p: string) => ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'flac'].includes(ext(p))
+export const isPdf = (p: string) => ext(p) === 'pdf'
+/** Files the viewer shows as themselves (picture, player, document) rather than as text. */
+export const isMedia = (p: string) => isImage(p) || isVideo(p) || isAudio(p)
 export const isHtml = (p: string) => ['html', 'htm'].includes(ext(p))
 /** URL that serves a workspace file through the main process (`ccws://` protocol). */
 export const wsUrl = (id: string, rel: string) => `ccws://${id}/${rel.split('/').map(encodeURIComponent).join('/')}`

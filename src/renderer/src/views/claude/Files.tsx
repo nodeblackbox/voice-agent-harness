@@ -1,21 +1,23 @@
 /** A session's workspace: a live file tree with what Claude changed marked, and a viewer for the selected file. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ChevronRight, Code, Eye, File, FileCode, FileImage, FileJson, FileText, Folder, FolderOpen, FolderSearch, Globe, RefreshCw, Search
+  ChevronRight, Code, Eye, File, FileAudio, FileCode, FileImage, FileJson, FileText, FileVideo, Folder, FolderOpen, FolderSearch, Globe, LayoutGrid, RefreshCw, Search
 } from 'lucide-react'
 import type { CcFile, CcFileContent } from '@shared/claude'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { Btn } from '../../components/primitives'
 import { Markdown } from './Markdown'
-import { ago, buildTree, ext, fmtBytes, isHtml, isImage, wsUrl, type Touched, type TreeNode } from './feed'
+import { ago, buildTree, ext, fmtBytes, isAudio, isHtml, isImage, isMedia, isPdf, isVideo, type Touched, type TreeNode } from './feed'
+import { AUDIO_TINT, Gallery, MediaView, VIDEO_TINT } from './Media'
 
 const CODE_EXT = new Set(['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'css', 'scss', 'html', 'htm', 'py', 'rs', 'go', 'java', 'sh', 'ps1', 'yml', 'yaml', 'toml', 'xml', 'sql', 'c', 'cpp', 'h'])
 const iconFor = (p: string) =>
-  isImage(p) ? FileImage : isHtml(p) ? Globe : ext(p) === 'json' ? FileJson : CODE_EXT.has(ext(p)) ? FileCode : ['md', 'txt', 'log'].includes(ext(p)) ? FileText : File
+  isImage(p) ? FileImage : isVideo(p) ? FileVideo : isAudio(p) ? FileAudio : isPdf(p) ? FileText : isHtml(p) ? Globe : ext(p) === 'json' ? FileJson : CODE_EXT.has(ext(p)) ? FileCode : ['md', 'txt', 'log'].includes(ext(p)) ? FileText : File
 const colorFor = (p: string) =>
   isHtml(p) ? '#F0883E' : ['css', 'scss'].includes(ext(p)) ? '#79C0FF' : ['js', 'mjs', 'cjs', 'jsx'].includes(ext(p)) ? '#E3C04A' : ['ts', 'tsx'].includes(ext(p)) ? '#4F9CF9'
-    : ext(p) === 'json' ? '#C6A0F6' : ext(p) === 'py' ? '#7BC4A4' : isImage(p) ? T.green : ext(p) === 'md' ? T.text2 : T.text3
+    : ext(p) === 'json' ? '#C6A0F6' : ext(p) === 'py' ? '#7BC4A4' : isImage(p) ? T.green : isVideo(p) ? VIDEO_TINT : isAudio(p) ? AUDIO_TINT
+    : isPdf(p) ? '#F87171' : ext(p) === 'md' ? T.text2 : T.text3
 const FRESH_MS = 120_000
 
 /**
@@ -121,14 +123,14 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
   )
 }
 
-function Viewer({ id, rel, mtime, onPreview }: { id: string; rel: string; mtime: number; onPreview: (rel: string) => void }) {
+function Viewer({ id, rel, mtime, size, onPreview }: { id: string; rel: string; mtime: number; size: number; onPreview: (rel: string) => void }) {
   const pushToast = useStore((s) => s.pushToast)
   const [content, setContent] = useState<CcFileContent | { error: string } | null>(null)
   const [raw, setRaw] = useState(false)
   useEffect(() => {
     let live = true
     setContent(null)
-    if (isImage(rel)) return
+    if (isMedia(rel) || isPdf(rel)) return
     void window.api.claude.read(id, rel).then((c) => { if (live) setContent(c) })
     return () => { live = false }
   }, [id, rel, mtime])
@@ -149,18 +151,20 @@ function Viewer({ id, rel, mtime, onPreview }: { id: string; rel: string; mtime:
           ))}
         </span>
         {content && 'size' in content && <span className="text-xs" style={{ color: T.text3 }}>{fmtBytes(content.size)}</span>}
+        {(isMedia(rel) || isPdf(rel)) && <span className="text-xs" style={{ color: T.text3 }}>{fmtBytes(size)}</span>}
         {md && <Btn small icon={raw ? Eye : Code} onClick={() => setRaw(!raw)}>{raw ? 'Rendered' : 'Source'}</Btn>}
         {isHtml(rel) && <Btn small icon={Eye} onClick={() => onPreview(rel)}>Preview</Btn>}
         <Btn small icon={Globe} onClick={() => void open('default')}>Open</Btn>
         <Btn small icon={Code} onClick={() => void open('code')}>VS Code</Btn>
         <Btn small icon={FolderSearch} onClick={() => void open('reveal')}>Show</Btn>
       </div>
+      {isMedia(rel) || isPdf(rel) ? (
+        <div className="flex-1 min-h-0 flex flex-col p-4">
+          <MediaView id={id} rel={rel} mtime={mtime} size={size} />
+        </div>
+      ) : (
       <div className="va-scroll flex-1 overflow-auto p-4">
-        {isImage(rel) ? (
-          <div className="flex items-center justify-center rounded-xl p-6" style={{ background: 'repeating-conic-gradient(#14171b 0% 25%, #101215 0% 50%) 50% / 20px 20px', border: `1px solid ${T.border}`, minHeight: 200 }}>
-            <img src={`${wsUrl(id, rel)}?v=${mtime}`} alt={rel} style={{ maxWidth: '100%', maxHeight: 480, objectFit: 'contain' }} />
-          </div>
-        ) : !content ? (
+        {!content ? (
           <div className="text-xs" style={{ color: T.text3 }}>Loading…</div>
         ) : 'error' in content ? (
           <div className="text-xs" style={{ color: T.red }}>{content.error}</div>
@@ -180,6 +184,7 @@ function Viewer({ id, rel, mtime, onPreview }: { id: string; rel: string; mtime:
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
@@ -198,6 +203,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
   const pushToast = useStore((s) => s.pushToast)
   const [open, setOpen] = useState<Set<string> | null>(null)
   const [filter, setFilter] = useState('')
+  const [gallery, setGallery] = useState(false)
   const now = Date.now()
   const touchedMap = useMemo(() => new Map(touched.map((t) => [t.path, t])), [touched])
   const shown = useMemo(() => {
@@ -246,6 +252,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
   const total = all.reduce((n, f) => n + f.size, 0)
   const sel = selected && all.find((f) => f.path === selected)
   const folderName = workspace.split(/[\\/]/).filter(Boolean).pop() ?? workspace
+  const mediaCount = all.filter((f) => !f.dir && isMedia(f.path)).length
   const openFolder = async () => {
     const r = await window.api.claude.open(id, '', 'default')
     if (!r.ok) pushToast('error', r.error)
@@ -260,10 +267,23 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate" style={{ color: T.text }} title={workspace}>{folderName}</div>
-              <div className="text-xs" style={{ color: T.text3 }}>
+              <div className="text-xs truncate" style={{ color: T.text3 }}>
                 {files === null ? 'Reading…' : `${fileCount} file${fileCount === 1 ? '' : 's'}${folderCount ? ` · ${folderCount} folder${folderCount === 1 ? '' : 's'}` : ''} · ${fmtBytes(total)}`}
               </div>
             </div>
+            {mediaCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setGallery(!gallery)}
+                aria-pressed={gallery}
+                aria-label="Media gallery"
+                title={`Pictures, videos and audio (${mediaCount})`}
+                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs"
+                style={{ cursor: 'pointer', color: gallery ? '#D97757' : T.text3, background: gallery ? 'rgba(217,119,87,.12)' : 'transparent', fontFamily: T.mono, fontSize: 10.5 }}
+              >
+                <LayoutGrid size={13} /> {mediaCount}
+              </button>
+            )}
             <button type="button" onClick={refresh} aria-label="Refresh files" title="Refresh" className="rounded-md p-1.5" style={{ color: T.text3, cursor: 'pointer', background: 'transparent' }}>
               <RefreshCw size={13} />
             </button>
@@ -293,11 +313,13 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
             </div>
           )}
           {filter.trim() && files && shown.length === 0 && <div className="text-xs p-3" style={{ color: T.text3 }}>No file matches “{filter}”.</div>}
-          {tree.map((n) => <TreeRow key={n.path} node={n} depth={0} selected={selected} open={openSet} toggle={toggle} select={onSelect} touched={touchedMap} now={now} />)}
+          {tree.map((n) => <TreeRow key={n.path} node={n} depth={0} selected={selected} open={openSet} toggle={toggle} select={(p) => { setGallery(false); onSelect(p) }} touched={touchedMap} now={now} />)}
         </div>
       </div>
-      {sel ? (
-        <Viewer id={id} rel={sel.path} mtime={sel.mtime} onPreview={onPreview} />
+      {gallery ? (
+        <Gallery id={id} files={all} selected={selected} onSelect={(p) => { setGallery(false); onSelect(p) }} />
+      ) : sel ? (
+        <Viewer id={id} rel={sel.path} mtime={sel.mtime} size={sel.size} onPreview={onPreview} />
       ) : (
         <div className="flex-1 flex flex-col gap-3 items-center justify-center" style={{ color: T.text3 }}>
           <FolderOpen size={36} style={{ opacity: 0.4 }} />

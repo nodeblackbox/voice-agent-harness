@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { Readable } from 'node:stream'
 import { extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, dialog, net, shell } from 'electron'
@@ -9,6 +10,7 @@ import { resolveInside } from '@core/claude/files'
 import { ClaudeSessionManager } from '@core/claude/manager'
 import { realAccount, realHistory, realSdk } from '@core/claude/sdk'
 import { log, logError } from './log'
+import { parseRange } from './range'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -16,6 +18,9 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.mp3': 'audio/mpeg',
   '.mp4': 'video/mp4', '.wav': 'audio/wav', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8',
+  '.webm': 'video/webm', '.mov': 'video/quicktime', '.m4v': 'video/mp4', '.ogv': 'video/ogg', '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg', '.flac': 'audio/flac',
+  '.pdf': 'application/pdf', '.avif': 'image/avif', '.bmp': 'image/bmp',
 }
 
 /**
@@ -104,11 +109,22 @@ export class ClaudeService {
     const rel = decodeURIComponent(url.pathname.replace(/^\/+/, '')) || 'index.html'
     const p = this.pathOf(url.hostname, rel)
     if (!p || !existsSync(p) || !statSync(p).isFile()) return new Response('Not found', { status: 404 })
+    const type = MIME[extname(p).toLowerCase()]
+    const base = { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Accept-Ranges': 'bytes' }
+    // video and audio: answer byte ranges so the player can start fast and seek (a 120 MB render would otherwise load whole)
+    if (type && /^(video|audio)\//.test(type)) {
+      const size = statSync(p).size
+      const range = parseRange(req.headers.get('range'), size)
+      if (range === 'unsatisfiable') return new Response(null, { status: 416, headers: { ...base, 'Content-Range': `bytes */${size}` } })
+      const { start, end } = range ?? { start: 0, end: size - 1 }
+      const body = Readable.toWeb(createReadStream(p, { start, end })) as ReadableStream
+      const headers = { ...base, 'Content-Type': type, 'Content-Length': String(end - start + 1), ...(range ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) }
+      return new Response(body, { status: range ? 206 : 200, headers })
+    }
     const res = await net.fetch(pathToFileURL(p).toString())
     const headers = new Headers(res.headers)
-    headers.set('Content-Type', MIME[extname(p).toLowerCase()] ?? res.headers.get('Content-Type') ?? 'application/octet-stream')
-    headers.set('Cache-Control', 'no-store')
-    headers.set('Access-Control-Allow-Origin', '*')
+    headers.set('Content-Type', type ?? res.headers.get('Content-Type') ?? 'application/octet-stream')
+    for (const [k, v] of Object.entries(base)) headers.set(k, v)
     return new Response(res.body, { status: 200, headers })
   }
 

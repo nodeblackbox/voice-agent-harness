@@ -4,7 +4,7 @@ import { safeStorage } from 'electron'
 import type { ClaudeSettings, KeyStatus, PromptStyle, Provider, Settings, Skill } from '@shared/types'
 import { CC_MODES } from '@shared/claude'
 import { defaultTuning, sanitizeTuning, stripTuningDefaults, type TuningMigration } from '@shared/tuning'
-import { DEFAULT_FALLBACK_MODEL_ID, DEFAULT_MODEL_ID } from '@core/providers/models'
+import { DEFAULT_FALLBACK_MODEL_ID, DEFAULT_MODEL_ID, OLD_FALLBACK_MODEL_IDS } from '@core/providers/models'
 import { DEFAULT_STYLE_ID } from '@core/prompts/styles'
 import { mergeSkills } from '@core/prompts/skills'
 import type { KeySource } from '@core/providers/keys'
@@ -101,6 +101,9 @@ export class SettingsService implements KeySource {
     const cc = this.settings.claude as ClaudeSettings & { approveShell?: boolean }
     if (!CC_MODES.includes(cc.defaultMode)) cc.defaultMode = 'auto'
     delete cc.approveShell
+    // the old default backup (GPT-OSS 20B on Groq's free tier, 8k tokens a minute) can't take a voice turn, which runs
+    // 10k+ tokens once Claude sessions are on; a stored old default was never chosen, so it moves to Claude Haiku 5.5
+    if (OLD_FALLBACK_MODEL_IDS.includes(this.settings.fallbackModelId)) this.settings.fallbackModelId = DEFAULT_FALLBACK_MODEL_ID
     this.migrations = migrated
     this.customStyles = this.readJson<PromptStyle[]>(this.stylesPath, [])
     this.storedSkills = this.readJson<Skill[]>(this.skillsPath, [])
