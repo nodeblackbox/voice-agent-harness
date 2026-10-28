@@ -10,7 +10,7 @@ function setup() {
   const runs: CcRunOpts[] = []
   const m = new ClaudeSessionManager({
     sdk: (o) => { runs.push(o); return { messages: never, interrupt: async () => {}, close: () => {} } },
-    workspaceRoot: 'C:\\fake\\ws', mkdir: () => {}, approveShell: false,
+    workspaceRoot: 'C:\\fake\\ws', mkdir: () => {}, defaultMode: 'auto',
   })
   const tools = claudeTools(m) as Record<string, { execute: (a: any, o: any) => Promise<any> }>
   const call = (name: string, args: Record<string, unknown> = {}) => tools[name]!.execute(args, { toolCallId: 't', messages: [] })
@@ -22,7 +22,7 @@ const Q = { questions: [{ question: 'Pick one?', header: 'p', multiSelect: false
 describe('claude voice tools', () => {
   it('exposes the session tools', () => {
     expect(Object.keys(claudeTools(setup().m)).sort()).toEqual(
-      ['claude_answer', 'claude_attach', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_recent', 'claude_remove', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
+      ['claude_answer', 'claude_attach', 'claude_details', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_mode', 'claude_recent', 'claude_remove', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
   })
 
   it('start -> list -> status flow returns immediately with speakable fields', async () => {
@@ -45,7 +45,7 @@ describe('claude voice tools', () => {
     const { call, runs } = setup()
     await call('claude_start', { name: 'A', task: 'go' })
     let result: any
-    void runs[0]!.canUseTool('AskUserQuestion', Q).then((r) => { result = r })
+    void runs[0]!.canUseTool('AskUserQuestion', Q, {}).then((r) => { result = r })
     await new Promise((r) => setImmediate(r))
     const st = await call('claude_status', { session: 'A' })
     expect(st.waiting_for_user).toMatchObject({ type: 'question' })
@@ -53,6 +53,36 @@ describe('claude voice tools', () => {
     expect(await call('claude_answer', { session: 'A', choice: [2] })).toMatchObject({ status: 'answered', answer: 'Beta' })
     await new Promise((r) => setImmediate(r))
     expect(result.updatedInput.answers['Pick one?']).toBe('Beta')
+  })
+
+  it('claude_mode switches a session; claude_start takes a mode', async () => {
+    const { call, m } = setup()
+    expect(await call('claude_start', { name: 'P', task: 'go', mode: 'plan' })).toMatchObject({ session: { mode: 'plan' } })
+    expect(await call('claude_mode', { session: 'P', mode: 'bypass' })).toMatchObject({ status: 'mode set', mode: 'bypass' })
+    expect(m.list()[0]!.mode).toBe('bypass')
+  })
+
+  it('keeps plans out of the conversation until asked: headline in status, full text from claude_details', async () => {
+    const { call, runs, m } = setup()
+    await call('claude_start', { name: 'P', task: 'go', mode: 'plan' })
+    const plan = '# Plan: Contact form\n\n1. Markup\n2. Validation\n3. Submit\n\n' + 'Detail. '.repeat(300)
+    void runs[0]!.canUseTool('ExitPlanMode', { plan }, {})
+    await new Promise((r) => setImmediate(r))
+    const st = await call('claude_status', { session: 'P' })
+    expect(st.waiting_for_user).toEqual({ type: 'plan', headline: 'Contact form', steps: 3, full_plan: 'claude_details what=plan' })
+    expect(JSON.stringify(st).length).toBeLessThan(700)
+    expect(claudeContextBlock(m)).toContain('WAITING ON THE USER (plan to approve): Contact form (3 steps')
+    expect(claudeContextBlock(m)).not.toContain('Detail.')
+    expect((await call('claude_details', { session: 'P', what: 'plan' })).plan).toContain('Validation')
+    expect(await call('claude_answer', { session: 'P', approve: false, text: 'skip validation' })).toMatchObject({ status: 'answered', answer: 'sent back with your changes' })
+  })
+
+  it('claude_details activity is one short line per step', async () => {
+    const { call, m } = setup()
+    await call('claude_start', { name: 'A', task: 'x'.repeat(1000) })
+    const d = await call('claude_details', { session: 'A', what: 'activity' })
+    expect(d.steps.every((l: string) => l.length <= 200)).toBe(true)
+    expect(m.list()).toHaveLength(1)
   })
 
   it('reports clear errors instead of throwing', async () => {
@@ -86,7 +116,7 @@ describe('claude prompt context', () => {
     const { call, runs, m } = setup()
     expect(claudeContextBlock(m)).toBe('No Claude Code sessions yet.')
     await call('claude_start', { name: 'A', task: 'go' })
-    void runs[0]!.canUseTool('AskUserQuestion', Q)
+    void runs[0]!.canUseTool('AskUserQuestion', Q, {})
     await new Promise((r) => setImmediate(r))
     const block = claudeContextBlock(m)
     expect(block).toContain('WAITING ON THE USER (question)')

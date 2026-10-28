@@ -47,9 +47,13 @@ export function describeInput(name: string, input: unknown): string {
     case 'claude_send':
       return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${str(i.prompt, 80)}${i.mode === 'now' ? ' (now)' : ''}`
     case 'claude_answer':
-      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${Array.isArray(i.choice) ? `option ${i.choice.join(', ')}` : typeof i.text === 'string' ? `“${str(i.text, 60)}”` : i.approve === true ? 'approve' : i.approve === false ? 'deny' : ''}`
+      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${Array.isArray(i.choice) ? `option ${i.choice.join(', ')}` : typeof i.text === 'string' ? `“${str(i.text, 60)}”` : i.approve === true ? `approve${typeof i.mode === 'string' ? ` · ${i.mode}` : ''}` : i.approve === false ? 'deny' : ''}`
     case 'claude_list':
       return ''
+    case 'claude_mode':
+      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${typeof i.mode === 'string' ? `${i.mode} mode` : ''}`
+    case 'claude_details':
+      return `${typeof i.session === 'string' && i.session ? `${i.session} · ` : ''}${typeof i.what === 'string' ? i.what : ''}`
     case 'claude_remove':
       return Array.isArray(i.sessions) ? `${i.sessions.join(', ')}${i.delete_folder ? ' + folders' : ''}` : ''
     case 'claude_status':

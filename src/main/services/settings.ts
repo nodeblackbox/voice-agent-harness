@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
-import type { KeyStatus, PromptStyle, Provider, Settings, Skill } from '@shared/types'
+import type { ClaudeSettings, KeyStatus, PromptStyle, Provider, Settings, Skill } from '@shared/types'
+import { CC_MODES } from '@shared/claude'
 import { defaultTuning, sanitizeTuning, stripTuningDefaults, type TuningMigration } from '@shared/tuning'
 import { DEFAULT_FALLBACK_MODEL_ID, DEFAULT_MODEL_ID } from '@core/providers/models'
 import { DEFAULT_STYLE_ID } from '@core/prompts/styles'
@@ -26,7 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   location: { mode: 'manual', manual: '' },
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },
-  claude: { enabled: false, workspaceRoot: 'D:\\Downloads\\VoiceAgentWorkspaces', model: '', maxSessions: 4, approveShell: true }
+  claude: { enabled: false, workspaceRoot: 'D:\\Downloads\\VoiceAgentWorkspaces', model: '', maxSessions: 4, defaultMode: 'auto' }
 }
 
 const ENV_KEYS: Record<Provider, string[]> = {
@@ -95,6 +96,11 @@ export class SettingsService implements KeySource {
     this.settings = deepMerge(DEFAULT_SETTINGS, { ...stored, ...tuning })
     // older builds stored the rate as a multiplier (1.0 = normal); it is now an offset, and the slider tops out at +0.5
     if (this.settings.voice.rate > 0.5) this.settings.voice = { ...this.settings.voice, rate: Math.min(0.5, this.settings.voice.rate - 1) }
+    // Claude sessions: the old "ask before shell commands" switch became per-session modes; asking was the
+    // annoying default, so older settings start in Auto (no prompts, still fenced to the session's folder)
+    const cc = this.settings.claude as ClaudeSettings & { approveShell?: boolean }
+    if (!CC_MODES.includes(cc.defaultMode)) cc.defaultMode = 'auto'
+    delete cc.approveShell
     this.migrations = migrated
     this.customStyles = this.readJson<PromptStyle[]>(this.stylesPath, [])
     this.storedSkills = this.readJson<Skill[]>(this.skillsPath, [])

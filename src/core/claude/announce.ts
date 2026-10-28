@@ -4,10 +4,26 @@ import type { CcManagerEvent } from './types'
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
 const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
 
+/** Why the fence asked, in a few spoken words (the exact path is on screen). */
+function spokenReason(reason: string): string {
+  if (/deletes outside/i.test(reason)) return 'That deletes something outside its folder.'
+  if (/deletes files/i.test(reason)) return 'That deletes files.'
+  if (/risky command/i.test(reason)) return 'That one is risky.'
+  if (/outside its folder/i.test(reason)) return 'That is outside its folder.'
+  return ''
+}
+
 export function announcement(e: CcManagerEvent): string | null {
   if (e.type === 'needs-input') {
     const p = e.pending
-    if (p.kind === 'permission') return `${e.name} wants to ${clip(oneLine(p.summary.replace(/^Run:\s*/i, 'run: ')), 140)}. Is that okay?`
+    if (p.kind === 'plan') {
+      // only the headline: the full plan is on screen, and claude_details reads it out when asked
+      return `${e.name} has a plan ready: ${clip(oneLine(p.summary), 140)}. Shall it go ahead, or do you want changes?`
+    }
+    if (p.kind === 'permission') {
+      const why = p.reason ? ` ${spokenReason(p.reason)}` : ''
+      return `${e.name} wants to ${clip(oneLine(p.summary.replace(/^Run:\s*/i, 'run: ')), 140)}.${why} Is that okay?`
+    }
     const q = p.questions[0]
     if (!q) return null
     const opts = q.options.slice(0, 4).map((o, i) => `${i + 1}, ${clip(oneLine(o.label), 40)}`).join('. ')

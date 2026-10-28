@@ -37,7 +37,7 @@ export class ClaudeService {
       sdk: realSdk,
       history: realHistory,
       workspaceRoot: s().workspaceRoot,
-      config: () => ({ workspaceRoot: s().workspaceRoot, model: s().model, maxSessions: s().maxSessions, approveShell: s().approveShell }),
+      config: () => ({ workspaceRoot: s().workspaceRoot, model: s().model, maxSessions: s().maxSessions, defaultMode: s().defaultMode }),
       persist: (sessions) => this.scheduleSave(sessions)
     })
     this.load()

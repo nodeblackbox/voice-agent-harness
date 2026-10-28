@@ -48,7 +48,27 @@ summary, so "answer it" works without you naming the session when only one is wa
   once. Deleting is only ever allowed for a session's own sandbox folder directly under the workspace root: never
   a project folder, never the root, never a folder another session still uses.
 - **Where it works**: the New form offers a new sandbox folder, an existing workspace folder, or **Browse…** for a
-  project folder (then it works in your real files, fenced to that folder, and every shell command asks).
+  project folder (then it works in your real files, fenced to that folder).
+
+## Modes: how much a session does on its own
+
+Each session has a mode, switched live from the pill in its header, by voice ("put it on bypass", "plan it
+first") or for new sessions in the New form; Settings holds the default (Auto; older settings with "ask before
+shell commands" were moved to Auto).
+
+| mode | what asks you |
+|---|---|
+| **Plan** | Nothing runs. The CLI's own plan mode: it reads and writes a plan; `ExitPlanMode` arrives as a plan card (and a spoken headline). Approve it into Ask/Auto/Bypass, or send it back with changes and it re-plans. |
+| **Ask** | Every shell command, plus everything the fence asks about. |
+| **Auto** | Only what the fence asks about: paths outside its folder, deletes, `git push`/`clean`/`reset --hard`, piping downloads into a shell, `reg`… |
+| **Bypass** | Nothing, except a delete that reaches outside its folder. |
+
+Machine-level commands (`format X:`, `diskpart`, `Clear-Disk`, `shutdown`, deleting a drive root or the home
+folder) are refused in every mode. Approvals offer "approve, and stop asking" (switches to Auto, or Bypass for a
+fence question); switching mode also lets through whatever is waiting that the new mode would not ask about.
+
+The voice model stays light: statuses and announcements carry a plan's headline and step count, approvals a
+few-word reason; `claude_details` (plan / answer / activity) reads more only when you ask for specifics.
 
 ## Your other sessions
 
@@ -56,26 +76,30 @@ summary, so "answer it" works without you naming the session when only one is wa
 terminal, the IDE and other apps (`listSessions`, interactive ones only) — searchable and grouped by project. Any
 of them opens read-only in the same rich timeline. **Continue here** attaches it:
 
-- it works in that session's **real project folder** (badge *your project*), fenced to that folder: deletes, paths
-  outside it and pushes stay blocked, and every shell command asks you, whatever the setting;
+- it works in that session's **real project folder** (badge *your project*), fenced to that folder; its mode
+  decides what asks (deletes, paths outside it and pushes ask unless it is in Bypass);
 - its first run **forks** the conversation (`forkSession`), so the original transcript, and your terminal, are untouched.
 
 ## Safety: the workspace fence
 
 Every session is pinned to its own folder under **Workspace folder** (default
-`D:\Downloads\VoiceAgentWorkspaces`). A `PreToolUse` hook (`src/core/claude/fence.ts`) denies, before
-any permission logic:
+`D:\Downloads\VoiceAgentWorkspaces`), plus two scratch roots it may use freely: the temp dir (its own
+background-task output) and `~/.claude/plans` (plan mode writes its plan there). A `PreToolUse` hook
+(`src/core/claude/fence.ts`) runs before any permission logic and answers allow, **ask** or deny. An "ask"
+reaches `canUseTool` with the reason (lab 07) and becomes a spoken yes/no; it covers:
 
-- file tools (Read/Write/Edit/Glob/Grep…) on any path outside the session's folder (absolute, `..`,
-  UNC, junction/symlink escapes, sibling-prefix tricks);
-- shell commands (the tool is **`PowerShell`** on Windows, `Bash` elsewhere; both are covered) that
-  mention a path outside the folder, use `~`/`%VAR%`/`$env:`, or are destructive/system-level
-  (`rm`, `del`, `rmdir`, `Remove-Item`, `format`, `git push`/`clean`, `reg`, pipes into a shell…);
-- MCP connectors and any tool not on the allow-list (default deny).
+- file tools (Read/Write/Edit/Glob/Grep…) on a path outside the folder (absolute, `..`, UNC,
+  junction/symlink escapes, sibling-prefix tricks);
+- shell commands (**`PowerShell`** on Windows, `Bash` elsewhere) that use a path outside the folder, run while
+  the shell sits outside it, delete, push, or pipe a download into a shell. Paths are read like a shell would:
+  quoted pieces joined (`"$D"/x`), variables set earlier in the command expanded, `$env:X`/`%X%`/`~` resolved,
+  Git Bash `/d/...` mapped to `D:\...`, and `..` resolved against the shell's real current folder (the hook's
+  `cwd` follows `cd`). Setting `$env:X = ...`, `--format=`, `cmd /c` and URLs are not paths.
 
-The SDK's own sandbox is macOS/Linux only, so this hook is the real gate. On top, shell commands ask for
-your approval by voice (`Settings → Ask before running shell commands`). `permissionMode` is always
-`default`; `bypassPermissions` and bare `allowedTools` are never used (a bare entry skips `canUseTool`).
+MCP connectors and unknown tools are denied unless the session is in Bypass; scheduling tools
+(`CronCreate`, `ScheduleWakeup`, `RemoteTrigger`) never run. The SDK's own sandbox is macOS/Linux only, so this
+hook is the real gate. `permissionMode` is `plan` or `default`; `bypassPermissions` and bare `allowedTools` are
+never used (Bypass is our own policy, so AskUserQuestion still reaches you).
 
 ### Billing: your subscription, never the API key
 

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, Ban, Check, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, ListChecks, Octagon, Pencil, Play, Plus, RotateCcw, Send,
-  Square, Trash2, Wrench, X, Zap, type LucideIcon
+  Activity, Ban, Check, ClipboardList, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, ListChecks, Octagon, Pencil, Play, Plus, RotateCcw, Send,
+  ShieldAlert, Square, Trash2, Undo2, Wrench, X, Zap, type LucideIcon
 } from 'lucide-react'
-import type { CcAnswer, CcEvent, CcPending, CcQuestion, CcSession } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcMode, CcPending, CcQuestion, CcSession } from '@shared/claude'
 import type { ClaudeSettings } from '@shared/types'
 import { T } from '../theme'
 import { useStore } from '../state/store'
@@ -15,10 +15,14 @@ import { Browse } from './claude/Browse'
 import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
 import { Files, RestartNotice, useWorkspaceFiles } from './claude/Files'
 import { Inspector } from './claude/Inspector'
+import { Markdown } from './claude/Markdown'
+import { MODES, ModeBadge, ModeChooser, ModeMenu, modeOf } from './claude/Mode'
 import { Preview } from './claude/Preview'
 import { ago, isHtml, touchedFiles, turnStart } from './claude/feed'
 
 const EMPTY: CcEvent[] = []
+/** The mode sessions without one of their own use (older saved sessions). */
+const useDefaultMode = (): CcMode => useStore((s) => s.settings?.claude?.defaultMode) ?? 'auto'
 const isBusy = (s: CcSession) => s.status === 'running' || s.status === 'needs_input' || s.status === 'needs_permission'
 
 function useAnswer(id: string) {
@@ -83,29 +87,81 @@ function QuestionCard({ id, q, count }: { id: string; q: CcQuestion; count: numb
   )
 }
 
+const BUILD_MODES: CcMode[] = ['ask', 'auto', 'bypass']
+
+/** A finished plan: read it, approve it into a building mode, or send it back with changes. */
+function PlanReview({ session, plan }: { session: CcSession; plan: Extract<CcPending, { kind: 'plan' }> }) {
+  const answer = useAnswer(session.id)
+  const fallback = useDefaultMode()
+  const [then, setThen] = useState<CcMode>(fallback === 'plan' ? 'auto' : fallback)
+  const [changes, setChanges] = useState('')
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-lg px-4 py-3 overflow-y-auto text-sm" style={{ maxHeight: 300, background: T.bg, border: `1px solid ${T.border}` }}>
+        <Markdown text={plan.plan || plan.summary} />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Btn small primary icon={Check} onClick={() => void answer({ kind: 'allow', mode: then })}>Approve and build</Btn>
+        <span className="text-xs" style={{ color: T.text3 }}>in</span>
+        <div role="radiogroup" aria-label="Build in mode" className="inline-flex gap-0.5 rounded-lg p-0.5" style={{ background: T.bg, border: `1px solid ${T.border}` }}>
+          {BUILD_MODES.map((k) => {
+            const x = MODES[k]
+            const on = k === then
+            return (
+              <button key={k} type="button" role="radio" aria-checked={on} title={x.blurb} onClick={() => setThen(k)} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs" style={{ cursor: 'pointer', color: on ? x.color : T.text3, background: on ? `${x.color}17` : 'transparent' }}>
+                <x.icon size={11} /> {x.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (changes.trim()) void answer({ kind: 'deny', reason: changes.trim() }) }}>
+        <TextInput value={changes} onChange={setChanges} placeholder="Or say what to change, and it re-plans…" />
+        <Btn small type="submit" icon={Undo2} disabled={!changes.trim()}>Send back</Btn>
+      </form>
+    </div>
+  )
+}
+
 function PendingCard({ session, pending }: { session: CcSession; pending: CcPending }) {
   const answer = useAnswer(session.id)
+  const plan = pending.kind === 'plan'
+  const accent = plan ? T.cyan : T.amber
+  const shell = pending.toolName === 'PowerShell' || pending.toolName === 'Bash'
+  const reason = pending.kind === 'permission' ? pending.reason : undefined
+  // "yes, and stop asking": Auto stops plain shell questions; what the fence asks about needs Bypass
+  const next: CcMode = reason ? 'bypass' : 'auto'
   return (
-    <Card pad={14} style={{ background: T.amberTint, border: `1px solid ${T.amber}` }}>
+    <Card pad={14} style={{ background: plan ? 'rgba(79,209,255,.06)' : T.amberTint, border: `1px solid ${accent}` }}>
       <div className="flex items-center gap-2 mb-2">
-        <Dot color={T.amber} pulse />
-        <span className="text-sm font-medium" style={{ color: T.amber }}>
-          {pending.kind === 'question' ? 'Needs your answer' : 'Needs your approval'}
+        {plan ? <ClipboardList size={14} style={{ color: accent }} /> : <Dot color={accent} pulse />}
+        <span className="text-sm font-medium" style={{ color: accent }}>
+          {pending.kind === 'question' ? 'Needs your answer' : plan ? `Plan ready: ${pending.summary}` : 'Needs your approval'}
         </span>
-        <span className="text-xs" style={{ color: T.text3 }}>say it, or tap</span>
+        <span className="text-xs" style={{ color: T.text3, flexShrink: 0 }}>say it, or tap</span>
       </div>
       {pending.kind === 'question' ? (
         <div className="flex flex-col gap-4">
           {pending.questions.map((q) => <QuestionCard key={q.question} id={session.id} q={q} count={pending.questions.length} />)}
         </div>
+      ) : pending.kind === 'plan' ? (
+        <PlanReview session={session} plan={pending} />
       ) : (
         <div className="flex flex-col gap-3">
+          {reason && (
+            <div className="inline-flex items-center gap-1.5 text-xs" style={{ color: T.amber }}>
+              <ShieldAlert size={12} style={{ flexShrink: 0 }} /> <span className="break-all">{reason[0]!.toUpperCase() + reason.slice(1)}</span>
+            </div>
+          )}
           <div className="va-term rounded-lg px-3 py-2 text-xs break-all" style={{ border: `1px solid ${T.border}`, color: '#E6EDF3' }}>
-            <span style={{ color: T.green }}>{pending.toolName === 'PowerShell' ? 'PS> ' : '$ '}</span>
+            {shell && <span style={{ color: T.green }}>{pending.toolName === 'PowerShell' ? 'PS> ' : '$ '}</span>}
             {pending.summary.replace(/^Run:\s*/, '')}
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
             <Btn small primary icon={Check} onClick={() => void answer({ kind: 'allow' })}>Approve</Btn>
+            <Btn small icon={MODES[next].icon} onClick={() => void answer({ kind: 'allow', mode: next })}>
+              {reason ? 'Approve, and Bypass from now on' : 'Approve, and stop asking (Auto)'}
+            </Btn>
             <Btn small danger icon={Ban} onClick={() => void answer({ kind: 'deny' })}>Deny</Btn>
           </div>
         </div>
@@ -169,6 +225,7 @@ function SessionMenu({ session, onClose }: { session: CcSession; onClose: () => 
 
 function Header({ session, touched, toolCalls }: { session: CcSession; touched: number; toolCalls: number }) {
   const check = useCheck()
+  const fallback = useDefaultMode()
   const [menu, setMenu] = useState(false)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(session.name)
@@ -203,7 +260,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
           )}
           <StatusPill status={session.status} />
           {session.external && (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" title="Continued from one of your saved sessions: it works in this real project folder (fenced to it; shell commands always ask)" style={{ background: 'rgba(138,164,200,.10)', color: '#8AA4C8', border: '1px solid rgba(138,164,200,.3)', flexShrink: 0 }}>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" title="It works in this real project folder (fenced to it: going outside, deleting and pushing ask unless it is in Bypass mode)" style={{ background: 'rgba(138,164,200,.10)', color: '#8AA4C8', border: '1px solid rgba(138,164,200,.3)', flexShrink: 0 }}>
               <FolderGit2 size={11} /> your project
             </span>
           )}
@@ -217,6 +274,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
         <span title="Files changed" className="inline-flex items-center gap-1"><FileCode size={11} />{touched}</span>
         <span title="Tool calls" className="inline-flex items-center gap-1"><Wrench size={11} />{toolCalls}</span>
       </div>
+      <ModeMenu session={session} fallback={fallback} />
       <Btn small danger icon={Octagon} disabled={!isBusy(session)} onClick={() => void check(window.api.claude.interrupt(session.id, false))}>Interrupt</Btn>
       <Btn small icon={Square} disabled={session.status === 'stopped'} onClick={() => void check(window.api.claude.stop(session.id))}>Stop</Btn>
       <div className="relative">
@@ -343,6 +401,7 @@ function Detail({ session }: { session: CcSession }) {
 }
 
 function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boolean; picked?: boolean; onClick: () => void }) {
+  const fallback = useDefaultMode()
   const working = s.status === 'running'
   const c = statusColor(s.status, T)
   return (
@@ -373,15 +432,12 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
         </span>
       </div>
       <div className="text-xs" style={{ color: s.pending ? T.amber : T.text3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.45 }}>
-        {s.pending ? (s.pending.kind === 'question' ? 'Asking: ' : '') + s.pending.summary : s.lastSummary || (s.status === 'idle' ? 'Ready for a task' : statusLabel(s.status))}
+        {s.pending ? (s.pending.kind === 'question' ? 'Asking: ' : s.pending.kind === 'plan' ? 'Plan ready: ' : '') + s.pending.summary : s.lastSummary || (s.status === 'idle' ? 'Ready for a task' : statusLabel(s.status))}
       </div>
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3, fontFamily: T.mono, fontSize: 10.5 }}>
-        <span title={costNote(s)}>${s.costUsd.toFixed(2)}</span>
-        <span>·</span>
-        <span>{s.turns} turns</span>
-        <span>·</span>
-        <span>{ago(s.updatedAt)}</span>
-        {s.queued.length > 0 && <span className="ml-auto rounded-full px-1.5" style={{ background: T.bg, color: T.text2 }}>+{s.queued.length}</span>}
+      <div className="flex items-center gap-1.5 text-xs whitespace-nowrap" style={{ color: T.text3, fontFamily: T.mono, fontSize: 10.5 }}>
+        <span className="flex-1 min-w-0 truncate" title={costNote(s)}>${s.costUsd.toFixed(2)} · {s.turns} turns · {ago(s.updatedAt)}</span>
+        <ModeBadge mode={modeOf(s, fallback)} />
+        {s.queued.length > 0 && <span className="rounded-full px-1.5" style={{ background: T.bg, color: T.text2, flexShrink: 0 }}>+{s.queued.length}</span>}
       </div>
     </button>
   )
@@ -397,6 +453,7 @@ function NewSession({ onDone, root }: { onDone: () => void; root: string }) {
   // '' = a new sandbox folder; a folder name under the root; or a full path chosen with Browse
   const [folder, setFolder] = useState('')
   const [folders, setFolders] = useState<Folders>([])
+  const [mode, setMode] = useState<CcMode>(useDefaultMode())
   useEffect(() => {
     if (typeof window.api.claude.folders !== 'function') return
     void window.api.claude.folders().then(setFolders, () => setFolders([]))
@@ -407,7 +464,7 @@ function NewSession({ onDone, root }: { onDone: () => void; root: string }) {
     if (p) setFolder(p)
   }
   const go = async () => {
-    const r = await window.api.claude.start(name.trim(), task.trim() || undefined, folder || undefined)
+    const r = await window.api.claude.start(name.trim(), task.trim() || undefined, folder || undefined, mode)
     if (!r.ok) return pushToast('error', r.error)
     selectClaude(r.session.id)
     onDone()
@@ -440,9 +497,13 @@ function NewSession({ onDone, root }: { onDone: () => void; root: string }) {
         )}
         {outside && (
           <div className="text-xs rounded-lg px-2 py-1.5" style={{ background: T.amberTint, color: T.amber, lineHeight: 1.5 }}>
-            Your real files: it can edit inside this folder (deleting, other folders and pushing stay blocked; every command asks you).
+            Your real files: it can edit inside this folder. {mode === 'bypass' ? 'In Bypass it can also delete, push and reach outside it without asking.' : 'Deleting, pushing and other folders ask you first.'}
           </div>
         )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <SectionTitle>Mode</SectionTitle>
+        <ModeChooser value={mode} onChange={setMode} label="Mode for this session" />
       </div>
       <div className="flex gap-1.5 justify-end">
         <Btn small onClick={onDone} icon={X}>Cancel</Btn>
@@ -468,9 +529,9 @@ function ClaudeSettingsCard({ s }: { s: ClaudeSettings }) {
         <SectionTitle>Workspace folder (sessions can only touch their own sub-folder of this)</SectionTitle>
         <TextInput value={s.workspaceRoot} onChange={(v) => set({ workspaceRoot: v })} />
       </div>
-      <div className="flex items-center justify-between">
-        <div className="text-sm" style={{ color: T.text }}>Ask before running shell commands</div>
-        <Toggle on={s.approveShell} onChange={(v) => set({ approveShell: v })} />
+      <div className="flex flex-col gap-1.5">
+        <SectionTitle>Default mode for new sessions (switch any session from its header)</SectionTitle>
+        <ModeChooser value={s.defaultMode ?? 'auto'} onChange={(v) => set({ defaultMode: v })} label="Default mode" />
       </div>
     </Card>
   )
@@ -481,6 +542,9 @@ const EXAMPLES: Array<[string, string]> = [
   ['“Also add a contact form.”', 'Queued behind what it is doing now.'],
   ['“How is landing page going?”', 'A short spoken summary of what just happened.'],
   ['“The second one.” / “Yes, go ahead.”', 'Answers its question or approval when it asks you.'],
+  ['“Plan it first.” / “Put landing page in plan mode.”', 'It works out a plan and changes nothing until you say go.'],
+  ['“Looks good, go ahead.” / “Change step two to use Postgres.”', 'Approves the plan, or sends it back to re-plan.'],
+  ['“Put it on bypass.” / “Yes, and stop asking me.”', 'Switches how much it does without asking you.'],
   ['“Hold on, stop that.”', 'Interrupts it; it keeps its context and can carry on.'],
   ['“What files did it make?”', 'Lists what is in its folder. The Files tab shows them all.'],
   ['“Start landing page over.”', 'Fresh conversation in the same folder.'],

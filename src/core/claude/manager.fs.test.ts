@@ -11,7 +11,7 @@ let root: string
 let project: string
 
 const fakeSdk = (): CcRun => ({ messages: { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => {}) }) }, interrupt: async () => {}, close: () => {} })
-const make = () => new ClaudeSessionManager({ sdk: fakeSdk, workspaceRoot: root, approveShell: false })
+const make = () => new ClaudeSessionManager({ sdk: fakeSdk, workspaceRoot: root, defaultMode: 'auto' })
 
 beforeEach(() => {
   base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-mgr-'))

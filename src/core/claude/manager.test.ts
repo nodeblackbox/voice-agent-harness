@@ -27,6 +27,7 @@ class FakeRun implements CcRun {
   tool(name: string, input: unknown) { this.emit({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } }) }
   result(text: string, extra: Record<string, unknown> = {}) { this.emit({ type: 'result', subtype: 'success', result: text, total_cost_usd: 0.01, num_turns: 1, terminal_reason: 'completed', ...extra }) }
   async interrupt() { this.interrupts++; this.emit({ type: 'result', subtype: 'error_during_execution', terminal_reason: 'aborted_tools', is_error: true, total_cost_usd: 0, num_turns: 0 }) }
+  setPermissionMode?: (mode: 'plan' | 'default') => Promise<void>
   close() { this.closed = true; this.done = true; this.wake?.() }
   messages: AsyncIterable<any> = {
     [Symbol.asyncIterator]: () => ({
@@ -48,7 +49,7 @@ function setup(over: Partial<ConstructorParameters<typeof ClaudeSessionManager>[
   const saved: CcSession[][] = []
   const m = new ClaudeSessionManager({
     sdk: (o) => { const r = new FakeRun(o); runs.push(r); return r },
-    workspaceRoot: ROOT, mkdir: () => {}, persist: (s) => saved.push(s), approveShell: false, ...over,
+    workspaceRoot: ROOT, mkdir: () => {}, persist: (s) => saved.push(s), defaultMode: 'auto', scratch: [], ...over,
   })
   m.on((e) => events.push(e))
   return { m, runs, events, saved, last: () => runs[runs.length - 1] }
@@ -126,7 +127,7 @@ describe('questions and approvals', () => {
     const id = (m.start('ask', 'go') as any).session.id
     await tick()
     let result: CcPermissionResult | undefined
-    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION).then((r) => { result = r })
+    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION, {}).then((r) => { result = r })
     await tick()
     const s = m.get(id)!
     expect(s.status).toBe('needs_input')
@@ -147,35 +148,35 @@ describe('questions and approvals', () => {
     const id = (m.start('ask', 'go') as any).session.id
     await tick()
     let result: any
-    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION).then((r) => { result = r })
+    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION, {}).then((r) => { result = r })
     await tick()
     m.answer(id, { kind: 'text', text: 'Rust please' })
     await tick()
     expect(result.updatedInput.answers['Which language?']).toBe('Rust please')
   })
 
-  it('asks before shell commands when approveShell is on; yes and no both flow through', async () => {
-    const { m, runs } = setup({ approveShell: true })
+  it('asks before shell commands in Ask mode; yes and no both flow through', async () => {
+    const { m, runs } = setup({ defaultMode: 'ask' })
     const id = (m.start('sh', 'go') as any).session.id
     await tick()
     let a: any, b: any
-    void runs[0]!.opts.canUseTool('PowerShell', { command: 'npm test' }).then((r) => { a = r })
+    void runs[0]!.opts.canUseTool('PowerShell', { command: 'npm test' }, {}).then((r) => { a = r })
     await tick()
     expect(m.get(id)).toMatchObject({ status: 'needs_permission', pending: { kind: 'permission', summary: 'Run: npm test' } })
     m.answer(id, { kind: 'allow' }); await tick()
     expect(a).toMatchObject({ behavior: 'allow', updatedInput: { command: 'npm test' } })
 
-    void runs[0]!.opts.canUseTool('Bash', { command: 'npm install' }).then((r) => { b = r })
+    void runs[0]!.opts.canUseTool('Bash', { command: 'npm install' }, {}).then((r) => { b = r })
     await tick()
     m.answer(id, { kind: 'deny', reason: 'no installs' }); await tick()
     expect(b).toMatchObject({ behavior: 'deny', message: 'no installs' })
   })
 
-  it('auto-allows non-shell tools and, with approveShell off, shell too', async () => {
+  it('auto-allows non-shell tools and, in Auto mode, shell too', async () => {
     const { m, runs } = setup()
     m.start('x', 'go'); await tick()
-    expect(await runs[0]!.opts.canUseTool('Write', { file_path: 'a' })).toMatchObject({ behavior: 'allow' })
-    expect(await runs[0]!.opts.canUseTool('Bash', { command: 'ls' })).toMatchObject({ behavior: 'allow' })
+    expect(await runs[0]!.opts.canUseTool('Write', { file_path: 'a' }, {})).toMatchObject({ behavior: 'allow' })
+    expect(await runs[0]!.opts.canUseTool('Bash', { command: 'ls' }, {})).toMatchObject({ behavior: 'allow' })
   })
 })
 
@@ -186,7 +187,7 @@ describe('interrupt, stop, resume', () => {
     m.send(id, 'later')
     await tick()
     let q: any
-    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION).then((r) => { q = r })
+    void runs[0]!.opts.canUseTool('AskUserQuestion', QUESTION, {}).then((r) => { q = r })
     await tick()
     expect(await m.interrupt(id)).toMatchObject({ ok: true })
     await tick()
@@ -262,16 +263,23 @@ describe('interrupt, stop, resume', () => {
 })
 
 describe('gate and persistence', () => {
-  it('the gate blocks escapes outside the session workspace and logs them', async () => {
+  it('the gate asks about escapes outside the session workspace, refuses the rest, and logs refusals', async () => {
     const { m, runs } = setup()
     const id = (m.start('g', 'go') as any).session.id
     await tick()
     const inside = path.join(ROOT, 'g', 'a.txt')
     expect(runs[0]!.opts.gate('Write', { file_path: inside })).toEqual({ allow: true })
-    expect(runs[0]!.opts.gate('Write', { file_path: 'C:\\Windows\\x' })).toMatchObject({ allow: false })
-    expect(runs[0]!.opts.gate('Write', { file_path: path.join(ROOT, 'other', 'a.txt') })).toMatchObject({ allow: false })
+    expect(runs[0]!.opts.gate('Write', { file_path: 'C:\\Windows\\x' })).toMatchObject({ allow: false, ask: true })
+    expect(runs[0]!.opts.gate('Write', { file_path: path.join(ROOT, 'other', 'a.txt') })).toMatchObject({ allow: false, ask: true })
+    expect(runs[0]!.opts.gate('mcp__x__send', {})).toMatchObject({ allow: false })
+    expect(runs[0]!.opts.gate('PowerShell', { command: 'diskpart' })).toMatchObject({ allow: false })
     expect(m.events(id).filter((e) => e.kind === 'denied')).toHaveLength(2)
     expect(m.digest(id)).toContain('2 actions were blocked')
+    // an ask the user turns down is logged too
+    void runs[0]!.opts.canUseTool('Write', { file_path: 'C:\\Windows\\x' }, { reason: '[fence] Write: C:\\Windows\\x is outside its folder' })
+    await tick()
+    m.answer(id, { kind: 'deny' })
+    expect(m.events(id).filter((e) => e.kind === 'denied')).toHaveLength(3)
   })
 
   it('persists a snapshot on every change', () => {
@@ -349,8 +357,8 @@ describe('saved sessions (browse and attach)', () => {
     expect((await m.externalEvents('old-1')).map((e) => e.kind)).toEqual(['user', 'text'])
   })
 
-  it('attach brings it in with its transcript; the first run forks, later runs resume the fork; shell always asks', async () => {
-    const { m, runs } = setup({ history: history(PROJECT), approveShell: false })
+  it('attach brings it in with its transcript; the first run forks, later runs resume the fork; its mode applies', async () => {
+    const { m, runs } = setup({ history: history(PROJECT), defaultMode: 'ask' })
     const r = await m.attach({ sessionId: 'old-1', title: 'Fix the build', cwd: PROJECT })
     expect(r.ok).toBe(true)
     const id = (r as any).session.id
@@ -361,8 +369,8 @@ describe('saved sessions (browse and attach)', () => {
     expect(runs[0]!.opts).toMatchObject({ resume: 'old-1', fork: true, cwd: PROJECT })
     runs[0]!.init('forked-9'); await tick()
     expect(m.get(id)).toMatchObject({ sdkSessionId: 'forked-9', forkOnResume: undefined })
-    // shell approval even though approveShell is off
-    void runs[0]!.opts.canUseTool('PowerShell', { command: 'npm test' })
+    // Ask mode: shell asks
+    void runs[0]!.opts.canUseTool('PowerShell', { command: 'npm test' }, {})
     await tick()
     expect(m.get(id)!.status).toBe('needs_permission')
     // a missing folder is refused
@@ -393,5 +401,150 @@ describe('billing', () => {
     expect(s).toMatchObject({ status: 'error', billing: 'api-key' })
     expect(s.lastSummary).toContain('API key')
     expect(m.events(id).some((e) => e.kind === 'text')).toBe(false)
+  })
+})
+
+/** A pending canUseTool call: resolves into `got.r`. */
+function ask(run: FakeRun, tool: string, input: Record<string, unknown>, meta: { reason?: string } = {}) {
+  const got: { r?: CcPermissionResult } = {}
+  void run.opts.canUseTool(tool, input, meta).then((r) => { got.r = r })
+  return got
+}
+const PLAN = '# Plan: Add a contact form\n\n1. Add form markup\n2. Validate fields\n3. Wire submit'
+
+describe('modes', () => {
+  it('new sessions take the default mode, or the one asked for; the CLI starts in plan mode only for Plan', async () => {
+    const { m, runs } = setup({ defaultMode: 'auto' })
+    const a = (m.start('A', 'go') as any).session
+    const b = (m.start('B', 'go', { mode: 'plan' }) as any).session
+    await tick()
+    expect(a.mode).toBe('auto')
+    expect(b.mode).toBe('plan')
+    expect(runs.map((r) => r.opts.permissionMode)).toEqual(['default', 'plan'])
+  })
+
+  it('the gate uses the fenced policy, and bypass once switched', async () => {
+    const { m, runs } = setup()
+    const id = (m.start('G', 'go') as any).session.id
+    await tick()
+    const outside = path.resolve('C:\\elsewhere\\x.txt')
+    expect(runs[0]!.opts.gate('Write', { file_path: outside })).toMatchObject({ allow: false, ask: true })
+    m.setMode(id, 'bypass')
+    expect(runs[0]!.opts.gate('Write', { file_path: outside })).toMatchObject({ allow: true })
+    expect(runs[0]!.opts.gate('PowerShell', { command: 'format C:' })).toMatchObject({ allow: false })
+  })
+
+  it('a fence "ask" becomes an approval with its reason, in any mode', async () => {
+    const { m, runs, events } = setup({ defaultMode: 'auto' })
+    const id = (m.start('F', 'go') as any).session.id
+    await tick()
+    const got = ask(runs[0]!, 'PowerShell', { command: 'rm -rf build' }, { reason: '[fence] PowerShell: deletes files' })
+    await tick()
+    expect(m.get(id)).toMatchObject({ status: 'needs_permission', pending: { kind: 'permission', summary: 'Run: rm -rf build', reason: 'deletes files' } })
+    expect(events.some((e) => e.type === 'needs-input')).toBe(true)
+    m.answer(id, { kind: 'allow' }); await tick()
+    expect(got.r).toMatchObject({ behavior: 'allow' })
+  })
+
+  it('"yes, and stop asking": an approval can switch the mode', async () => {
+    const { m, runs } = setup({ defaultMode: 'ask' })
+    const id = (m.start('Y', 'go') as any).session.id
+    await tick()
+    const got = ask(runs[0]!, 'Bash', { command: 'npm test' })
+    await tick()
+    expect(m.answer(id, { kind: 'allow', mode: 'auto' })).toMatchObject({ ok: true })
+    await tick()
+    expect(got.r).toMatchObject({ behavior: 'allow' })
+    expect(m.get(id)!.mode).toBe('auto')
+    expect(await runs[0]!.opts.canUseTool('Bash', { command: 'npm run lint' }, {})).toMatchObject({ behavior: 'allow' })
+  })
+
+  it('switching to Auto lets a waiting shell approval through; a fence reason still waits; Bypass lets that through too', async () => {
+    const { m, runs } = setup({ defaultMode: 'ask' })
+    const id = (m.start('S', 'go') as any).session.id
+    await tick()
+    const plain = ask(runs[0]!, 'Bash', { command: 'npm test' })
+    await tick()
+    m.setMode(id, 'auto'); await tick()
+    expect(plain.r).toMatchObject({ behavior: 'allow' })
+    const fenced = ask(runs[0]!, 'Bash', { command: 'git push' }, { reason: '[fence] Bash: risky command (git push)' })
+    await tick()
+    m.setMode(id, 'auto'); await tick()
+    expect(fenced.r).toBeUndefined()
+    m.setMode(id, 'bypass'); await tick()
+    expect(fenced.r).toMatchObject({ behavior: 'allow' })
+  })
+
+  it('tells the live CLI when it enters or leaves plan mode', async () => {
+    const calls: string[] = []
+    const { m, runs } = setup()
+    const id = (m.start('P', 'go') as any).session.id
+    await tick()
+    runs[0]!.setPermissionMode = async (x) => { calls.push(x) }
+    m.setMode(id, 'plan'); m.setMode(id, 'ask'); m.setMode(id, 'bypass')
+    await tick()
+    expect(calls).toEqual(['plan', 'default'])
+  })
+})
+
+describe('plans', () => {
+  it('ExitPlanMode waits for approval with a headline; approving leaves plan mode first, then builds in the mode it had before', async () => {
+    const calls: string[] = []
+    const { m, runs, events } = setup({ defaultMode: 'auto' })
+    const id = (m.start('Plan', 'go', { mode: 'plan' }) as any).session.id
+    await tick()
+    runs[0]!.setPermissionMode = async (x) => { calls.push(x) }
+    const got = ask(runs[0]!, 'ExitPlanMode', { plan: PLAN, planFilePath: 'C:\\x.md' })
+    await tick()
+    expect(m.get(id)).toMatchObject({ status: 'needs_permission', pending: { kind: 'plan', summary: 'Add a contact form', plan: PLAN } })
+    expect(events.find((e) => e.type === 'needs-input')).toBeTruthy()
+    expect(m.answer(id, { kind: 'allow' })).toMatchObject({ ok: true, said: 'plan approved, building in Auto mode' })
+    await tick(); await tick()
+    expect(calls).toEqual(['default'])
+    expect(got.r).toMatchObject({ behavior: 'allow', updatedInput: { plan: PLAN } })
+    expect(m.get(id)).toMatchObject({ mode: 'auto', status: 'running', pending: undefined })
+  })
+
+  it('a plan can be approved into a chosen mode, or sent back with feedback', async () => {
+    const { m, runs } = setup()
+    const id = (m.start('Plan', 'go', { mode: 'plan' }) as any).session.id
+    await tick()
+    const first = ask(runs[0]!, 'ExitPlanMode', { plan: PLAN })
+    await tick()
+    expect(m.answer(id, { kind: 'text', text: 'use Postgres' })).toMatchObject({ ok: true, said: 'sent back with your changes' })
+    await tick()
+    expect(first.r).toMatchObject({ behavior: 'deny' })
+    expect((first.r as any).message).toContain('use Postgres')
+    expect(m.get(id)!.mode).toBe('plan')
+    const second = ask(runs[0]!, 'ExitPlanMode', { plan: PLAN })
+    await tick()
+    m.answer(id, { kind: 'allow', mode: 'bypass' }); await tick(); await tick()
+    expect(second.r).toMatchObject({ behavior: 'allow' })
+    expect(m.get(id)!.mode).toBe('bypass')
+  })
+
+  it('switching mode while a plan waits approves it into that mode', async () => {
+    const { m, runs } = setup()
+    const id = (m.start('Plan', 'go', { mode: 'plan' }) as any).session.id
+    await tick()
+    const got = ask(runs[0]!, 'ExitPlanMode', { plan: PLAN })
+    await tick()
+    m.setMode(id, 'ask'); await tick(); await tick()
+    expect(got.r).toMatchObject({ behavior: 'allow' })
+    expect(m.get(id)!.mode).toBe('ask')
+  })
+
+  it('follows the model into plan mode when it enters it by itself', async () => {
+    const { m, runs } = setup({ defaultMode: 'ask' })
+    const id = (m.start('Self', 'go') as any).session.id
+    await tick()
+    runs[0]!.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan' })
+    await tick()
+    expect(m.get(id)!.mode).toBe('plan')
+    const got = ask(runs[0]!, 'ExitPlanMode', { plan: PLAN })
+    await tick()
+    m.answer(id, { kind: 'allow' }); await tick(); await tick()
+    expect(got.r).toMatchObject({ behavior: 'allow' })
+    expect(m.get(id)!.mode).toBe('ask')
   })
 })

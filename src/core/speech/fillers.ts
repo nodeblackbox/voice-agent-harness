@@ -55,7 +55,9 @@ export function toolLabel(toolName: string): string {
       claude_remove: 'Removing sessions',
       claude_files: 'Looking at its files',
       claude_recent: 'Looking at your other sessions',
-      claude_attach: 'Bringing that session in'
+      claude_attach: 'Bringing that session in',
+      claude_mode: 'Switching its mode',
+      claude_details: 'Reading the details'
     }[toolName] ?? toolName
   )
 }

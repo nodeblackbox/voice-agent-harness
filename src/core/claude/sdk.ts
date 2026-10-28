@@ -2,7 +2,7 @@
 import { getSessionMessages, listSessions, query } from '@anthropic-ai/claude-agent-sdk'
 import type { CcAccount } from '@shared/claude'
 import { toAccount } from './account'
-import type { CcHistory, CcSdk } from './types'
+import { FENCE_TAG, type CcHistory, type CcSdk } from './types'
 
 /**
  * Anything here would make the CLI bill an API key or another provider instead of the user's `claude` login
@@ -31,15 +31,18 @@ export const realSdk: CcSdk = (o) => {
       forkSession: o.fork || undefined,
       env: sessionEnv(),
       settingSources: [], // no user/project settings or CLAUDE.md from the host machine
-      permissionMode: 'default',
+      permissionMode: o.permissionMode,
       // Deliberately no allowedTools: a bare entry would skip canUseTool (lab finding).
-      canUseTool: async (toolName, input) => o.canUseTool(toolName, input),
+      canUseTool: async (toolName, input, opts) => o.canUseTool(toolName, input, { reason: opts.decisionReason }),
       hooks: {
         PreToolUse: [{
           hooks: [async (input: any) => {
-            const v = o.gate(String(input.tool_name), (input.tool_input ?? {}) as Record<string, unknown>)
+            // input.cwd follows the shell's `cd` (lab 07), so relative paths resolve where they will run
+            const v = o.gate(String(input.tool_name), (input.tool_input ?? {}) as Record<string, unknown>, typeof input.cwd === 'string' ? input.cwd : undefined)
             if (v.allow) return {}
-            return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'deny' as const, permissionDecisionReason: v.reason } }
+            // 'ask' reaches canUseTool with this reason (lab 07), where it becomes a spoken approval
+            const decision = v.ask ? ('ask' as const) : ('deny' as const)
+            return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: decision, permissionDecisionReason: v.ask ? FENCE_TAG + v.reason : v.reason } }
           }],
         }],
       },
@@ -48,6 +51,7 @@ export const realSdk: CcSdk = (o) => {
   return {
     messages: q,
     interrupt: async () => { await q.interrupt() },
+    setPermissionMode: (mode) => q.setPermissionMode(mode),
     close: () => q.close(),
   }
 }

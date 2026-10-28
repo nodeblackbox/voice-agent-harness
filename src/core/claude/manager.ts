@@ -13,11 +13,12 @@ import path from 'node:path'
 import { billingOf } from './account'
 import { digest } from './digest'
 import { historyEvents, messageEvents } from './events'
-import { checkToolUse, insideRoot } from './fence'
+import { checkToolUse, insideRoot, scratchRoots } from './fence'
 import { listWorkspace, readWorkspaceFile } from './files'
 import { Pushable } from './pushable'
+import { FENCE_TAG } from './types'
 import type {
-  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
+  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
 
 export interface ManagerDeps {
@@ -28,10 +29,12 @@ export interface ManagerDeps {
   workspaceRoot: string
   model?: string
   maxSessions?: number
-  /** Ask by voice before running any shell command (default true). */
-  approveShell?: boolean
+  /** Mode for new sessions (default 'auto'). */
+  defaultMode?: CcMode
   /** Live overrides of the four fields above, read on every use so Settings changes apply at once. */
-  config?: () => Partial<Pick<ManagerDeps, 'workspaceRoot' | 'model' | 'maxSessions' | 'approveShell'>>
+  config?: () => Partial<Pick<ManagerDeps, 'workspaceRoot' | 'model' | 'maxSessions' | 'defaultMode'>>
+  /** Folders every session may use besides its own (default: the temp dir and Claude Code's plan files). */
+  scratch?: string[]
   eventBuffer?: number
   now?: () => number
   mkdir?: (dir: string) => void
@@ -52,11 +55,15 @@ interface Rt {
   pendingInput?: Record<string, unknown>
   /** Prompt to send as soon as an in-flight interrupt lands (`send(..., {now:true})`). */
   redirect?: string
+  /** The mode to build in once a plan is approved (the mode it had before planning). */
+  afterPlan?: CcMode
   lastText: string
 }
 
 
 const SHELL = new Set(['Bash', 'PowerShell'])
+export const MODE_LABEL: Record<CcMode, string> = { plan: 'Plan', ask: 'Ask', auto: 'Auto', bypass: 'Bypass' }
+const sdkMode = (m: CcMode) => (m === 'plan' ? 'plan' : 'default') as 'plan' | 'default'
 const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'session'
 const userMsg = (text: string, sessionId = '') => ({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: sessionId })
 
@@ -112,9 +119,9 @@ export class ClaudeSessionManager {
    * Start a session. By default it gets a new folder of its own under the workspace root. `folder` picks
    * where it works instead: the name of a folder under the root (reused, or created), or the full path
    * of an existing project folder elsewhere, which makes it an "external" session like an attached one
-   * (fenced to that folder, shell commands always ask).
+   * (fenced to that folder; its mode decides what asks).
    */
-  start(name: string, firstPrompt?: string, opts: { folder?: string } = {}): CcResult<{ session: CcSession }> {
+  start(name: string, firstPrompt?: string, opts: { folder?: string; mode?: CcMode } = {}): CcResult<{ session: CcSession }> {
     const max = this.cfg.maxSessions ?? 4
     if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
     const root = path.resolve(this.cfg.workspaceRoot)
@@ -143,7 +150,7 @@ export class ClaudeSessionManager {
     }
     const t = this.now()
     const s: CcSession = {
-      id: `cc${++this.seq}-${t.toString(36)}`, name: name.trim() || path.basename(workspace), workspace, status: 'idle',
+      id: `cc${++this.seq}-${t.toString(36)}`, name: name.trim() || path.basename(workspace), workspace, status: 'idle', mode: opts.mode ?? this.defaultMode,
       ...(external ? { external } : {}), queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
     }
     if (!external) try { (this.d.mkdir ?? ((p) => fs.mkdirSync(p, { recursive: true })))(workspace) } catch (e) {
@@ -212,9 +219,33 @@ export class ClaudeSessionManager {
     if (!r || !p || !r.resolve) return { ok: false, error: 'Nothing is waiting for an answer.' }
 
     if (p.kind === 'permission') {
-      if (a.kind === 'allow') { this.settle(r, { behavior: 'allow', updatedInput: r.pendingInput ?? {} }); return { ok: true, said: 'approved' } }
-      if (a.kind === 'deny') { this.settle(r, { behavior: 'deny', message: a.reason ?? 'The user said no.' }); return { ok: true, said: 'denied' } }
+      if (a.kind === 'allow') {
+        if (a.mode) this.applyMode(r, a.mode)
+        this.settle(r, { behavior: 'allow', updatedInput: r.pendingInput ?? {} })
+        return { ok: true, said: a.mode ? `approved, and ${MODE_LABEL[a.mode]} mode from now on` : 'approved' }
+      }
+      if (a.kind === 'deny') {
+        this.log(r, 'denied', `You said no: ${p.summary.replace(/^Run:\s*/, '')}`)
+        this.settle(r, { behavior: 'deny', message: a.reason ?? 'The user said no.' })
+        return { ok: true, said: 'denied' }
+      }
       return { ok: false, error: 'That is a yes/no approval.' }
+    }
+
+    if (p.kind === 'plan') {
+      if (a.kind === 'allow') {
+        const then = this.buildMode(r, a.mode)
+        this.approvePlan(r, then)
+        return { ok: true, said: `plan approved, building in ${MODE_LABEL[then]} mode` }
+      }
+      const feedback = (a.kind === 'text' ? a.text : a.kind === 'deny' ? a.reason : undefined)?.trim()
+      this.settle(r, {
+        behavior: 'deny',
+        message: feedback
+          ? `The user wants changes before you build. Their feedback: ${feedback}\nStay in plan mode: revise the plan and present it again with ExitPlanMode.`
+          : 'The user did not approve this plan yet. Stay in plan mode and ask them what to change.',
+      })
+      return { ok: true, said: feedback ? 'sent back with your changes' : 'kept planning' }
     }
 
     // Question
@@ -261,7 +292,7 @@ export class ClaudeSessionManager {
 
   /**
    * Bring a saved session into the list so it can be continued by voice. It works in its own project
-   * folder (fenced to it; shell commands always ask) and its first run forks the conversation, so the
+   * folder (fenced to it; its mode decides what asks) and its first run forks the conversation, so the
    * original transcript is left as it was.
    */
   async attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>> {
@@ -273,7 +304,7 @@ export class ClaudeSessionManager {
     const t = this.now()
     const s: CcSession = {
       id: `cc${++this.seq}-${t.toString(36)}`, name: x.title.trim().slice(0, 60) || path.basename(x.cwd), workspace: path.resolve(x.cwd), status: 'idle',
-      sdkSessionId: x.sessionId, forkOnResume: true, external: true, queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
+      mode: this.defaultMode, sdkSessionId: x.sessionId, forkOnResume: true, external: true, queued: [], lastSummary: '', costUsd: 0, turns: 0, createdAt: t, updatedAt: t,
     }
     const r: Rt = { s, events: [], lastText: '' }
     try {
@@ -281,6 +312,26 @@ export class ClaudeSessionManager {
     } catch { /* the transcript is only context; attaching still works */ }
     this.rts.set(s.id, r)
     this.log(r, 'status', `Continued here from ${path.basename(x.cwd)} (a copy: the original session is untouched)`)
+    this.changed(r)
+    return { ok: true, session: this.snap(r) }
+  }
+
+  /**
+   * Switch how much the session may do on its own, live. Anything it is waiting on that the new mode would not
+   * ask about goes through: an approval under Auto/Bypass, a plan when leaving Plan (it builds in the new mode).
+   */
+  setMode(id: string, mode: CcMode): CcResult<{ session: CcSession }> {
+    const r = this.rts.get(id)
+    if (!r) return { ok: false, error: 'No such session.' }
+    const p = r.s.pending
+    if (p?.kind === 'plan' && mode !== 'plan') {
+      this.approvePlan(r, mode)
+      return { ok: true, session: this.snap(r) }
+    }
+    this.applyMode(r, mode)
+    if (p?.kind === 'permission' && (mode === 'bypass' ? !/deletes outside/.test(p.reason ?? '') : mode === 'auto' && !p.reason)) {
+      this.settle(r, { behavior: 'allow', updatedInput: r.pendingInput ?? {} })
+    }
     this.changed(r)
     return { ok: true, session: this.snap(r) }
   }
@@ -380,6 +431,41 @@ export class ClaudeSessionManager {
   // ---- internals ----
   private now(): number { return (this.d.now ?? Date.now)() }
 
+  private get defaultMode(): CcMode { return this.cfg.defaultMode ?? 'auto' }
+
+  private modeOf(r: Rt): CcMode { return r.s.mode ?? this.defaultMode }
+
+  /** Record the mode and tell the live CLI (plan mode is the CLI's own; the rest is our policy). */
+  private applyMode(r: Rt, mode: CcMode): void {
+    const was = this.modeOf(r)
+    if (was === mode) return
+    if (mode === 'plan') r.afterPlan = was
+    r.s.mode = mode
+    if (sdkMode(was) !== sdkMode(mode)) void r.run?.setPermissionMode?.(sdkMode(mode)).catch(() => {})
+    this.log(r, 'status', `${MODE_LABEL[mode]} mode`)
+  }
+
+  /** The mode to build in after a plan: the one asked for, else the one before planning, else Auto. */
+  private buildMode(r: Rt, asked?: CcMode): CcMode {
+    if (asked && asked !== 'plan') return asked
+    if (r.afterPlan && r.afterPlan !== 'plan') return r.afterPlan
+    return this.defaultMode === 'plan' ? 'auto' : this.defaultMode
+  }
+
+  /** Leave plan mode first, then let ExitPlanMode through (the order lab 07 verified). */
+  private approvePlan(r: Rt, then: CcMode): void {
+    const input = r.pendingInput ?? {}
+    const resolve = r.resolve
+    r.resolve = undefined
+    r.s.mode = then
+    r.afterPlan = undefined
+    this.log(r, 'status', `Plan approved: building in ${MODE_LABEL[then]} mode`)
+    const go = () => { r.resolve = resolve; this.settle(r, { behavior: 'allow', updatedInput: input }) }
+    const switching = r.run?.setPermissionMode?.('default')
+    if (switching) void switching.catch(() => {}).finally(go)
+    else go()
+  }
+
   private snap(r: Rt): CcSession { return { ...r.s, queued: [...r.s.queued], pending: r.s.pending && { ...r.s.pending } as CcPending } }
 
   private emit(e: CcManagerEvent): void { for (const fn of this.listeners) fn(e) }
@@ -423,11 +509,14 @@ export class ClaudeSessionManager {
       model: this.cfg.model || undefined,
       resume: r.s.sdkSessionId,
       fork: r.s.forkOnResume && !!r.s.sdkSessionId,
+      permissionMode: sdkMode(this.modeOf(r)),
       input,
-      canUseTool: (name, inp) => this.canUseTool(r, name, inp),
-      gate: (name, inp) => {
-        const v = checkToolUse(name, inp, { root: r.s.workspace })
-        if (!v.allow) this.log(r, 'denied', v.reason)
+      canUseTool: (name, inp, meta) => this.canUseTool(r, name, inp, meta),
+      gate: (name, inp, cwd) => {
+        const v = checkToolUse(name, inp, {
+          root: r.s.workspace, cwd, extra: this.d.scratch ?? scratchRoots(), policy: this.modeOf(r) === 'bypass' ? 'bypass' : 'fenced',
+        })
+        if (!v.allow && !v.ask) this.log(r, 'denied', v.reason)
         return v
       },
     })
@@ -483,6 +572,12 @@ export class ClaudeSessionManager {
       if (billing !== 'unknown') r.s.billing = billing
       if (r.s.sdkSessionId !== m.session_id || r.s.forkOnResume) { r.s.sdkSessionId = m.session_id; r.s.forkOnResume = undefined }
       this.changed(r)
+    } else if (m.type === 'system' && m.subtype === 'status' && m.permissionMode === 'plan' && this.modeOf(r) !== 'plan') {
+      // the model entered plan mode by itself (EnterPlanMode): keep our mode in step
+      r.afterPlan = this.modeOf(r)
+      r.s.mode = 'plan'
+      this.log(r, 'status', 'Plan mode')
+      this.changed(r)
     } else if (m.type === 'system' && m.subtype === 'permission_denied') {
       this.log(r, 'denied', String(m.message ?? m.tool_name ?? 'Permission denied'))
     } else if (m.type === 'assistant' || m.type === 'user') {
@@ -518,7 +613,8 @@ export class ClaudeSessionManager {
     if (next) this.dispatch(r, next)
   }
 
-  private canUseTool(r: Rt, toolName: string, input: Record<string, unknown>): Promise<CcPermissionResult> {
+  private canUseTool(r: Rt, toolName: string, input: Record<string, unknown>, meta: { reason?: string } = {}): Promise<CcPermissionResult> {
+    const mode = this.modeOf(r)
     if (toolName === 'AskUserQuestion') {
       const questions = parseQuestions(input)
       if (!questions.length) return Promise.resolve({ behavior: 'allow', updatedInput: input })
@@ -527,10 +623,16 @@ export class ClaudeSessionManager {
         summary: questions.map((q) => q.question).join(' '),
       }, 'needs_input')
     }
-    // a session attached to a real project folder always asks before running commands
-    if (SHELL.has(toolName) && (r.s.external || (this.cfg.approveShell ?? true))) {
-      const cmd = String(input.command ?? '')
-      return this.block(r, input, { id: `${r.s.id}-p${++this.seq}`, kind: 'permission', toolName, summary: `Run: ${cmd}` }, 'needs_permission')
+    if (toolName === 'ExitPlanMode' && mode !== 'bypass') {
+      const plan = String(input.plan ?? '').trim()
+      return this.block(r, input, { id: `${r.s.id}-plan${++this.seq}`, kind: 'plan', toolName: 'ExitPlanMode', plan, summary: planHeadline(plan) }, 'needs_permission')
+    }
+    // the fence asked (outside its folder, deletes, pushes…), or Ask mode and a shell command
+    const fence = meta.reason?.startsWith(FENCE_TAG) ? meta.reason.slice(FENCE_TAG.length) : undefined
+    if (fence || (SHELL.has(toolName) && mode === 'ask')) {
+      const what = SHELL.has(toolName) ? `Run: ${String(input.command ?? '')}` : `${toolName} ${String(input.file_path ?? input.notebook_path ?? input.path ?? '')}`.trim()
+      const reason = fence?.replace(/^(Bash|PowerShell|\w+):\s*/, '')
+      return this.block(r, input, { id: `${r.s.id}-p${++this.seq}`, kind: 'permission', toolName, summary: what, ...(reason ? { reason } : {}) }, 'needs_permission')
     }
     return Promise.resolve({ behavior: 'allow', updatedInput: input })
   }
@@ -545,6 +647,13 @@ export class ClaudeSessionManager {
       this.emit({ type: 'needs-input', id: r.s.id, name: r.s.name, pending })
     })
   }
+}
+
+/** First line of a plan, as a short headline (markdown and a leading "Plan:" stripped). */
+export function planHeadline(plan: string): string {
+  const line = plan.split(/\r?\n/).map((l) => l.replace(/^[#>*\s-]+/, '').replace(/\*\*/g, '').trim()).find(Boolean) ?? 'A plan'
+  const h = line.replace(/^plan\s*[:\-–]\s*/i, '') || line
+  return h.length > 140 ? h.slice(0, 139).trimEnd() + '…' : h
 }
 
 function parseQuestions(input: Record<string, unknown>): CcQuestion[] {

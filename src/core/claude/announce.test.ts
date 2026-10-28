@@ -16,6 +16,15 @@ describe('announcement', () => {
   it('asks for approval in plain words', () => {
     expect(announcement({ type: 'needs-input', id: '1', name: 'API', pending: { id: 'p', kind: 'permission', toolName: 'PowerShell', summary: 'Run: npm test' } })).toBe('API wants to run: npm test. Is that okay?')
   })
+  it('says why the fence asked, in a few words', () => {
+    const line = announcement({ type: 'needs-input', id: '1', name: 'Site', pending: { id: 'p', kind: 'permission', toolName: 'Bash', summary: 'Run: rm -rf dist', reason: 'deletes files' } })
+    expect(line).toBe('Site wants to run: rm -rf dist. That deletes files. Is that okay?')
+  })
+  it('gives a plan headline only, never the whole plan', () => {
+    const plan = '# Plan: Contact form\n\n' + '1. step\n'.repeat(80)
+    const line = announcement({ type: 'needs-input', id: '1', name: 'Site', pending: { id: 'p', kind: 'plan', toolName: 'ExitPlanMode', plan, summary: 'Contact form' } })
+    expect(line).toBe('Site has a plan ready: Contact form. Shall it go ahead, or do you want changes?')
+  })
   it('announces completion with a clipped summary, and stays quiet for other events', () => {
     expect(announcement({ type: 'finished', id: '1', name: 'API', summary: 'All tests pass.' })).toBe('API is done. All tests pass.')
     expect(announcement({ type: 'finished', id: '1', name: 'API', summary: 'x'.repeat(500) })!.length).toBeLessThan(260)

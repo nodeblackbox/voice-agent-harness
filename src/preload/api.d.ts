@@ -1,4 +1,4 @@
-import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcResult, CcSession } from '@shared/claude'
+import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -120,12 +120,14 @@ export interface VoiceAgentApi {
     list(): Promise<CcSession[]>
     events(id: string, n?: number): Promise<CcEvent[]>
     /** `folder`: a workspace folder name to reuse, or a full project path (works in your real files). */
-    start(name: string, task?: string, folder?: string): Promise<CcResult<{ session: CcSession }>>
+    start(name: string, task?: string, folder?: string, mode?: CcMode): Promise<CcResult<{ session: CcSession }>>
     send(id: string, text: string, now?: boolean): Promise<CcResult<{ queued: boolean }>>
     answer(id: string, answer: CcAnswer): Promise<CcResult<{ said: string }>>
     interrupt(id: string, clearQueue?: boolean): Promise<CcResult>
     stop(id: string): Promise<CcResult>
     dequeue(id: string, index: number): Promise<CcResult>
+    /** Plan / Ask / Auto / Bypass, live; a waiting approval or plan the new mode would not ask about goes through. */
+    setMode(id: string, mode: CcMode): Promise<CcResult<{ session: CcSession }>>
     rename(id: string, name: string): Promise<CcResult>
     /** Fresh start: forget the conversation, keep the folder. */
     reset(id: string): Promise<CcResult>

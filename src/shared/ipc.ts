@@ -49,6 +49,7 @@ export const IPC = {
   claudeInterrupt: 'claude:interrupt',
   claudeStop: 'claude:stop',
   claudeDequeue: 'claude:dequeue',
+  claudeSetMode: 'claude:set-mode',
   claudeRename: 'claude:rename',
   claudeReset: 'claude:reset',
   claudeRemove: 'claude:remove',

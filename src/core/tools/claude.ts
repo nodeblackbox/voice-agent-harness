@@ -1,25 +1,43 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
+import { CC_MODES, type CcMode } from '@shared/claude'
 import type { ClaudeSessionManager } from '../claude/manager'
-import type { CcSession } from '../claude/types'
+import type { CcEvent, CcPending, CcSession } from '../claude/types'
 
 const sessionRef = z.string().default('').describe('Session name (or part of it). Leave empty when there is only one session.')
+const modeEnum = z.enum(CC_MODES as [CcMode, ...CcMode[]])
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s)
+const stepCount = (plan: string) => plan.split(/\r?\n/).filter((l) => /^\s*(\d+[.)]|[-*])\s/.test(l)).length
+
+/** What a session is waiting on, kept short: a plan is its headline only (claude_details reads the rest). */
+function waiting(p: CcPending | undefined) {
+  if (!p) return null
+  if (p.kind === 'question') {
+    return { type: 'question', questions: p.questions.map((q) => ({ question: q.question, options: q.options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` (${clip(o.description, 80)})` : ''}`), multi_select: q.multiSelect })) }
+  }
+  if (p.kind === 'plan') return { type: 'plan', headline: p.summary, steps: stepCount(p.plan), full_plan: 'claude_details what=plan' }
+  return { type: 'approval', what: clip(p.summary, 200), ...(p.reason ? { why: p.reason } : {}) }
+}
 
 /** What the voice model is told about a session: short, speakable, no internals. */
 function brief(s: CcSession, m: ClaudeSessionManager) {
   return {
     name: s.name,
     status: s.status,
+    mode: s.mode,
     workspace: s.workspace,
-    waiting_for_user: s.pending
-      ? s.pending.kind === 'question'
-        ? { type: 'question', questions: s.pending.questions.map((q) => ({ question: q.question, options: q.options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` (${o.description})` : ''}`), multi_select: q.multiSelect })) }
-        : { type: 'approval', what: s.pending.summary }
-      : null,
+    waiting_for_user: waiting(s.pending),
     queued_prompts: s.queued.length,
     what_just_happened: m.digest(s.id),
     cost_usd: Number(s.costUsd.toFixed(3))
   }
+}
+
+/** One line per event for claude_details: tool calls with their target, results and errors, no file contents. */
+function line(e: CcEvent): string | null {
+  if (e.kind === 'tool_result') return e.isError ? `  ✗ ${clip(e.text.replace(/\s+/g, ' '), 140)}` : null
+  const label = e.kind === 'tool' ? '→' : e.kind === 'text' ? 'said' : e.kind
+  return `${label} ${clip(e.text.replace(/\s+/g, ' '), 180)}`
 }
 
 /**
@@ -31,24 +49,25 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
 
   return {
     claude_list: tool({
-      description: 'List the Claude Code sessions (name, status, what is waiting on the user, what just happened) and the existing folders in the workspace root that a new session could reuse.',
+      description: 'List the Claude Code sessions (name, status, mode, what is waiting on the user, last result in short) and the existing folders in the workspace root that a new session could reuse.',
       inputSchema: z.object({}),
       execute: async () => ({
-        sessions: m.list().map((s) => brief(s, m)),
+        sessions: m.list().map((s) => ({ name: s.name, status: s.status, mode: s.mode, waiting_for_user: waiting(s.pending), queued: s.queued.length, last: clip(s.lastSummary, 160) })),
         workspace_folders: m.folders().slice(0, 20).map((f) => (f.inUse ? `${f.name} (in use)` : f.name))
       })
     }),
 
     claude_start: tool({
       description:
-        'Start a NEW Claude Code session and optionally give it a first task. By default it gets a fresh sandbox folder of its own. Use "folder" when the user says where it should work: the name of an existing workspace folder (see claude_list) to continue in it, or the FULL path of one of their project folders. A project path means it works in their real files (fenced to that folder, shell commands ask), so say that and get a clear yes first. Pick a short, spoken-friendly name (e.g. "landing page").',
+        'Start a NEW Claude Code session and optionally give it a first task. By default it gets a fresh sandbox folder of its own. Use "folder" when the user says where it should work: the name of an existing workspace folder (see claude_list) to continue in it, or the FULL path of one of their project folders. A project path means it works in their real files (fenced to that folder), so say that and get a clear yes first. Pick a short, spoken-friendly name (e.g. "landing page"). Set mode only when the user asks for one (e.g. "plan it first" = plan); otherwise leave it empty for the default.',
       inputSchema: z.object({
         name: z.string().min(1).describe('Short session name'),
         task: z.string().default('').describe('The first instruction for Claude Code. Full, self-contained, written as a clear brief.'),
-        folder: z.string().default('').describe('Optional: an existing workspace folder name, or a full project path. Empty = a new sandbox folder.')
+        folder: z.string().default('').describe('Optional: an existing workspace folder name, or a full project path. Empty = a new sandbox folder.'),
+        mode: z.union([modeEnum, z.literal('')]).default('').describe('Optional: plan | ask | auto | bypass. Empty = the default mode.')
       }),
-      execute: async ({ name, task, folder }) => {
-        const r = m.start(name, task || undefined, { folder: folder || undefined })
+      execute: async ({ name, task, folder, mode }) => {
+        const r = m.start(name, task || undefined, { folder: folder || undefined, mode: mode || undefined })
         return r.ok ? { status: 'started', session: brief(r.session, m) } : { status: 'failed', error: r.error }
       }
     }),
@@ -80,20 +99,52 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
 
     claude_answer: tool({
       description:
-        'Answer what a session is waiting on. For a multiple-choice question give the option number(s) ("choice") or free text ("text") for something else. For a yes/no approval give approve true or false. Only call this when the user has actually answered; never guess an answer on their behalf.',
+        'Answer what a session is waiting on. A multiple-choice question: the option number(s) ("choice") or free text ("text"). A yes/no approval: approve true or false. A plan: approve true to let it build (optionally "mode" to build in, e.g. auto), or approve false with "text" = the changes the user wants (it revises the plan). "mode" with an approval also switches the session from now on (e.g. "yes, and stop asking me" = approve true, mode auto). Only call this when the user has actually answered; never guess an answer on their behalf.',
       inputSchema: z.object({
         session: sessionRef,
         choice: z.array(z.number().int().min(1)).optional().describe('1-based option number(s); several only for multi-select; one per question when there are several questions'),
-        text: z.string().optional().describe('A free-text answer instead of an option'),
-        approve: z.boolean().optional().describe('For approvals: true = allow, false = deny')
+        text: z.string().optional().describe('A free-text answer instead of an option; for a plan, the changes the user wants'),
+        approve: z.boolean().optional().describe('For approvals and plans: true = allow / go ahead, false = deny / send back'),
+        mode: modeEnum.optional().describe('With approve true: the mode to continue in (plans: the mode to build in)')
       }),
-      execute: async ({ session, choice, text, approve }) => {
+      execute: async ({ session, choice, text, approve, mode }) => {
         const f = find(session)
         if (!f.ok) return { status: 'failed', error: f.error }
-        const a = approve !== undefined ? (approve ? ({ kind: 'allow' } as const) : ({ kind: 'deny' } as const)) : choice?.length ? ({ kind: 'choice', choices: choice } as const) : text ? ({ kind: 'text', text } as const) : null
+        const a = approve !== undefined
+          ? (approve ? ({ kind: 'allow', mode } as const) : ({ kind: 'deny', reason: text } as const))
+          : choice?.length ? ({ kind: 'choice', choices: choice } as const) : text ? ({ kind: 'text', text } as const) : null
         if (!a) return { status: 'failed', error: 'No answer was given.' }
         const r = m.answer(f.session.id, a)
         return r.ok ? { status: 'answered', session: f.session.name, answer: r.said } : { status: 'failed', error: r.error }
+      }
+    }),
+
+    claude_mode: tool({
+      description:
+        'Change how much a session may do on its own. plan = it only looks around and writes a plan, nothing changes until the user approves it. ask = every shell command asks first. auto = no questions for work inside its folder (going outside it, deleting or pushing still asks). bypass = no questions at all; only when the user explicitly asks for bypass / full auto / "stop asking me anything". A waiting approval or plan that the new mode would not ask about goes ahead.',
+      inputSchema: z.object({ session: sessionRef, mode: modeEnum }),
+      execute: async ({ session, mode }) => {
+        const f = find(session)
+        if (!f.ok) return { status: 'failed', error: f.error }
+        const r = m.setMode(f.session.id, mode)
+        return r.ok ? { status: 'mode set', session: f.session.name, mode, now: r.session.status } : { status: 'failed', error: r.error }
+      }
+    }),
+
+    claude_details: tool({
+      description:
+        'Read MORE of a session, only when the user wants specifics that the short status does not cover: what=plan for its full plan, what=answer for its whole last reply, what=activity for its recent steps one line each. Everything else stays short on purpose, to keep this conversation light.',
+      inputSchema: z.object({ session: sessionRef, what: z.enum(['plan', 'answer', 'activity']) }),
+      execute: async ({ session, what }) => {
+        const f = find(session)
+        if (!f.ok) return { status: 'failed', error: f.error }
+        const s = f.session
+        if (what === 'plan') {
+          return s.pending?.kind === 'plan' ? { session: s.name, plan: clip(s.pending.plan, 4000) } : { session: s.name, plan: null, note: 'No plan is waiting for approval.' }
+        }
+        if (what === 'answer') return { session: s.name, answer: clip(s.lastSummary || 'Nothing yet.', 4000) }
+        const lines = m.events(s.id, 60).map(line).filter((x): x is string => !!x).slice(-25)
+        return { session: s.name, status: s.status, mode: s.mode, steps: lines }
       }
     }),
 
@@ -193,15 +244,19 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
 export function claudeContextBlock(m: ClaudeSessionManager): string {
   const sessions = m.list()
   if (!sessions.length) return 'No Claude Code sessions yet.'
-  return sessions
-    .map((s) => {
-      const head = `- ${s.name} [${s.status}]${s.queued.length ? `, ${s.queued.length} queued` : ''}`
-      if (s.pending?.kind === 'question') {
-        const q = s.pending.questions.map((x) => `${x.question} ${x.options.map((o, i) => `${i + 1}) ${o.label}`).join('  ')}`).join(' | ')
-        return `${head}\n  WAITING ON THE USER (question): ${q}`
+  // newest first; long-idle sessions collapse to a name so many sessions stay cheap
+  return [...sessions]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((s, i) => {
+      const head = `- ${s.name} [${s.status}${s.mode ? `, ${s.mode} mode` : ''}]${s.queued.length ? `, ${s.queued.length} queued` : ''}`
+      const p = s.pending
+      if (p?.kind === 'question') {
+        const q = p.questions.map((x) => `${x.question} ${x.options.map((o, n) => `${n + 1}) ${clip(o.label, 60)}`).join('  ')}`).join(' | ')
+        return `${head}\n  WAITING ON THE USER (question): ${clip(q, 600)}`
       }
-      if (s.pending) return `${head}\n  WAITING ON THE USER (approval): ${s.pending.summary}`
-      return `${head}${s.lastSummary ? ` — ${s.lastSummary.slice(0, 140)}` : ''}`
+      if (p?.kind === 'plan') return `${head}\n  WAITING ON THE USER (plan to approve): ${p.summary} (${stepCount(p.plan)} steps; claude_details reads it)`
+      if (p) return `${head}\n  WAITING ON THE USER (approval): ${clip(p.summary, 200)}${p.reason ? ` [${p.reason}]` : ''}`
+      return `${head}${s.lastSummary && i < 6 ? ` — ${clip(s.lastSummary.replace(/\s+/g, ' '), 140)}` : ''}`
     })
     .join('\n')
 }

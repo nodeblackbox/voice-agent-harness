@@ -1,8 +1,9 @@
 /** Types for voice-managed Claude Code sessions. Electron-free: shared by the manager, tools and IPC. */
 
-import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
+import type { FenceVerdict } from './fence'
 
-export type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
+export type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
 
 // ---- SDK seam (real implementation in sdk.ts, a scripted fake in tests) ----
 
@@ -16,16 +17,25 @@ export interface CcRunOpts {
   resume?: string
   /** With resume: continue in a new session id, leaving the original transcript as it was. */
   fork?: boolean
+  /** The CLI's own mode: 'plan' keeps it read-only until a plan is approved. */
+  permissionMode: SdkMode
   /** Streaming prompt: the manager pushes user messages here. */
   input: AsyncIterable<unknown>
-  canUseTool: (toolName: string, input: Record<string, unknown>) => Promise<CcPermissionResult>
-  /** Hard gate, run as a PreToolUse hook before any permission logic. */
-  gate: (toolName: string, input: Record<string, unknown>) => { allow: true } | { allow: false; reason: string }
+  /** `reason`: why it asks (a fence 'ask' arrives here with FENCE_TAG in front). */
+  canUseTool: (toolName: string, input: Record<string, unknown>, meta: { reason?: string }) => Promise<CcPermissionResult>
+  /** Hard gate, run as a PreToolUse hook before any permission logic. `cwd` = the shell's current folder. */
+  gate: (toolName: string, input: Record<string, unknown>, cwd?: string) => FenceVerdict
 }
+
+export type SdkMode = 'plan' | 'default'
+/** Marks a permission request that came from the fence asking (not refusing). */
+export const FENCE_TAG = '[fence] '
 
 export interface CcRun {
   messages: AsyncIterable<any>
   interrupt(): Promise<void>
+  /** Change the CLI's mode mid-session (lab: works on the live stream). */
+  setPermissionMode?(mode: SdkMode): Promise<void>
   close(): void
 }
 

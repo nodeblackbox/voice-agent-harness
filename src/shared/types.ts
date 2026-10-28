@@ -1,7 +1,7 @@
 // Shared contracts between main, preload, renderer and the agent core.
 // Everything crossing an IPC boundary is defined here.
 
-import type { CcManagerEvent } from './claude'
+import type { CcManagerEvent, CcMode } from './claude'
 import type { TuningValues } from './tuning'
 
 export type Provider = 'anthropic' | 'groq' | 'google' | 'xai'
@@ -372,8 +372,8 @@ export interface ClaudeSettings {
   /** Model for sessions; empty = the Claude Code default. */
   model: string
   maxSessions: number
-  /** Ask by voice before a session runs a shell command. */
-  approveShell: boolean
+  /** How much a new session may do on its own (each session can be switched later). */
+  defaultMode: CcMode
 }
 
 export interface Settings {

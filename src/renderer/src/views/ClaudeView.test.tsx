@@ -15,7 +15,7 @@ const claude = {
   rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
   external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
-  folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null),
+  folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null), setMode: vi.fn().mockResolvedValue({ ok: true }),
   account: vi.fn().mockResolvedValue({ billing: 'subscription', plan: 'Claude Max', email: 'me@example.com' }),
 }
 ;(globalThis as { window: { api?: unknown } }).window.api = { claude, settings: { set: vi.fn(async (p: object) => p) } }
@@ -28,7 +28,7 @@ const { ClaudeStrip } = await import('../components/chat/ClaudeStrip')
 const session = (over: Partial<CcSession> = {}): CcSession => ({
   id: 's1', name: 'Landing page', workspace: 'D:\\ws\\landing-page', status: 'idle', queued: [], lastSummary: 'Built it', costUsd: 0.02, turns: 2, createdAt: 1, updatedAt: 1, ...over,
 })
-const claudeSettings = { enabled: true, workspaceRoot: 'D:\\ws', model: '', maxSessions: 4, approveShell: true }
+const claudeSettings = { enabled: true, workspaceRoot: 'D:\\ws', model: '', maxSessions: 4, defaultMode: 'auto' as const }
 
 let root: Root
 let host: HTMLDivElement
@@ -134,6 +134,42 @@ describe('ClaudeView', () => {
     expect(claude.answer).toHaveBeenLastCalledWith('s1', { kind: 'allow' })
     await click(button('Deny'))
     expect(claude.answer).toHaveBeenLastCalledWith('s1', { kind: 'deny' })
+  })
+
+  it('shows why the fence asks, and offers "approve and stop asking"', async () => {
+    const pending = { id: 'p', kind: 'permission' as const, toolName: 'Bash', summary: 'Run: rm -rf dist', reason: 'deletes files' }
+    useStore.setState({ claudeSessions: [session({ status: 'needs_permission', pending })], claudeSelected: 's1' })
+    await render()
+    expect(host.textContent).toContain('Deletes files')
+    await click(button('Bypass from now on'))
+    expect(claude.answer).toHaveBeenLastCalledWith('s1', { kind: 'allow', mode: 'bypass' })
+  })
+
+  it('reviews a plan: approve into a chosen mode, or send it back with changes', async () => {
+    const plan = { id: 'p', kind: 'plan' as const, toolName: 'ExitPlanMode' as const, plan: '# Plan: Contact form\n\n1. Markup\n2. Validation', summary: 'Contact form' }
+    useStore.setState({ claudeSessions: [session({ status: 'needs_permission', mode: 'plan', pending: plan })], claudeSelected: 's1' })
+    await render()
+    expect(host.textContent).toContain('Plan ready: Contact form')
+    expect(host.textContent).toContain('Validation')
+    await click([...host.querySelectorAll('[role="radio"]')].find((b) => b.textContent?.includes('Ask')))
+    await click(button('Approve and build'))
+    expect(claude.answer).toHaveBeenLastCalledWith('s1', { kind: 'allow', mode: 'ask' })
+    const input = host.querySelector('input[placeholder^="Or say what to change"]') as HTMLInputElement
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      set.call(input, 'use Postgres')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('Send back'))
+    expect(claude.answer).toHaveBeenLastCalledWith('s1', { kind: 'deny', reason: 'use Postgres' })
+  })
+
+  it('switches a session\'s mode from the header', async () => {
+    useStore.setState({ claudeSessions: [session({ mode: 'auto' })], claudeSelected: 's1' })
+    await render()
+    await click(host.querySelector('button[aria-label^="Mode: Auto"]')!)
+    await click([...host.querySelectorAll('[role="menuitemradio"]')].find((b) => b.textContent?.includes('Bypass')))
+    expect(claude.setMode).toHaveBeenCalledWith('s1', 'bypass')
   })
 
   it('lists queued prompts and removes one', async () => {
@@ -330,7 +366,7 @@ describe('ClaudeView', () => {
     })
     await click(button('bing-bong-jiggly'))
     await click(button('Start'))
-    expect(claude.start).toHaveBeenCalledWith('slop three', undefined, 'bing-bong-jiggly')
+    expect(claude.start).toHaveBeenCalledWith('slop three', undefined, 'bing-bong-jiggly', 'auto')
   })
 
   it('shows which login sessions bill: the Claude subscription', async () => {
