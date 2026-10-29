@@ -1,7 +1,11 @@
 # VoiceAiChatBot — New Architecture (planning document)
 
+> **Historical.** This is the planning document written before the first line of code. It is kept for the
+> reasoning behind the design; the current map is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and some things
+> changed on the way (Claude Code sessions and Skills shipped; barge-in cuts instantly; Kokoro covers for Edge TTS).
+
 Standalone desktop voice agent in **Electron + TypeScript**, informed by the analysis of the old
-terminal agent (`D:\Downloads\voiceAgent\ARCHITECTURE.md`). No implementation yet — this is the
+terminal agent (a Python project, not published). Written before any code existed; this is the
 document to review before Phase A starts.
 
 Conventions used below: **[reuse]** = pattern/logic carried over from the old project,

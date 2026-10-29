@@ -7,7 +7,7 @@ diagnostics** and this page is the decoder.
 
 ## Files
 
-All under `%APPDATA%/Voice Agent/logs/` (Settings → Diagnostics → *Open logs folder*):
+All under `%APPDATA%/Voice Agent/logs/` (Diagnostics view → *Open logs folder*):
 
 | file | what | flood control |
 |---|---|---|
@@ -28,7 +28,7 @@ Every line has `t` (ISO time), `sid` (session), usually `turn`, and `ev`. Prefix
 | `state` | agent state machine | `{from, to, event}` — every transition (`idle`, `listening`, `user_speaking`, `thinking`, `tool`, `speaking`, `interrupted`) |
 | `ear.*` | sidecar events (never `level`) | `speech_start{earT}`, `partial{text}`, `speech_end{reason, silenceMs, turnP, speechMs, checks[{silenceMs,p,heldOnFiller,lastWord,capMs}], afterCut, capMs, segments}`, `segment{text, index}` (older part of a long utterance, turn still open), `final{text, durationMs, asrMs, asrRtf, queuedMs, afterCut, segments}`, `bargein{stage: duck|cut|release, prerollMs}`, `status{stage}`, `ready{loadS}`, `stats{turns, turnChecks, turnCostP50Ms, heldOnFiller, backchannels, cuts, cutsEmptyFinal}`, `error` |
 | `turn.*` | agent core | `start{via, text, asrMs, queuedMs, endReason, silenceMs, turnP, model, style, mode, tools, memoryHints…}`, `first_token{ttftMs}`, `first_sentence{ttfsMs}`, `first_audio{ttfaMs, speechEndToAudioMs, ttsFirstMs, ttsFirstByteMs, rendererMs}`, `tool_start{id, name, summary}`, `tool_end{id, name, ok, ms, detail}`, `filler{kind: lead-in|continuation, text}`, `attempt{reason, model}`, `attempt_failed{error, transient}`, `stall{reason}`, `step_limit`, `notice{text}`, `self_cut_suspect{overlap}`, `dropped{reason}`, `spoken_split{seq, offsetS, durationS}`, `cancel{reason, spokenText, unspokenText, metrics}`, `drain_timeout{waitMs}` (the renderer never reported the audio finished, e.g. audio device error), `end{metrics, fillers, ttsDroppedFrames}`, `error{message}`, `mergeable{reason}` (this transcript looked unfinished; a resume inside the window merges), `continuation{gapMs}` (the user resumed: reply cancelled silently), `merged{parts, text}` (the joined transcript starts a turn), `segment{index}`, `resume{kind: resume|backchannel|empty, userText, heardChars, remainingChars, count, text}` (an interrupted reply replayed from its cut sentence, no model call; `end{resumed}` closes it) |
-| `cc.*` | Claude Code sessions (main) | `status{session, status, queued, costUsd}` (every status change: idle, running, needs_input, needs_permission, error, stopped), `needs_input{session, kind: question|permission, summary}`, `finished{session, chars}`, `denied{reason}` (the workspace fence refused a tool call). Unprompted speech shows as `announce.queued{text, queued}` then `turn.announce{text}` in the `turn.*`/agent stream. |
+| `cc.*` | Claude Code sessions (main) | `status{session, status, queued, costUsd}` (every status change: idle, running, needs_input, needs_permission, error, stopped), `needs_input{session, kind: question|permission|plan, summary}`, `finished{session, chars}`, `denied{reason}` (the workspace fence refused a tool call). Unprompted speech shows as `announce.queued{text, queued}` then `turn.announce{text}` in the `turn.*`/agent stream. |
 | `settings.migrated` | main | `{migrated: [{group, key, from, to}]}` — superseded tuning defaults replaced at launch (see docs/TUNING.md "Changing a default") |
 | `tts.warm` | agent | `{turnId, ms}` — the Edge socket pre-opened at turn start (only logged when it had to reconnect or succeeded) |
 | `tts.sentence` | speaker | `{seq, kind, chars, ms, firstByteMs, attempts, outcome: ok|skip|fallback, engine}` |
@@ -116,7 +116,7 @@ text got a reply.
 - `duck` then `release` → correct handling of a backchannel ("mhm"); nothing to fix.
 - `cut` followed by `turn.self_cut_suspect` → the agent heard its own speaker output (empty transcript
   or high word overlap with what it was saying). `ear.stats.cutsEmptyFinal` counts these. Raise
-  `bargeInThreshold`; if it keeps happening with speakers on, the echo gate (Phase 4) is the fix.
+  `bargeInThreshold`; with speakers on, headphones or a lower speaker volume are the real fix (the app relies on Chromium's echo cancellation and counts self-cut suspects in Diagnostics).
 - `cut` with a real transcript → a genuine interruption; check `turn.cancel` shows `spokenText` /
   `unspokenText` split sensibly, and that the next `turn.start` follows.
 

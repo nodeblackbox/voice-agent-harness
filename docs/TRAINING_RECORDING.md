@@ -11,7 +11,7 @@ In `.env`:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `RECORD_TRAINING_DATA` | off | `1` turns the mode on |
-| `RECORD_DIR` | `D:\Downloads\fish-audio-cloning-pipe-line\raw` | where session folders go |
+| `RECORD_DIR` | `%APPDATA%\Voice Agent\training\raw` | where session folders go |
 | `RECORD_ROOMTONE` | off | `1` records 10 s of room tone when the mic first opens (stay quiet) |
 | `RECORD_SYSTEM_PROMPT_FILE` | `<RECORD_DIR>\..\recording-coach.md` | the coach prompt; used as the style while the mode is on |
 
@@ -20,8 +20,8 @@ Restart the app after changing `.env`. A toast confirms the mode is on.
 ## What gets saved
 
 When voice mode starts, the renderer opens a second stream from the same mic with echo
-cancellation, noise suppression and auto gain **off**, at the mic's native rate (48 kHz on the
-Yeti), and streams it to main (`src/renderer/src/audio/training-tap.ts`). The ears keep their own
+cancellation, noise suppression and auto gain **off**, at the mic's native rate (48 kHz on most
+USB mics), and streams it to main (`src/renderer/src/audio/training-tap.ts`). The ears keep their own
 processed 16 kHz stream, untouched. Main keeps the last 3 minutes in a ring buffer
 (`src/main/training/recorder.ts`) and, for every `speech_end` from the ears, cuts the span from
 speech start - 300 ms to speech end + 500 ms.

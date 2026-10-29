@@ -5,7 +5,7 @@ emits speech events and transcripts: Silero VAD for speech detection, Smart Turn
 Parakeet TDT 0.6B (via `onnx-asr`, GPU) for transcription, plus the two-stage barge-in logic. The exact
 message protocol is in `PROTOCOL.md`.
 
-It is the only Python in the project; everything else is TypeScript.
+Together with `mouth/` (the Kokoro voice that covers for Edge TTS) and the SearXNG installer it is all the Python in the project; everything else is TypeScript.
 
 ## Setup
 
@@ -13,7 +13,7 @@ It is the only Python in the project; everything else is TypeScript.
 .\install.ps1        # creates .\.venv with the pinned CUDA 12.4 stack (needs uv)
 ```
 
-The app looks for Python in this order: Settings → Voice input → *Python path* (`stt.pythonPath`), the
+The app looks for Python in this order: `stt.pythonPath` in `settings.json`, the
 `VA_PYTHON` environment variable, `sidecar\.venv\Scripts\python.exe`, then `python` on PATH. Any venv
 with the same pins works (for example an existing one from another project); point the setting at its
 `python.exe` instead of installing twice.

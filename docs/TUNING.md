@@ -196,7 +196,7 @@ field that confirms it.
 - **It interrupts itself with speakers on.** `self-cut suspects` in Diagnostics → raise
   `bargeInThreshold` (0.85) or `duckChunks` (5). A self-cut with an empty transcript now resumes the
   reply by itself (`turn.resume{kind: empty}`, at most twice per reply), so the damage is a stutter,
-  not a lost reply; if it happens every turn the echo gate is the fix, not more threshold.
+  not a lost reply; if it happens every turn with speakers on, use headphones or lower the speaker volume rather than raising the threshold.
 - **First word after I interrupt is missing.** `prerollMs` ≤ `duckChunks × 32` (instant mode) or
   `bargeInChunks × 32` (staged). Raise preroll.
 - **It goes quiet during searches.** `fillerAfterMs` too high, or fillers disabled in Behaviour.

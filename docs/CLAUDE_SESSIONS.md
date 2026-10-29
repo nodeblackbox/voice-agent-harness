@@ -19,8 +19,10 @@ Claude Code view (rail) → Settings.
 | "shut down landing page" | `claude_stop` (workspace and history kept; the next send resumes it) |
 | "start landing page over" | `claude_reset` → fresh conversation, same folder |
 | "get rid of slop one and slop two" (+ "and delete their files") | `claude_remove` → several at once; folders kept unless asked |
-| "start a session in the bing-bong-jiggly folder" / "…in D:\\Downloads\\my-app" | `claude_start` with `folder` (a workspace folder, or your project after a yes) |
+| "start a session in the landing-page folder" / "…in C:\\code\\my-app" | `claude_start` with `folder` (a workspace folder, or your project after a yes) |
 | "what files did it make?" | `claude_files` → newest files with sizes |
+| "start three sessions: a pricing page, a users API and fix the login test" | one `claude_start` with `more[]`: several sessions in one call |
+| "tell all of them to commit their work" / "stop everything" | `claude_send` / `claude_interrupt` with session `all` |
 | "what were my other Claude sessions about?" | `claude_recent` → your saved sessions from the terminal/IDE |
 | "pick up the build-fix session" (after a clear yes) | `claude_attach` → continues a copy of it here |
 
@@ -36,8 +38,10 @@ summary, so "answer it" works without you naming the session when only one is wa
 - **Activity**: the session's timeline. Each tool call is drawn for what it is: shell commands as a terminal with
   their output, edits as a red/green diff, new files as code, to-do lists as checklists, plans as Markdown, blocked
   actions in red. A side panel shows the plan's progress, the files it changed and where its tool calls went.
-- **Files**: a live tree of the workspace (created `A` / modified `M` by Claude), a code/Markdown/image viewer,
-  and Open / VS Code / Show in Explorer.
+- **Files**: a live tree of the workspace (created `A` / modified `M` by Claude), a code/Markdown viewer, and
+  Open / VS Code / Show in Explorer. Pictures, video, audio and PDFs open as themselves (a viewer per kind, keyboard
+  seek, and a gallery of everything the session made); video and audio stream with byte ranges so a big render
+  plays and scrubs at once.
 - **Preview**: web pages it builds, served read-only from the workspace over `ccws://` in a sandboxed frame
   (scripts run; no access to the app, no popups, no top navigation). Desktop/tablet/phone widths; reloads by
   itself when a tool finishes.
@@ -83,7 +87,7 @@ of them opens read-only in the same rich timeline. **Continue here** attaches it
 ## Safety: the workspace fence
 
 Every session is pinned to its own folder under **Workspace folder** (default
-`D:\Downloads\VoiceAgentWorkspaces`), plus two scratch roots it may use freely: the temp dir (its own
+`Documents\VoiceAgentWorkspaces`), plus two scratch roots it may use freely: the temp dir (its own
 background-task output) and `~/.claude/plans` (plan mode writes its plan there). A `PreToolUse` hook
 (`src/core/claude/fence.ts`) runs before any permission logic and answers allow, **ask** or deny. An "ask"
 reaches `canUseTool` with the reason (lab 07) and becomes a spoken yes/no; it covers:
@@ -111,12 +115,12 @@ and the CLI prefers an env key over the login, so three things keep sessions on 
   `ANTHROPIC_BASE_URL` and the `CLAUDE_CODE_USE_*` provider switches from every session's environment.
 - Every turn's `init` message reports `apiKeySource`. Anything other than `none` (e.g. an `apiKeyHelper`)
   stops the run before it does anything and marks the session errored ("about to bill an API key").
-- The sidebar badge asks the CLI who it runs as (`accountInfo()`, no prompt, so no usage): green "Claude Max
-  subscription · email", or amber if a key would be billed or the login can't be checked.
+- The sidebar badge asks the CLI who it runs as (`accountInfo()`, no prompt, so no usage): green with your plan
+  and login, or amber if a key would be billed or the login can't be checked.
 
-Verified live with `pnpm lab:auth` on 2026-10-24: scrubbed → `Claude Max`, your email, no key; with `--raw`
-(no scrub) → `apiKeySource: ANTHROPIC_API_KEY`. The `$` figures in the view are usage priced at API rates,
-covered by the plan, not charges. Use API-key auth before shipping this to other people.
+Verified live with `pnpm lab:auth` on 2026-10-24: scrubbed → the subscription, no key; with `--raw` (no scrub)
+→ `apiKeySource: ANTHROPIC_API_KEY`. The `$` figures in the view are usage priced at API rates, covered by the
+plan, not charges.
 
 ## Layout
 
@@ -130,15 +134,19 @@ covered by the plan, not charges. Use API-key auth before shipping this to other
 | service (persistence, quit), IPC | `src/main/services/claude.ts`, `src/main/ipc/register.ts` |
 | shared types | `src/shared/claude.ts` |
 | workspace listing/reading (fenced) | `src/core/claude/files.ts` |
+| saved timelines (compact, 200 events per session) | `src/core/claude/persist.ts` |
+| account / billing check | `src/core/claude/account.ts`, `views/claude/Account.tsx` |
 | `ccws://` preview protocol, open in Explorer/VS Code | `src/main/services/claude.ts` (`serve`, `open`) |
-| UI | `src/renderer/src/views/ClaudeView.tsx`, `views/claude/*` (Activity, Files, Preview, Inspector, feed logic), `state/claude.ts` |
+| UI | `src/renderer/src/views/ClaudeView.tsx`, `views/claude/*` (Activity, Files, Media, Preview, Inspector, Browse, Mode, Account, feed logic), `state/claude.ts` |
 
-Sessions persist in `userData/claude-sessions.json`. After a restart nothing is running; the next send
-to a session resumes it by SDK session id, and a dropped connection (status `error`) recovers the same way.
+Sessions persist in `userData/claude-sessions.json`, and each session's last 200 timeline events in
+`claude-events.json`, so "what did it do?" still has an answer after a restart. Nothing is running after a
+restart; the next send to a session resumes it by SDK session id, and a dropped connection (status `error`)
+recovers the same way.
 
 ## Testing
 
 - `pnpm test` runs everything against a scripted fake SDK (no login, no cost).
 - `lab/claude-sdk/` holds runnable experiments against the **real** SDK (`pnpm lab:interrupt`,
-  `lab:ask-user`, `lab:permissions`, `lab:fence`, `lab:manager`); results live in
-  `lab/claude-sdk/FINDINGS.md`. They only touch `D:\Downloads\VoiceAgentWorkspaces\lab`.
+  `lab:ask-user`, `lab:permissions`, `lab:fence`, `lab:manager`, `lab:auth`, `lab:modes`); results live in
+  `lab/claude-sdk/FINDINGS.md`. They only touch `<temp>/voice-agent-lab` (or `LAB_WORKSPACE`).
