@@ -28,6 +28,16 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('SettingsService', () => {
+  it('fills an empty Claude workspace root from the supplied machine default, else <userData>/workspaces', () => {
+    expect(new SettingsService(dir, env, { defaultWorkspaceRoot: 'X:\\ws' }).get().claude.workspaceRoot).toBe('X:\\ws')
+    expect(new SettingsService(dir, env).get().claude.workspaceRoot).toBe(join(dir, 'workspaces'))
+  })
+
+  it('keeps a stored Claude workspace root over the machine default', () => {
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ claude: { workspaceRoot: 'D:\\mine' } }))
+    expect(new SettingsService(dir, env, { defaultWorkspaceRoot: 'X:\\ws' }).get().claude.workspaceRoot).toBe('D:\\mine')
+  })
+
   it('prefers the .env key over a stale inherited environment variable', () => {
     process.env.ANTHROPIC_API_KEY = 'stale-system-key'
     writeFileSync(env, 'ANTHROPIC_API_KEY=fresh-env-key')
@@ -55,7 +65,7 @@ describe('SettingsService', () => {
 
   it('starts from defaults and deep-merges patches, persisting them', () => {
     const s = new SettingsService(dir, env)
-    expect(s.get()).toEqual(DEFAULT_SETTINGS)
+    expect(s.get()).toEqual({ ...DEFAULT_SETTINGS, claude: { ...DEFAULT_SETTINGS.claude, workspaceRoot: join(dir, 'workspaces') } })
     const seen: string[] = []
     s.onChange((n) => seen.push(n.voice.voice))
     s.set({ voice: { ...s.get().voice, voice: 'en-GB-SoniaNeural' }, endpoint: { ...s.get().endpoint, duckGain: 0.1 } })

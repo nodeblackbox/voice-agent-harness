@@ -1,6 +1,7 @@
 """End to end with the real models: start the sidecar, replay recordings, expect finals and a barge-in cut.
 
-Skipped unless EAR_INTEGRATION=1 (needs the GPU stack and the wav files from the old project).
+Skipped unless EAR_INTEGRATION=1 (needs the GPU stack) with EAR_WAV and EAR_BARGE_WAV pointing at 16 kHz mono
+recordings: one utterance, and one to inject while the agent speaks.
 """
 from __future__ import annotations
 
@@ -14,16 +15,16 @@ from pathlib import Path
 import pytest
 
 SIDECAR = Path(__file__).resolve().parent.parent
-WAV = Path(os.environ.get("EAR_WAV", r"D:\Downloads\voiceAgent\audio\handy-1787878656.wav"))
-BARGE = Path(os.environ.get("EAR_BARGE_WAV", r"D:\Downloads\voiceAgent\audio\handy-1787881187.wav"))
+WAV = Path(os.environ["EAR_WAV"]) if os.environ.get("EAR_WAV") else None
+BARGE = Path(os.environ["EAR_BARGE_WAV"]) if os.environ.get("EAR_BARGE_WAV") else None
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.skipif(os.environ.get("EAR_INTEGRATION") != "1", reason="set EAR_INTEGRATION=1 to run against real models")
 def test_replay_with_barge_in():
-    if not WAV.exists() or not BARGE.exists():
-        pytest.skip("recordings not found")
+    if WAV is None or BARGE is None or not WAV.exists() or not BARGE.exists():
+        pytest.skip("set EAR_WAV and EAR_BARGE_WAV to existing recordings")
     proc = subprocess.Popen([sys.executable, "-m", "ear", "--port", "0"], cwd=SIDECAR, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, text=True)
     try:

@@ -10,11 +10,12 @@ import { TrainingRecorder, type TapInfo } from './recorder'
 // folder; main/index.ts only forwards events to it. With the flag off, setupTraining returns null and
 // the renderer's one config query answers { enabled: false }.
 
-export const DEFAULT_RECORD_DIR = 'D:\\Downloads\\fish-audio-cloning-pipe-line\\raw'
 export const COACH_STYLE_ID = 'recording-coach'
 
 export interface TrainingDeps {
   env: (name: string) => string | undefined
+  /** App data folder; takes go to <userData>/training/raw unless RECORD_DIR says otherwise. */
+  userData: string
   appVersion: string
   log: (msg: string) => void
   notify: (msg: string) => void
@@ -34,7 +35,7 @@ const on = (v: string | undefined): boolean => !!v && !/^(0|false|no|off)$/i.tes
 
 export function setupTraining(deps: TrainingDeps): Training | null {
   const enabled = on(deps.env('RECORD_TRAINING_DATA'))
-  const root = deps.env('RECORD_DIR') ?? DEFAULT_RECORD_DIR
+  const root = deps.env('RECORD_DIR') ?? join(deps.userData, 'training', 'raw')
   ipcMain.handle(IPC.trainingConfig, () => ({ enabled }))
   if (!enabled) return null
 

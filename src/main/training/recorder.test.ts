@@ -168,7 +168,7 @@ describe('TrainingRecorder', () => {
 
 describe('setupTraining', () => {
   it('is a no-op with the flag off: nothing returned, nothing written, the renderer told it is off', async () => {
-    const t = setupTraining({ env: (k) => ({ RECORD_DIR: root })[k], appVersion: '1', log: () => undefined, notify: () => undefined })
+    const t = setupTraining({ env: (k) => ({ RECORD_DIR: root })[k], userData: root, appVersion: '1', log: () => undefined, notify: () => undefined })
     expect(t).toBeNull()
     expect([...handlers.keys()]).toEqual(['training:config'])
     expect(await (handlers.get('training:config') as () => unknown)()).toEqual({ enabled: false })
@@ -181,9 +181,17 @@ describe('setupTraining', () => {
     const file = join(dir, 'coach.md')
     writeFileSync(file, 'Be a coach for {user_name}.')
     const env: Record<string, string> = { RECORD_TRAINING_DATA: '1', RECORD_DIR: root, RECORD_SYSTEM_PROMPT_FILE: file }
-    const t = setupTraining({ env: (k) => env[k], appVersion: '1', log: () => undefined, notify: () => undefined })!
+    const t = setupTraining({ env: (k) => env[k], userData: root, appVersion: '1', log: () => undefined, notify: () => undefined })!
     expect(t.styles[0]).toMatchObject({ id: 'recording-coach', body: 'Be a coach for {user_name}.' })
     expect(t.settings({ styleId: 'short' } as never)).toMatchObject({ styleId: 'recording-coach' })
+    t.recorder.dispose()
+  })
+
+  it('without RECORD_DIR, records under the app data folder', () => {
+    const logs: string[] = []
+    const env: Record<string, string> = { RECORD_TRAINING_DATA: '1' }
+    const t = setupTraining({ env: (k) => env[k], userData: root, appVersion: '1', log: (m) => logs.push(m), notify: () => undefined })!
+    expect(logs.find((l) => l.startsWith('training: recording mode on'))).toBe(`training: recording mode on -> ${join(root, 'training', 'raw')}`)
     t.recorder.dispose()
   })
 })

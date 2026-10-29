@@ -5,9 +5,11 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { sessionEnv } from '../../src/core/claude/sdk'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
-// not from _common: that drops ANTHROPIC_API_KEY, and this test must prove the app's own scrub does it
-const WORKSPACE = String.raw`D:\Downloads\VoiceAgentWorkspaces\lab`
+// not from _common: that drops ANTHROPIC_API_KEY, and this test must prove the app's own scrub does it (same default folder)
+const WORKSPACE = process.env.LAB_WORKSPACE ?? path.join(os.tmpdir(), 'voice-agent-lab')
 
 async function main() {
   fs.mkdirSync(WORKSPACE, { recursive: true })

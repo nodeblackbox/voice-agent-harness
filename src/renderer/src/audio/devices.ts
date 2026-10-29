@@ -24,15 +24,12 @@ export async function listDevices(): Promise<DeviceLists> {
   }
 }
 
-const YETI = /yeti/i
-
 export function pickDefaults(current: AudioDeviceSettings, devices: DeviceLists): Partial<AudioDeviceSettings> | null {
   const patch: Partial<AudioDeviceSettings> = {}
   const inputStillPresent = current.inputDeviceId && devices.inputs.some((d) => d.deviceId === current.inputDeviceId)
   if (!inputStillPresent) {
-    const byLabel = current.inputLabel ? devices.inputs.find((d) => d.label === current.inputLabel) : undefined
-    const yeti = devices.inputs.find((d) => YETI.test(d.label) && d.deviceId !== 'default' && d.deviceId !== 'communications')
-    const pick = byLabel ?? yeti
+    // a configured mic that moved to a new id is re-found by its label; otherwise the system default is used
+    const pick = current.inputLabel ? devices.inputs.find((d) => d.label === current.inputLabel) : undefined
     if (pick) {
       patch.inputDeviceId = pick.deviceId
       patch.inputLabel = pick.label

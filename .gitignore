@@ -2,20 +2,34 @@ node_modules/
 out/
 dist/
 release/
+coverage/
 *.log
 .env
 .env.*
+!.env.example
+
+# Windows artefact from `> nul` in a POSIX shell
+nul
+
+# editor
+.vscode/
 
 # Python sidecar
 sidecar/.venv/
-sidecar/**/__pycache__/
+**/__pycache__/
+sidecar/.pytest_cache/
 models/*.onnx
 models/hf-cache/
 
-# SearXNG (fetched by search/install_searxng.ps1)
+# SearXNG (fetched by search/install_searxng.py)
 search/searxng-src/
 search/.venv-searxng/
 search/settings.local.yml
 
-# local app data written during dev
-.data/
+# local-only working material (promo video cuts, LinkedIn drafts); the final GIF lives in docs/
+video/
+
+# never commit data backups
+backup/
+backups/
+*.bak

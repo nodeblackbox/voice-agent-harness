@@ -84,7 +84,7 @@ function changedPaths(a: unknown, b: unknown, prefix = '', out: Record<string, u
 
 app.whenReady().then(async () => {
   const userData = app.getPath('userData')
-  const settings = new SettingsService(userData, join(projectRoot, '.env'))
+  const settings = new SettingsService(userData, join(projectRoot, '.env'), { defaultWorkspaceRoot: join(app.getPath('documents'), 'VoiceAgentWorkspaces') })
   initLog(userData, {
     level: () => settings.get().runtime.logLevel as LogLevel,
     transcripts: () => settings.get().runtime.logTranscripts
@@ -125,6 +125,7 @@ app.whenReady().then(async () => {
   // opt-in voice-clone dataset capture (RECORD_TRAINING_DATA=1); null when off
   const training = setupTraining({
     env: (name) => settings.envVar(name),
+    userData,
     appVersion: app.getVersion(),
     log: (m) => log('training', m),
     notify: (text) => emitRef.current({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'info', text } })

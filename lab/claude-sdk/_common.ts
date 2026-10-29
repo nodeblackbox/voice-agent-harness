@@ -1,12 +1,13 @@
 /** Shared helpers for the Claude Agent SDK lab. Run with `pnpm lab:<name>`. Everything happens inside WORKSPACE. */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 // A stale ANTHROPIC_API_KEY in the shell makes the CLI answer "Invalid API key" instead of using the
 // ambient `claude` login (what the Python lab relied on). Drop it for this process only.
 delete process.env.ANTHROPIC_API_KEY
 
-export const WORKSPACE = process.env.LAB_WORKSPACE ?? 'D:\\Downloads\\VoiceAgentWorkspaces\\lab'
+export const WORKSPACE = process.env.LAB_WORKSPACE ?? path.join(os.tmpdir(), 'voice-agent-lab')
 export const MODEL = process.env.LAB_MODEL ?? 'claude-haiku-4-5-20251001'
 
 export function freshWorkspace(name: string): string {

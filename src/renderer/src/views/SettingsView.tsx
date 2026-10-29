@@ -207,7 +207,7 @@ function VoiceInput() {
     <Section icon={Mic} title="Voice input">
       <Card pad={0}>
         <div className="px-4">
-          <Row label="Microphone" sub={a.inputLabel ?? 'Picks a Blue Yeti automatically when present'}>
+          <Row label="Microphone" sub={a.inputLabel ?? 'System default microphone until you pick one'}>
             <Select value={a.inputDeviceId ?? ''} onChange={setInput} options={inputOptions} width={260} />
           </Row>
           <Row label="Output device" sub={a.outputLabel}>

@@ -27,7 +27,13 @@ export const DEFAULT_SETTINGS: Settings = {
   location: { mode: 'manual', manual: '' },
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },
-  claude: { enabled: false, workspaceRoot: 'D:\\Downloads\\VoiceAgentWorkspaces', model: '', maxSessions: 4, defaultMode: 'auto' }
+  // workspaceRoot '' = filled at construction from SettingsOptions.defaultWorkspaceRoot (the main process passes a Documents folder)
+  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 4, defaultMode: 'auto' }
+}
+
+export interface SettingsOptions {
+  /** Where Claude Code session folders go when the user has not chosen one. Default: <userData>/workspaces. */
+  defaultWorkspaceRoot?: string
 }
 
 const ENV_KEYS: Record<Provider, string[]> = {
@@ -80,7 +86,8 @@ export class SettingsService implements KeySource {
 
   constructor(
     private readonly userData: string,
-    dotEnvPath: string
+    dotEnvPath: string,
+    opts: SettingsOptions = {}
   ) {
     mkdirSync(userData, { recursive: true })
     this.settingsPath = join(userData, 'settings.json')
@@ -104,6 +111,8 @@ export class SettingsService implements KeySource {
     // the old default backup (GPT-OSS 20B on Groq's free tier, 8k tokens a minute) can't take a voice turn, which runs
     // 10k+ tokens once Claude sessions are on; a stored old default was never chosen, so it moves to Claude Haiku 5.5
     if (OLD_FALLBACK_MODEL_IDS.includes(this.settings.fallbackModelId)) this.settings.fallbackModelId = DEFAULT_FALLBACK_MODEL_ID
+    // a stored root always wins; only an empty one (fresh install, or a cleared field) takes the machine default
+    if (!this.settings.claude.workspaceRoot) this.settings.claude = { ...this.settings.claude, workspaceRoot: opts.defaultWorkspaceRoot ?? join(userData, 'workspaces') }
     this.migrations = migrated
     this.customStyles = this.readJson<PromptStyle[]>(this.stylesPath, [])
     this.storedSkills = this.readJson<Skill[]>(this.skillsPath, [])

@@ -312,8 +312,8 @@ describe('ClaudeView', () => {
 
   it('browses saved sessions, reads one, and continues it here', async () => {
     claude.external.mockResolvedValue([
-      { sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\Downloads\\AgentHarness', branch: 'main', lastModified: Date.now() - 60_000 },
-      { sessionId: 'x2', title: 'Voice clone', cwd: 'D:\\Downloads\\fish', lastModified: Date.now() - 120_000 }
+      { sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\projects\\agent-harness', branch: 'main', lastModified: Date.now() - 60_000 },
+      { sessionId: 'x2', title: 'Voice clone', cwd: 'D:\\projects\\fish', lastModified: Date.now() - 120_000 }
     ])
     claude.externalEvents.mockResolvedValue([{ t: 1, kind: 'user', text: 'Why is the build red?' }, { t: 2, kind: 'text', text: 'A missing import.' }])
     claude.attach.mockResolvedValue({ ok: true, session: session({ id: 's9', name: 'Fix the build', external: true }) })
@@ -321,14 +321,14 @@ describe('ClaudeView', () => {
     await render()
     await click(button('Your other sessions'))
     expect(host.textContent).toContain('Fix the build')
-    expect(host.textContent).toContain('AgentHarness')
+    expect(host.textContent).toContain('agent-harness')
     await click(button('Voice clone'))
-    expect(claude.externalEvents).toHaveBeenCalledWith('x2', 'D:\\Downloads\\fish')
+    expect(claude.externalEvents).toHaveBeenCalledWith('x2', 'D:\\projects\\fish')
     await click(button('Fix the build'))
     expect(host.textContent).toContain('Why is the build red?')
     expect(host.textContent).toContain('real project folder')
     await click(button('Continue here'))
-    expect(claude.attach).toHaveBeenCalledWith({ sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\Downloads\\AgentHarness' })
+    expect(claude.attach).toHaveBeenCalledWith({ sessionId: 'x1', title: 'Fix the build', cwd: 'D:\\projects\\agent-harness' })
     expect(useStore.getState().claudeSelected).toBe('s9')
   })
 
@@ -347,7 +347,7 @@ describe('ClaudeView', () => {
   })
 
   it('an attached project session never offers to delete its folder', async () => {
-    useStore.setState({ claudeSessions: [session({ external: true, workspace: 'D:\\Downloads\\AgentHarness' })], claudeSelected: 's1' })
+    useStore.setState({ claudeSessions: [session({ external: true, workspace: 'D:\\projects\\agent-harness' })], claudeSelected: 's1' })
     await render()
     await click(host.querySelector('button[aria-label="More session actions"]') ?? undefined)
     await click(button('Remove session'))

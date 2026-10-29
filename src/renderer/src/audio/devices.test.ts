@@ -7,12 +7,8 @@ const dev = (deviceId: string, label: string, kind: 'audioinput' | 'audiooutput'
 const lists = (inputs: MediaDeviceInfo[], outputs: MediaDeviceInfo[] = []): DeviceLists => ({ inputs, outputs })
 
 describe('pickDefaults', () => {
-  it('prefers a Blue Yeti over the default entries when nothing is configured', () => {
-    const patch = pickDefaults({}, lists([dev('default', 'Default - Yeti Classic', 'audioinput'), dev('abc', 'Yeti Classic (Blue)', 'audioinput')]))
-    expect(patch).toEqual({ inputDeviceId: 'abc', inputLabel: 'Yeti Classic (Blue)' })
-  })
-
-  it('returns null when nothing is configured and no Yeti exists', () => {
+  it('leaves the system default in place when nothing is configured, whatever mics exist', () => {
+    expect(pickDefaults({}, lists([dev('default', 'Default - Yeti Classic', 'audioinput'), dev('abc', 'Yeti Classic (Blue)', 'audioinput')]))).toBeNull()
     expect(pickDefaults({}, lists([dev('x', 'Webcam mic', 'audioinput')]))).toBeNull()
   })
 
@@ -20,7 +16,7 @@ describe('pickDefaults', () => {
     expect(pickDefaults({ inputDeviceId: 'x', inputLabel: 'Webcam mic' }, lists([dev('x', 'Webcam mic', 'audioinput')]))).toBeNull()
   })
 
-  it('re-resolves a missing input by label before falling back to the Yeti', () => {
+  it('re-resolves a missing input by label', () => {
     const patch = pickDefaults(
       { inputDeviceId: 'old', inputLabel: 'Webcam mic' },
       lists([dev('new', 'Webcam mic', 'audioinput'), dev('y', 'Yeti', 'audioinput')])
@@ -28,8 +24,8 @@ describe('pickDefaults', () => {
     expect(patch).toEqual({ inputDeviceId: 'new', inputLabel: 'Webcam mic' })
   })
 
-  it('clears a configured input that vanished with no substitute', () => {
-    const patch = pickDefaults({ inputDeviceId: 'old', inputLabel: 'Gone' }, lists([dev('x', 'Other', 'audioinput')]))
+  it('clears a configured input that vanished with no substitute, never picking another mic by name', () => {
+    const patch = pickDefaults({ inputDeviceId: 'old', inputLabel: 'Gone' }, lists([dev('x', 'Other', 'audioinput'), dev('y', 'Yeti', 'audioinput')]))
     expect(patch).toEqual({ inputDeviceId: undefined, inputLabel: undefined })
   })
 

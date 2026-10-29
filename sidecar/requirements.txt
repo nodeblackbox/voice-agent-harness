@@ -1,4 +1,4 @@
-# Pins match the proven stack in D:\Downloads\voiceAgent (RTX 4090, driver 551.23, CUDA 12.4).
+# Pins match the reference machine (RTX 4090, driver 551.23, CUDA 12.4). CPU-only works with stt.device = cpu.
 --extra-index-url https://download.pytorch.org/whl/cu124
 numpy==2.4.6
 onnx-asr==0.12.0
@@ -21,3 +21,5 @@ soundfile==0.14.0
 # `mouth`: Kokoro-82M, the local voice the app starts on demand when Edge TTS is unreachable
 kokoro==0.9.4
 misaki==0.9.4
+# misaki (Kokoro's English front-end) loads this spaCy model and would otherwise try to download it on first use
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
