@@ -109,9 +109,11 @@ export class ClaudeSessionManager {
 
   // ---- lifecycle ----
   /** Load persisted sessions. Nothing is running after a restart; the next send resumes by SDK session id. */
-  restore(list: CcSession[]): void {
+  /** Bring saved sessions back (stopped; the next send resumes them) with whatever timeline was saved for each. */
+  restore(list: CcSession[], events: Record<string, CcEvent[]> = {}): void {
+    const cap = this.d.eventBuffer ?? 200
     for (const s of list) {
-      this.rts.set(s.id, { s: { ...s, status: s.status === 'error' ? 'error' : 'stopped', pending: undefined, queued: [...s.queued] }, events: [], lastText: '' })
+      this.rts.set(s.id, { s: { ...s, status: s.status === 'error' ? 'error' : 'stopped', pending: undefined, queued: [...s.queued] }, events: (events[s.id] ?? []).slice(-cap), lastText: '' })
     }
   }
 

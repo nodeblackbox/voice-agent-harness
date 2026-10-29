@@ -234,8 +234,10 @@ describe('interrupt, stop, resume', () => {
   it('restore() brings sessions back stopped and the next send resumes by sdk id', async () => {
     const { m, runs } = setup()
     const snap: CcSession = { id: 'old1', name: 'Old', workspace: path.join(ROOT, 'old'), status: 'running', sdkSessionId: 'sdk-old', queued: ['q1'], lastSummary: 's', costUsd: 1, turns: 3, createdAt: 1, updatedAt: 1, pending: { id: 'p', kind: 'permission', toolName: 'Bash', summary: 'x' } }
-    m.restore([snap])
+    m.restore([snap], { old1: [{ t: 1, kind: 'user', text: 'build it' }, { t: 2, kind: 'text', text: 'Built.' }], stranger: [{ t: 3, kind: 'text', text: 'ignored' }] })
     expect(m.get('old1')).toMatchObject({ status: 'stopped', pending: undefined, queued: ['q1'] })
+    // the saved timeline is back, and new events append after it
+    expect(m.events('old1').map((e) => e.text)).toEqual(['build it', 'Built.'])
     m.send('old1', 'continue'); await tick()
     expect(runs[0]!.opts.resume).toBe('sdk-old')
   })

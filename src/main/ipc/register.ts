@@ -5,6 +5,7 @@ import type { LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Prov
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
+import { withProjectDefaults } from '@core/projects'
 import { BUILTIN_STYLES } from '@core/prompts/styles'
 import { ModelFactory } from '@core/providers/factory'
 import type { MemoryStore } from '@core/memory/store'
@@ -53,7 +54,7 @@ export function registerIpc(d: IpcDeps): void {
 
   h(IPC.settingsGet, () => d.settings.get())
   h(IPC.settingsSet, (_e, patch: Partial<Settings>) => {
-    const s = d.settings.set(patch)
+    const s = d.settings.set(withProjectDefaults(patch, d.settings.get(), d.store.projects()))
     d.broadcastSettings(s)
     return s
   })

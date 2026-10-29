@@ -9,6 +9,7 @@ import type { Settings } from '@shared/types'
 import { resolveInside } from '@core/claude/files'
 import { ClaudeSessionManager } from '@core/claude/manager'
 import { realAccount, realHistory, realSdk } from '@core/claude/sdk'
+import { parseEvents, serializeEvents } from '@core/claude/persist'
 import { log, logError } from './log'
 import { parseRange } from './range'
 
@@ -31,12 +32,15 @@ const MIME: Record<string, string> = {
 export class ClaudeService {
   readonly manager: ClaudeSessionManager
   private readonly file: string
+  /** Timelines live next to the session list, in their own file, so the list's format never changes. */
+  private readonly eventsFile: string
   private saveTimer: ReturnType<typeof setTimeout> | null = null
   private latest: CcSession[] = []
   private who: Promise<CcAccount> | null = null
 
   constructor(userData: string, private settings: () => Settings) {
     this.file = join(userData, 'claude-sessions.json')
+    this.eventsFile = join(userData, 'claude-events.json')
     const s = () => this.settings().claude
     this.manager = new ClaudeSessionManager({
       sdk: realSdk,
@@ -46,6 +50,10 @@ export class ClaudeService {
       persist: (sessions) => this.scheduleSave(sessions)
     })
     this.load()
+    // every timeline event lands on disk through the same debounced save as the session list
+    this.manager.on((e) => {
+      if (e.type === 'event') this.scheduleSave(this.manager.list())
+    })
   }
 
   enabled(): boolean {
@@ -132,8 +140,9 @@ export class ClaudeService {
     if (!existsSync(this.file)) return
     try {
       const list = JSON.parse(readFileSync(this.file, 'utf8')) as CcSession[]
-      if (Array.isArray(list)) this.manager.restore(list.filter((x) => x && typeof x.id === 'string' && typeof x.workspace === 'string'))
-      log('claude', `restored ${this.manager.list().length} session(s)`)
+      const events = existsSync(this.eventsFile) ? parseEvents(readFileSync(this.eventsFile, 'utf8')) : {}
+      if (Array.isArray(list)) this.manager.restore(list.filter((x) => x && typeof x.id === 'string' && typeof x.workspace === 'string'), events)
+      log('claude', `restored ${this.manager.list().length} session(s), ${Object.keys(events).length} with a saved timeline`)
     } catch (e) {
       logError('claude', 'could not read claude-sessions.json', e)
     }
@@ -153,6 +162,7 @@ export class ClaudeService {
     try {
       mkdirSync(join(this.file, '..'), { recursive: true })
       writeFileSync(this.file, JSON.stringify(this.latest.map((s) => ({ ...s, pending: undefined })), null, 2))
+      writeFileSync(this.eventsFile, serializeEvents(this.latest, (id) => this.manager.events(id, 200)))
     } catch (e) {
       logError('claude', 'could not save claude-sessions.json', e)
     }
