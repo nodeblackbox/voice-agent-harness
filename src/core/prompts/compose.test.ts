@@ -115,6 +115,12 @@ describe('mergeSkills', () => {
     expect(merged.filter((s) => s.id === shadow.id)).toHaveLength(1)
   })
 
+  it('tells the model which voice is speaking, in the live part', () => {
+    const { live } = composeSystemParts(style('short'), { ...ctx, voiceLine: 'Inworld, voice "Hana" (inworld-tts-2-flash); delivery cues are on' })
+    expect(live).toContain('Your voice right now: Inworld, voice "Hana" (inworld-tts-2-flash); delivery cues are on.')
+    expect(composeSystemParts(style('short'), ctx).live).not.toContain('Your voice right now')
+  })
+
   it('puts the delivery-cue guide in the cached part, before the tool rules, only when given', () => {
     const { stable, live } = composeSystemParts(style('short'), { ...ctx, expressiveBlock: 'Delivery cues: [laughs] is fine.' })
     expect(stable.indexOf('Delivery cues:')).toBeGreaterThan(0)

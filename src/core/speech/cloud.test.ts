@@ -60,10 +60,17 @@ describe('ElevenLabsEngine', () => {
   it('lists the account’s voices (own clones first) and the models that can speak', async () => {
     const f = (async (url: string | URL | Request) =>
       String(url).includes('/v2/voices')
-        ? Response.json({ voices: [{ voice_id: 'p1', name: 'Sarah', category: 'premade', labels: { gender: 'female' } }, { voice_id: 'c1', name: 'Me', category: 'cloned' }] })
+        ? Response.json({
+            voices: [
+              { voice_id: 'p1', name: 'Sarah - Mature, Reassuring', category: 'premade', labels: { gender: 'female' } },
+              { voice_id: 'c1', name: 'Me', category: 'cloned' },
+              { voice_id: 'x1', name: 'Donny', category: 'professional', sharing: { status: 'copied_disabled' } }
+            ]
+          })
         : Response.json([{ model_id: 'eleven_v3', name: 'Eleven v3', can_do_text_to_speech: true }, { model_id: 'eleven_sts', name: 'STS', can_do_text_to_speech: false }])) as unknown as typeof fetch
     const cat = await new ElevenLabsEngine(deps(f)).catalog()
     expect(cat.voices.map((v) => v.shortName)).toEqual(['c1', 'p1'])
+    expect(cat.voices.find((v) => v.shortName === 'p1')?.name).toBe('Sarah')
     expect(cat.models.map((m) => m.id)).toEqual(['eleven_v3'])
     expect(cat.error).toBeUndefined()
   })

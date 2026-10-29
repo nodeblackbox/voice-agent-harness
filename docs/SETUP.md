@@ -1,6 +1,6 @@
 # Setup, step by step
 
-A fresh Windows 11 machine to a working Voice Agent, with every download named and where it lands. The
+A fresh Windows 11 machine to a working Voice Agent Harness, with every download named and where it lands. The
 short version is in the [README](../README.md#getting-started).
 
 ## 1. Tools
@@ -17,8 +17,8 @@ short version is in the [README](../README.md#getting-started).
 ## 2. Clone and install
 
 ```powershell
-git clone https://github.com/nodeblackbox/voice-agent.git
-cd voice-agent
+git clone https://github.com/nodeblackbox/voice-agent-harness.git
+cd voice-agent-harness
 pnpm install
 ```
 

@@ -1,13 +1,13 @@
 {
-  "name": "voice-agent",
+  "name": "voice-agent-harness",
   "productName": "Voice Agent",
   "version": "0.1.0",
   "description": "A voice harness for Claude Code: talk to one agent and it runs your sessions in parallel. Electron + TypeScript, Parakeet ears, Edge TTS voice, any LLM brain.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nodeblackbox/voice-agent.git"
+    "url": "https://github.com/nodeblackbox/voice-agent-harness.git"
   },
-  "homepage": "https://github.com/nodeblackbox/voice-agent#readme",
+  "homepage": "https://github.com/nodeblackbox/voice-agent-harness#readme",
   "license": "MIT",
   "main": "./out/main/index.js",
   "type": "module",

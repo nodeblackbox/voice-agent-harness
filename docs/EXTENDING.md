@@ -1,4 +1,4 @@
-# Extending Voice Agent
+# Extending Voice Agent Harness
 
 How to add the things people most often want to add. Each recipe lists the files in the order you touch
 them and the test that proves it. Written for people and for coding agents alike: if you are an agent, read

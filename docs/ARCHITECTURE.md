@@ -1,6 +1,6 @@
 # Architecture
 
-Voice Agent is an Electron desktop app whose brain is TypeScript and whose ears (and fallback mouth) are
+Voice Agent Harness is an Electron desktop app whose brain is TypeScript and whose ears (and fallback mouth) are
 small Python sidecars. This page is the map: processes, the life of one voice turn, how an interruption
 cancels everything, how Claude Code sessions hang off the same core, and where each concern lives. The
 planning history is in [../NEW_ARCHITECTURE.md](../NEW_ARCHITECTURE.md); the ear protocol is in

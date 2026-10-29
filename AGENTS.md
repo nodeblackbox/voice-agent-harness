@@ -1,6 +1,6 @@
-# Working on Voice Agent (for coding agents and new contributors)
+# Working on Voice Agent Harness (for coding agents and new contributors)
 
-Voice Agent is an Electron + TypeScript desktop app with two small Python sidecars. It is a voice harness for
+Voice Agent Harness is an Electron + TypeScript desktop app with two small Python sidecars. It is a voice harness for
 Claude Code sessions and a voice assistant. Read this, then [docs/EXTENDING.md](docs/EXTENDING.md) for recipes
 and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the map.
 

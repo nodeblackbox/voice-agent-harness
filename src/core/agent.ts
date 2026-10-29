@@ -11,6 +11,7 @@ import type {
   SessionSummary,
   Settings,
   Skill,
+  SpeechSettings,
   TtsCatalog,
   TtsEngineId,
   TurnMetrics,
@@ -33,6 +34,7 @@ import { claudeContextBlock, claudeTools } from './tools/claude'
 import type { ClaudeSessionManager } from './claude/manager'
 import { skillsBlock } from './prompts/skills'
 import { Speaker } from './speech/speaker'
+import { LatencyEstimate, firstChunkWords } from './speech/pace'
 import { EdgeHealth } from './speech/edge-health'
 import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type AgentSource, type KokoroBackend, type TtsEngine } from './speech/tts'
 import { TTS_ENGINE_LABELS, expressiveGuide, isCloudTts, requestFields } from '@shared/tts'
@@ -128,6 +130,8 @@ interface ActiveTurn {
   llmDone: boolean
   drained: boolean
   startedAt: number
+  /** The voice engine this turn's speaker was built with. */
+  ttsEngine?: TtsEngineId
   /** Wall-clock moment the ears closed the user's turn (voice turns only). */
   speechEndAt?: number
   ttsDroppedBefore: number
@@ -162,6 +166,8 @@ export class Agent {
   private kokoro: KokoroTtsEngine | null = null
   /** Health per remote voice (Edge and the hosted ones): once one fails the local voice is kept until a background probe succeeds. */
   private ttsHealth = new Map<TtsEngineId, EdgeHealth>()
+  /** Measured request -> first audio per engine; sizes the first chunk so a slow engine does not stutter. */
+  private ttsLatency = new LatencyEstimate()
   private location = new LocationProvider()
   private sessionId = ''
   private messages: ChatMessage[] = []
@@ -528,6 +534,7 @@ export class Agent {
       if (t.speechEndAt !== undefined) m.speechEndToAudioMs = now - t.speechEndAt
       if (t.speaker.firstSynthMs !== undefined) m.ttsFirstMs = t.speaker.firstSynthMs
       if (t.speaker.firstByteMs !== undefined) m.ttsFirstByteMs = t.speaker.firstByteMs
+      if (t.speaker.firstByteMs !== undefined && t.ttsEngine) this.ttsLatency.sample(t.ttsEngine, t.speaker.firstByteMs)
       if (emittedAt !== undefined) m.rendererMs = Math.max(0, now - emittedAt)
       this.tr('turn.first_audio', { seq, ttfaMs: m.ttfaMs, speechEndToAudioMs: m.speechEndToAudioMs, ttsFirstMs: m.ttsFirstMs, ttsFirstByteMs: m.ttsFirstByteMs, rendererMs: m.rendererMs })
       if (t.assistant) {
@@ -663,7 +670,8 @@ export class Agent {
       drained: false,
       startedAt: Date.now(),
       speechEndAt: speechEnd?.at,
-      ttsDroppedBefore: edgeTtsStats.droppedFrames
+      ttsDroppedBefore: edgeTtsStats.droppedFrames,
+      ttsEngine: engine.name
     }
     this.turn = turn
     this.sm.think()
@@ -718,6 +726,7 @@ export class Agent {
       skillsBlock: skillsBlock(this.deps.skills()),
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
       expressiveBlock: this.expressiveBlock(settings),
+      voiceLine: this.voiceLine(settings),
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -779,7 +788,7 @@ export class Agent {
       maxSteps: settings.mode === 'ask' ? settings.brain.maxStepsAsk : settings.brain.maxStepsAgent,
       format: style.format,
       speaker,
-      speech: settings.speech,
+      speech: this.speechFor(settings, engine),
       brain: settings.brain,
       fillerEnabled: settings.behaviour.fillerBeforeTools && speakThisTurn,
       firstTokenTimeoutMs: settings.brain.firstTokenTimeoutMs,
@@ -1137,6 +1146,27 @@ export class Agent {
 
   private fallbackEngine(): TtsEngine {
     return this.kokoro ?? this.system
+  }
+
+  /** Speech settings for this turn: the first chunk grows with the engine's measured latency (see speech/pace). */
+  private speechFor(s: Settings, engine: TtsEngine): SpeechSettings {
+    const firstMinWords = firstChunkWords(s.speech, this.ttsLatency.get(engine.name))
+    if (firstMinWords !== s.speech.firstMinWords) this.tr('tts.pace', { engine: engine.name, firstByteMs: this.ttsLatency.get(engine.name), firstMinWords })
+    return { ...s.speech, firstMinWords }
+  }
+
+  /** One line for the prompt about the voice actually speaking this turn, so the model never guesses. */
+  private voiceLine(s: Settings): string {
+    const engine = this.engineFor(s)
+    const chosen = this.chosenEngine(s)
+    const fields = requestFields(s.voice, engine.name)
+    let line = TTS_ENGINE_LABELS[engine.name]
+    if (fields.voice && engine.name !== 'system') line += `, voice "${fields.voice.length > 40 ? `${fields.voice.slice(0, 38)}…` : fields.voice}"`
+    if (fields.model) line += ` (${fields.model})`
+    if (engine !== chosen) line += `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    const cues = s.voice.expressive && isCloudTts(engine.name) && engine.acceptsTags?.(fields)
+    line += cues ? '; delivery cues are on' : '; it reads plain text, no cue tags'
+    return line
   }
 
   /** The delivery-cue guidance, when expressive mode is on and the current voice understands cues. */

@@ -151,12 +151,14 @@ export class ElevenLabsEngine extends HttpTtsEngine {
     const H = { 'xi-api-key': key }
     const [vr, mr] = await Promise.all([this.fetch('https://api.elevenlabs.io/v2/voices?page_size=100', { headers: H }), this.fetch('https://api.elevenlabs.io/v1/models', { headers: H })])
     if (!vr.ok) throw await failure('ElevenLabs voices', vr)
-    const vj = (await vr.json()) as { voices?: Array<{ voice_id: string; name: string; category?: string; labels?: Record<string, string> }> }
-    const voices: VoiceInfo[] = (vj.voices ?? []).map((x) => ({
+    const vj = (await vr.json()) as { voices?: Array<{ voice_id: string; name: string; category?: string; labels?: Record<string, string>; sharing?: { status?: string } | null }> }
+    // a library voice whose owner withdrew it is still listed but answers 403 "disabled by the owner": leave it out
+    vj.voices = (vj.voices ?? []).filter((x) => x.sharing?.status !== 'copied_disabled')
+    const voices: VoiceInfo[] = vj.voices.map((x) => ({
       shortName: x.voice_id,
-      name: x.name,
+      name: x.name.replace(/\s+-\s+.*$/, ''),
       locale: x.labels?.accent ?? x.category ?? '',
-      gender: x.labels?.gender ?? ''
+      gender: x.labels?.gender ?? x.category ?? ''
     }))
     // own voices (cloned, generated, professional) first, then the stock ones
     const own = new Set(['cloned', 'generated', 'professional'])
@@ -199,7 +201,7 @@ export class FishEngine extends HttpTtsEngine {
     const H = { authorization: `Bearer ${key}` }
     const [own, pop] = await Promise.all([
       this.fetch('https://api.fish.audio/model?self=true&page_size=50', { headers: H }),
-      this.fetch('https://api.fish.audio/model?page_size=12&sort_by=task_count&language=en', { headers: H })
+      this.fetch('https://api.fish.audio/model?page_size=48&sort_by=task_count&language=en', { headers: H })
     ])
     if (!own.ok) throw await failure('Fish Audio voices', own)
     type Item = { _id: string; title: string; languages?: string[] }
