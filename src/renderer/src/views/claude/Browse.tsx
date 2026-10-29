@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, FolderGit2, GitBranch, History, RefreshCw, Search, ShieldAlert, X } from 'lucide-react'
 import type { CcEvent, CcExternal } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 import { useStore } from '../../state/store'
 import { Btn } from '../../components/primitives'
 import { Activity } from './Activity'
@@ -51,8 +51,8 @@ function Transcript({ x, onAttached }: { x: CcExternal; onAttached: (id: string)
   const tools = events?.filter((e) => e.kind === 'tool').length ?? 0
   return (
     <div className="flex-1 min-w-0 flex flex-col">
-      <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid ${T.border}`, background: 'linear-gradient(180deg, rgba(217,119,87,.07), transparent)' }}>
-        <div className="flex items-center justify-center rounded-xl" style={{ width: 40, height: 40, background: 'rgba(217,119,87,.10)', border: '1px solid rgba(217,119,87,.25)', flexShrink: 0 }}>
+      <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid ${T.border}`, background: `linear-gradient(180deg, ${alpha(T.claude, 7)}, transparent)` }}>
+        <div className="flex items-center justify-center rounded-xl" style={{ width: 40, height: 40, background: alpha(T.claude, 10), border: `1px solid ${alpha(T.claude, 25)}`, flexShrink: 0 }}>
           <ClaudeMark size={24} />
         </div>
         <div className="min-w-0 flex-1">
@@ -66,7 +66,7 @@ function Transcript({ x, onAttached }: { x: CcExternal; onAttached: (id: string)
         </div>
         <Btn small primary icon={ArrowRight} disabled={busy} onClick={() => void attach()}>{busy ? 'Bringing it in…' : 'Continue here'}</Btn>
       </div>
-      <div className="flex items-start gap-2 mx-5 mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: T.amberTint, border: '1px solid rgba(255,180,84,.35)', color: T.text2, lineHeight: 1.55 }}>
+      <div className="flex items-start gap-2 mx-5 mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: T.amberTint, border: `1px solid ${alpha(T.amber, 35)}`, color: T.text2, lineHeight: 1.55 }}>
         <ShieldAlert size={13} style={{ color: T.amber, flexShrink: 0, marginTop: 2 }} />
         <span>
           <b style={{ color: T.amber, fontWeight: 500 }}>Continue here</b> works in this session's real project folder, not a sandbox. It can edit files in{' '}
@@ -116,7 +116,7 @@ export function Browse({ onClose, onAttached }: { onClose: () => void; onAttache
       <div className="flex flex-col" style={{ width: 380, borderRight: `1px solid ${T.border}`, flexShrink: 0 }}>
         <div className="px-4 pt-4 pb-3 flex flex-col gap-3" style={{ borderBottom: `1px solid ${T.border}` }}>
           <div className="flex items-center gap-2">
-            <History size={16} style={{ color: '#D97757' }} />
+            <History size={16} style={{ color: T.claude }} />
             <span className="text-sm font-semibold flex-1" style={{ color: T.text }}>Your Claude Code sessions</span>
             <button type="button" aria-label="Reload sessions" onClick={reload} className="p-1 rounded-md" style={{ color: T.text3, cursor: 'pointer', background: 'transparent' }}><RefreshCw size={13} /></button>
             <button type="button" aria-label="Close browser" onClick={onClose} className="p-1 rounded-md" style={{ color: T.text3, cursor: 'pointer', background: 'transparent' }}><X size={14} /></button>
@@ -128,11 +128,11 @@ export function Browse({ onClose, onAttached }: { onClose: () => void; onAttache
           </div>
           {projects.length > 1 && (
             <div className="flex gap-1.5 flex-wrap">
-              <button type="button" onClick={() => setProject(null)} className="text-xs rounded-full px-2.5 py-0.5" style={{ cursor: 'pointer', background: !project ? 'rgba(217,119,87,.15)' : T.surface, color: !project ? '#E8A58C' : T.text3, border: `1px solid ${!project ? 'rgba(217,119,87,.4)' : T.border}` }}>
+              <button type="button" onClick={() => setProject(null)} className="text-xs rounded-full px-2.5 py-0.5" style={{ cursor: 'pointer', background: !project ? alpha(T.claude, 15) : T.surface, color: !project ? T.claudeText : T.text3, border: `1px solid ${!project ? alpha(T.claude, 40) : T.border}` }}>
                 All {list?.length}
               </button>
               {projects.slice(0, 8).map((p) => (
-                <button key={p.cwd} type="button" onClick={() => setProject(project === p.cwd ? null : p.cwd)} className="text-xs rounded-full px-2.5 py-0.5" style={{ cursor: 'pointer', background: project === p.cwd ? 'rgba(217,119,87,.15)' : T.surface, color: project === p.cwd ? '#E8A58C' : T.text3, border: `1px solid ${project === p.cwd ? 'rgba(217,119,87,.4)' : T.border}` }}>
+                <button key={p.cwd} type="button" onClick={() => setProject(project === p.cwd ? null : p.cwd)} className="text-xs rounded-full px-2.5 py-0.5" style={{ cursor: 'pointer', background: project === p.cwd ? alpha(T.claude, 15) : T.surface, color: project === p.cwd ? T.claudeText : T.text3, border: `1px solid ${project === p.cwd ? alpha(T.claude, 40) : T.border}` }}>
                   {p.name} {p.n}
                 </button>
               ))}
@@ -150,7 +150,7 @@ export function Browse({ onClose, onAttached }: { onClose: () => void; onAttache
                 type="button"
                 onClick={() => setPicked(x.sessionId)}
                 className="va-tree-row text-left rounded-lg px-3 py-2 flex flex-col gap-1"
-                style={{ cursor: 'pointer', background: on ? 'rgba(217,119,87,.10)' : 'transparent', boxShadow: on ? 'inset 2px 0 0 #D97757' : undefined }}
+                style={{ cursor: 'pointer', background: on ? alpha(T.claude, 10) : 'transparent', boxShadow: on ? `inset 2px 0 0 ${T.claude}` : undefined }}
               >
                 <span className="text-sm truncate" style={{ color: on ? T.text : T.text2 }}>{x.title}</span>
                 <span className="flex items-center gap-2 text-xs" style={{ color: T.text3 }}>

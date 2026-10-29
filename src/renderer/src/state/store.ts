@@ -25,6 +25,7 @@ import { cue } from '../audio/cue'
 import type { ChunkText } from '../lib/spoken'
 import { listDevices, pickDefaults } from '../audio/devices'
 import { rlog } from '../lib/rlog'
+import { applyTheme } from '../lib/theme-mode'
 
 export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
 
@@ -228,6 +229,7 @@ export const useStore = create<Store>((set, get) => ({
           break
         case 'settings-changed':
           set({ settings: e.settings })
+          applyTheme(e.settings.behaviour?.theme ?? 'dark')
           playback.configure(e.settings.playback)
           void playback.setOutput(e.settings.audio.outputDeviceId)
           break
@@ -287,6 +289,7 @@ export const useStore = create<Store>((set, get) => ({
       context,
       ready: true
     })
+    applyTheme(settings.behaviour?.theme ?? 'dark')
     playback.configure(settings.playback)
     void playback.setOutput(settings.audio.outputDeviceId)
     void get().reloadClaude()
@@ -313,6 +316,7 @@ export const useStore = create<Store>((set, get) => ({
   async updateSettings(patch) {
     const settings = await window.api.settings.set(patch)
     set({ settings })
+    if (patch.behaviour) applyTheme(settings.behaviour?.theme ?? 'dark')
     if (patch.playback) playback.configure(settings.playback)
     if (patch.audio) void playback.setOutput(settings.audio.outputDeviceId)
   },

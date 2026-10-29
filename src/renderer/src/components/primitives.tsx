@@ -354,7 +354,7 @@ export function MenuItem({
       onClick={onClick}
       aria-disabled={disabled || undefined}
       className="w-full text-left px-3 py-2 flex items-start gap-2"
-      style={{ background: selected ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}
+      style={{ background: selected ? T.wash : 'transparent', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}
     >
       <span style={{ width: 14, paddingTop: 3, color: T.cyan, flexShrink: 0 }}>{selected ? <Check size={12} /> : null}</span>
       <span className="flex flex-col gap-0.5 min-w-0">

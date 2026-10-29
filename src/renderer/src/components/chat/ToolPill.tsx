@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react'
 import { BookOpen, Bot, Brain, ChevronDown, ChevronRight, Clock, ExternalLink, Globe, Plug, Wrench, type LucideIcon } from 'lucide-react'
 import type { ToolActivity, ToolSource } from '@shared/types'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 import { faviconUrl, formatElapsed, hostOf, truncate } from '../../lib/format'
 
 const ICONS: Record<ToolActivity['kind'], LucideIcon> = {
@@ -76,7 +76,7 @@ export const ToolPill = memo(function ToolPill({ tool }: { tool: ToolActivity })
           </span>
         )}
         {tool.server && (
-          <span className="rounded px-1.5 py-0.5" style={{ background: 'rgba(185,139,255,.16)', color: T.violet, fontFamily: T.mono, fontSize: 10 }}>
+          <span className="rounded px-1.5 py-0.5" style={{ background: alpha(T.violet, 16), color: T.violet, fontFamily: T.mono, fontSize: 10 }}>
             {tool.server}
           </span>
         )}
@@ -152,7 +152,7 @@ function MemoryDiff({ before, after }: { before: string; after: string }) {
             {p.text}
           </span>
         ) : (
-          <span key={i} style={{ color: T.green, background: 'rgba(74,222,128,.12)', borderRadius: 2 }}>
+          <span key={i} style={{ color: T.green, background: alpha(T.green, 12), borderRadius: 2 }}>
             {p.text}
           </span>
         )

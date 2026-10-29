@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, session, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, protocol, session, shell } from 'electron'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { IPC } from '@shared/ipc'
@@ -36,14 +36,24 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let win: BrowserWindow | null = null
 
-function createWindow(): BrowserWindow {
+// the window's own background shows before the renderer paints, so it has to match the chosen theme
+const WINDOW_BG = { dark: '#0B0D10', light: '#FBF7F0' } as const
+
+/** Tells Chromium which theme native widgets (scrollbars, <select> popups) should use; returns the one in effect. */
+function applyNativeTheme(s: Settings): 'dark' | 'light' {
+  const pref = s.behaviour.theme ?? 'dark'
+  nativeTheme.themeSource = pref
+  return pref === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : pref
+}
+
+function createWindow(theme: 'dark' | 'light'): BrowserWindow {
   const w = new BrowserWindow({
     width: 1280,
     height: 840,
     minWidth: 960,
     minHeight: 620,
     show: false,
-    backgroundColor: '#0B0D10',
+    backgroundColor: WINDOW_BG[theme],
     title: 'Voice Agent',
     autoHideMenuBar: true,
     webPreferences: {
@@ -261,6 +271,7 @@ app.whenReady().then(async () => {
     const changed = changedPaths(previousSettings, s)
     previousSettings = s
     if (Object.keys(changed).length) trace({ ev: 'settings.changed', sid: agent.currentSessionId, changed })
+    if ('behaviour.theme' in changed) applyNativeTheme(s)
     sidecar.applyConfig()
     emit({ type: 'settings-changed', settings: s })
     emit({ type: 'context', snapshot: agent.snapshot() })
@@ -292,7 +303,7 @@ app.whenReady().then(async () => {
     broadcastSettings: (s) => emit({ type: 'settings-changed', settings: s })
   })
 
-  win = createWindow()
+  win = createWindow(applyNativeTheme(settings.get()))
   win.on('closed', () => {
     win = null
   })
@@ -364,7 +375,7 @@ app.whenReady().then(async () => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) win = createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) win = createWindow(applyNativeTheme(settings.get()))
   })
 
   app.on('before-quit', () => {

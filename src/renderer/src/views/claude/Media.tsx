@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileAudio, Film, Image as ImageIcon, Maximize2, Minimize2, Pause, Play, Repeat } from 'lucide-react'
 import type { CcFile } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha, MEDIA } from '../../theme'
 import { ago, fmtBytes, isAudio, isImage, isPdf, isVideo, wsUrl } from './feed'
 
 const CHECKER = 'repeating-conic-gradient(#14171b 0% 25%, #101215 0% 50%) 50% / 20px 20px'
@@ -48,7 +48,7 @@ function ImageView({ src, size }: { src: string; size: number }) {
           aria-label={actual ? 'Fit to view' : 'Actual size'}
           title={actual ? 'Fit to view' : 'Actual size'}
           className="absolute top-2 right-2 rounded-md p-1.5"
-          style={{ background: 'rgba(11,13,16,.75)', border: `1px solid ${T.border}`, color: T.text2, cursor: 'pointer' }}
+          style={{ background: MEDIA.scrim, border: `1px solid ${T.border}`, color: T.text2, cursor: 'pointer' }}
         >
           {actual ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
         </button>
@@ -63,7 +63,7 @@ function VideoView({ src, size }: { src: string; size: number }) {
   const [loop, setLoop] = useState(false)
   return (
     <div className="flex flex-col gap-3 h-full">
-      <div className="relative flex-1 min-h-0 flex items-center justify-center rounded-xl overflow-hidden" style={{ background: '#050607', border: `1px solid ${T.border}`, minHeight: 240 }}>
+      <div className="relative flex-1 min-h-0 flex items-center justify-center rounded-xl overflow-hidden" style={{ background: MEDIA.stage, border: `1px solid ${T.border}`, minHeight: 240 }}>
         <video
           key={src}
           src={src}
@@ -82,7 +82,7 @@ function VideoView({ src, size }: { src: string; size: number }) {
           aria-pressed={loop}
           title="Loop"
           className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs"
-          style={{ cursor: 'pointer', color: loop ? VIDEO_TINT : T.text3, background: loop ? 'rgba(244,114,182,.10)' : 'transparent', border: `1px solid ${loop ? 'rgba(244,114,182,.35)' : T.border}` }}
+          style={{ cursor: 'pointer', color: loop ? VIDEO_TINT : T.text3, background: loop ? alpha(VIDEO_TINT, 10) : 'transparent', border: `1px solid ${loop ? alpha(VIDEO_TINT, 35) : T.border}` }}
         >
           <Repeat size={11} /> Loop
         </button>
@@ -152,9 +152,9 @@ function AudioView({ src, name, size }: { src: string; name: string; size: numbe
   }
   return (
     <div className="flex items-center justify-center h-full p-4">
-      <div className="w-full flex flex-col gap-5 rounded-2xl p-6" style={{ maxWidth: 640, background: `linear-gradient(160deg, rgba(34,211,238,.07), rgba(185,139,255,.05) 60%, transparent), ${T.surface}`, border: `1px solid ${T.border}` }}>
+      <div className="w-full flex flex-col gap-5 rounded-2xl p-6" style={{ maxWidth: 640, background: `linear-gradient(160deg, ${alpha(AUDIO_TINT, 7)}, ${alpha(T.violet, 5)} 60%, transparent), ${T.surface}`, border: `1px solid ${T.border}` }}>
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, background: 'rgba(34,211,238,.10)', border: '1px solid rgba(34,211,238,.28)' }}>
+          <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, background: alpha(AUDIO_TINT, 10), border: `1px solid ${alpha(AUDIO_TINT, 28)}` }}>
             <FileAudio size={20} style={{ color: AUDIO_TINT }} />
           </div>
           <div className="min-w-0 flex-1">
@@ -168,7 +168,7 @@ function AudioView({ src, name, size }: { src: string; name: string; size: numbe
             onClick={toggle}
             aria-label={playing ? 'Pause' : 'Play'}
             className="flex items-center justify-center rounded-full"
-            style={{ width: 46, height: 46, flexShrink: 0, cursor: 'pointer', background: AUDIO_TINT, color: '#06232a', boxShadow: '0 6px 20px rgba(34,211,238,.25)' }}
+            style={{ width: 46, height: 46, flexShrink: 0, cursor: 'pointer', background: AUDIO_TINT, color: '#06232a', boxShadow: `0 6px 20px ${alpha(AUDIO_TINT, 25)}` }}
           >
             {playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginLeft: 2 }} />}
           </button>
@@ -240,15 +240,15 @@ function Thumb({ id, f }: { id: string; f: CcFile }) {
         onMouseEnter={() => void video.current?.play().catch(() => undefined)}
         onMouseLeave={() => { const v = video.current; if (v) { v.pause(); v.currentTime = Math.min(0.5, v.duration || 0) } }}
       >
-        <video ref={video} src={`${src}#t=0.5`} muted loop playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} className="w-full h-full" style={{ objectFit: 'cover', background: '#050607' }} />
-        <span className="absolute left-2 bottom-2 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs" style={{ background: 'rgba(5,6,7,.75)', color: '#fff', fontFamily: T.mono, fontSize: 10.5 }}>
+        <video ref={video} src={`${src}#t=0.5`} muted loop playsInline preload="metadata" onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} className="w-full h-full" style={{ objectFit: 'cover', background: MEDIA.stage }} />
+        <span className="absolute left-2 bottom-2 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs" style={{ background: MEDIA.scrim, color: '#fff', fontFamily: T.mono, fontSize: 10.5 }}>
           <Play size={9} fill="currentColor" /> {dur !== null ? clock(dur) : 'video'}
         </span>
       </div>
     )
   }
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: `linear-gradient(160deg, rgba(34,211,238,.10), rgba(185,139,255,.06)), ${T.raised}` }}>
+    <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: `linear-gradient(160deg, ${alpha(AUDIO_TINT, 10)}, ${alpha(T.violet, 6)}), ${T.raised}` }}>
       <div className="flex items-end gap-[3px]" style={{ height: 28 }}>
         {[0.4, 0.75, 0.55, 1, 0.65, 0.85, 0.45, 0.7, 0.5].map((h, i) => <span key={i} style={{ width: 3, height: `${h * 100}%`, borderRadius: 2, background: AUDIO_TINT, opacity: 0.85 }} />)}
       </div>
@@ -287,7 +287,7 @@ export function Gallery({ id, files, selected, onSelect }: { id: string; files: 
               onClick={() => onSelect(f.path)}
               title={f.path}
               className="va-media-card text-left rounded-xl overflow-hidden flex flex-col"
-              style={{ cursor: 'pointer', background: T.surface, border: `1px solid ${active ? '#D97757' : T.border}`, boxShadow: active ? '0 0 0 1px #D97757' : undefined }}
+              style={{ cursor: 'pointer', background: T.surface, border: `1px solid ${active ? T.claude : T.border}`, boxShadow: active ? `0 0 0 1px ${T.claude}` : undefined }}
             >
               <div style={{ aspectRatio: '16 / 10', background: CHECKER, overflow: 'hidden' }}>
                 <Thumb id={id} f={f} />

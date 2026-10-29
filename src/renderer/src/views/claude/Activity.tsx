@@ -5,7 +5,7 @@ import {
   Map as MapIcon, MessageCircleQuestion, Search, ShieldX, SquareTerminal, Wrench, type LucideIcon
 } from 'lucide-react'
 import type { CcEvent } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha, TERM } from '../../theme'
 import { ClaudeMark } from './ClaudeMark'
 import { Markdown } from './Markdown'
 import { buildFeed, fmtDuration, relPath, toolFamily, type FeedItem, type ToolFamily, type ToolItem } from './feed'
@@ -36,8 +36,8 @@ function Code({ text, max = 14, start = 1, tint }: { text: string; max?: number;
       <div style={{ padding: '6px 0', minWidth: 'fit-content' }}>
         {shown.map((l, i) => (
           <div key={i} className="va-code-line flex" style={{ background: tint?.(l) }}>
-            <span style={{ color: '#3a4049', width: 40, textAlign: 'right', paddingRight: 12, userSelect: 'none', flexShrink: 0 }}>{start + i}</span>
-            <span style={{ color: '#C9D1D9', whiteSpace: 'pre', paddingRight: 12 }}>{l || ' '}</span>
+            <span style={{ color: TERM.gutter, width: 40, textAlign: 'right', paddingRight: 12, userSelect: 'none', flexShrink: 0 }}>{start + i}</span>
+            <span style={{ color: TERM.text, whiteSpace: 'pre', paddingRight: 12 }}>{l || ' '}</span>
           </div>
         ))}
       </div>
@@ -70,9 +70,9 @@ function Diff({ before, after }: { before: string; after: string }) {
     <div className="va-term va-scroll rounded-lg overflow-x-auto" style={{ border: `1px solid ${T.border}`, fontSize: 11.5, lineHeight: 1.55 }}>
       <div style={{ padding: '6px 0', minWidth: 'fit-content' }}>
         {shown.map(([k, l], i) => (
-          <div key={i} className="flex" style={{ background: k === '-' ? 'rgba(255,107,107,.10)' : k === '+' ? 'rgba(74,222,128,.09)' : undefined }}>
-            <span style={{ width: 22, textAlign: 'center', color: k === '-' ? T.red : k === '+' ? T.green : '#3a4049', userSelect: 'none', flexShrink: 0 }}>{k}</span>
-            <span style={{ color: k === ' ' ? '#7d858f' : '#D5DCE3', whiteSpace: 'pre', paddingRight: 12 }}>{l || ' '}</span>
+          <div key={i} className="flex" style={{ background: k === '-' ? TERM.minus : k === '+' ? TERM.plus : undefined }}>
+            <span style={{ width: 22, textAlign: 'center', color: k === '-' ? T.red : k === '+' ? T.green : TERM.gutter, userSelect: 'none', flexShrink: 0 }}>{k}</span>
+            <span style={{ color: k === ' ' ? TERM.dimDiff : TERM.diff, whiteSpace: 'pre', paddingRight: 12 }}>{l || ' '}</span>
           </div>
         ))}
       </div>
@@ -93,7 +93,7 @@ function Terminal({ item, running }: { item: ToolItem; running: boolean }) {
   const shown = all || lines.length <= 14 ? lines : lines.slice(-10)
   return (
     <div className="va-term rounded-lg overflow-hidden" style={{ border: `1px solid ${T.border}`, fontSize: 11.5, lineHeight: 1.55 }}>
-      <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ borderBottom: `1px solid #15181c`, background: '#0c0e11' }}>
+      <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ borderBottom: `1px solid ${TERM.border}`, background: TERM.chrome }}>
         <span style={{ width: 8, height: 8, borderRadius: 8, background: '#ff5f57' }} />
         <span style={{ width: 8, height: 8, borderRadius: 8, background: '#febc2e' }} />
         <span style={{ width: 8, height: 8, borderRadius: 8, background: '#28c840' }} />
@@ -101,14 +101,14 @@ function Terminal({ item, running }: { item: ToolItem; running: boolean }) {
       </div>
       <div className="va-scroll overflow-x-auto" style={{ padding: '8px 12px' }}>
         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-          <span style={{ color: T.green }}>{item.name === 'PowerShell' ? 'PS>' : '$'}</span> <span style={{ color: '#E6EDF3' }}>{cmd}</span>
+          <span style={{ color: T.green }}>{item.name === 'PowerShell' ? 'PS>' : '$'}</span> <span style={{ color: TERM.bright }}>{cmd}</span>
         </div>
         {lines.length > shown.length && (
           <button type="button" onClick={() => setAll(true)} style={{ color: T.text3, fontSize: 11, cursor: 'pointer', background: 'transparent', padding: '2px 0' }}>
             … {lines.length - shown.length} earlier lines
           </button>
         )}
-        {shown.length > 0 && <div style={{ color: item.result?.isError ? '#ff9b9b' : '#9aa4af', whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 2 }}>{shown.join('\n')}</div>}
+        {shown.length > 0 && <div style={{ color: item.result?.isError ? TERM.err : TERM.dim, whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 2 }}>{shown.join('\n')}</div>}
         {!item.result && running && <span className="va-pulse" style={{ color: T.green }}>▍</span>}
       </div>
     </div>
@@ -137,7 +137,7 @@ function ToolBody({ item, running }: { item: ToolItem; running: boolean }) {
   const fam = toolFamily(item.name)
   const i = item.input
   const res = item.result
-  const resultBlock = res?.text ? <Code text={res.text} max={10} tint={res.isError ? () => 'rgba(255,107,107,.06)' : undefined} /> : null
+  const resultBlock = res?.text ? <Code text={res.text} max={10} tint={res.isError ? () => alpha(T.red, 6) : undefined} /> : null
   switch (fam) {
     case 'shell':
       return <Terminal item={item} running={running} />
@@ -215,7 +215,7 @@ function ToolCard({ item, running, workspace, onOpenFile }: { item: ToolItem; ru
   return (
     <div className="va-tool-card va-fade rounded-xl overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 text-left" style={{ cursor: 'pointer', background: 'transparent' }}>
-        <span className="inline-flex items-center justify-center rounded-md" style={{ width: 22, height: 22, background: `${f.color}1a`, color: f.color, flexShrink: 0 }}>
+        <span className="inline-flex items-center justify-center rounded-md" style={{ width: 22, height: 22, background: `${alpha(f.color, 10)}`, color: f.color, flexShrink: 0 }}>
           <Icon size={13} />
         </span>
         <span className="text-xs font-medium" style={{ color: T.text, flexShrink: 0 }}>{item.name}</span>{' '}
@@ -278,7 +278,7 @@ function Row({ item, running, workspace, onOpenFile }: { item: FeedItem; running
       return <ToolCard item={item} running={running} workspace={workspace} onOpenFile={onOpenFile} />
     case 'denied':
       return (
-        <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs va-fade" style={{ background: T.redTint, border: `1px solid rgba(255,107,107,.3)`, color: T.text2 }}>
+        <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs va-fade" style={{ background: T.redTint, border: `1px solid ${alpha(T.red, 30)}`, color: T.text2 }}>
           <ShieldX size={13} style={{ color: T.red, flexShrink: 0, marginTop: 1 }} />
           <span><b style={{ color: T.red, fontWeight: 500 }}>blocked</b> · {item.text}</span>
         </div>
@@ -356,7 +356,7 @@ export function Activity({ events, running, waiting, since, workspace, onOpenFil
         {running && (
           <div className="flex items-center gap-2.5 py-1.5 va-fade">
             <ClaudeMark size={18} working={!waiting} />
-            <span className={waiting ? 'text-sm' : 'text-sm va-shimmer'} style={{ color: waiting ? T.amber : '#E8A58C' }}>
+            <span className={waiting ? 'text-sm' : 'text-sm va-shimmer'} style={{ color: waiting ? T.amber : T.claudeText }}>
               {waiting ? 'Waiting for you…' : 'Working…'}
             </span>
             {elapsed && <span className="text-xs" style={{ color: T.text3, fontFamily: T.mono }}>{elapsed}</span>}

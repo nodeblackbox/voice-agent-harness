@@ -1,6 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import type { AgentState, ServiceStatus } from '@shared/types'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 import { Dot } from '../primitives'
 import { VoiceBars } from '../VoiceBars'
 import { truncate } from '../../lib/format'
@@ -48,7 +48,7 @@ export function StateIndicator({
     )
   }
   const d = describe(state, toolLabel, micMuted)
-  const tint = state === 'idle' ? 'transparent' : `${d.color}1A`
+  const tint = state === 'idle' ? 'transparent' : `${alpha(d.color, 10)}`
   return (
     <span className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs" style={{ background: tint, color: d.color, maxWidth: 360 }}>
       {(d.kind === 'mic' || d.kind === 'output') && <VoiceBars source={d.kind} color={d.color} h={10} n={4} />}

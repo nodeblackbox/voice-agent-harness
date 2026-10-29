@@ -12,7 +12,7 @@ import {
   Clock,
   type LucideIcon
 } from 'lucide-react'
-import type { KeyStatus, Provider, ServiceStatus, VoiceInfo } from '@shared/types'
+import type { KeyStatus, Provider, ServiceStatus, ThemePref, VoiceInfo } from '@shared/types'
 import { T, serviceColor, serviceLabel } from '../theme'
 import { keyedProviders, useStore } from '../state/store'
 import { Btn, Card, Dot, Page, Row, Select, TextInput, Toggle } from '../components/primitives'
@@ -248,6 +248,18 @@ function Behaviour() {
     <Section icon={CircleDot} title="Behaviour">
       <Card pad={0}>
         <div className="px-4">
+          <Row label="Theme" sub="Dark, light, or follow Windows">
+            <Select
+              value={b.theme ?? 'dark'}
+              onChange={(v) => set({ theme: v as ThemePref })}
+              options={[
+                { id: 'dark', label: 'Dark' },
+                { id: 'light', label: 'Light' },
+                { id: 'system', label: 'System' }
+              ]}
+              width={140}
+            />
+          </Row>
           <Row label="Confirm before saving to memory" sub="Off: writes silently. On: asks in the chat first.">
             <Toggle on={b.confirmBeforeSave} onChange={(v) => set({ confirmBeforeSave: v })} />
           </Row>

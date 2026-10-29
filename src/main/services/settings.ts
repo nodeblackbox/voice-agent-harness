@@ -23,7 +23,7 @@ export const DEFAULT_SETTINGS: Settings = {
   audio: {},
   ...defaultTuning(),
   stt: { model: 'nemo-parakeet-tdt-0.6b-v2', device: 'hybrid', pythonPath: '' },
-  behaviour: { confirmBeforeSave: false, fillerBeforeTools: true, loadingSound: true, speakTypedReplies: true, listenOnLaunch: false },
+  behaviour: { theme: 'dark', confirmBeforeSave: false, fillerBeforeTools: true, loadingSound: true, speakTypedReplies: true, listenOnLaunch: false },
   location: { mode: 'manual', manual: '' },
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },

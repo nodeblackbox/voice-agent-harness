@@ -4,7 +4,7 @@ import {
   ChevronRight, Code, Eye, File, FileAudio, FileCode, FileImage, FileJson, FileText, FileVideo, Folder, FolderOpen, FolderSearch, Globe, LayoutGrid, RefreshCw, Search
 } from 'lucide-react'
 import type { CcFile, CcFileContent } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha, TERM } from '../../theme'
 import { useStore } from '../../state/store'
 import { Btn } from '../../components/primitives'
 import { Markdown } from './Markdown'
@@ -87,15 +87,15 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
           paddingRight: 8,
           height: 28,
           cursor: 'pointer',
-          background: active ? 'rgba(217,119,87,.12)' : 'transparent',
-          boxShadow: active ? 'inset 2px 0 0 #D97757' : undefined,
+          background: active ? alpha(T.claude, 12) : 'transparent',
+          boxShadow: active ? `inset 2px 0 0 ${T.claude}` : undefined,
           fontSize: 12.5
         }}
       >
         <ChevronRight size={12} style={{ color: T.text3, flexShrink: 0, opacity: node.dir ? 1 : 0, transform: isOpen ? 'rotate(90deg)' : undefined, transition: 'transform .15s ease' }} />
-        <Icon size={14} style={{ color: node.dir ? '#8AA4C8' : colorFor(node.path), flexShrink: 0 }} />
+        <Icon size={14} style={{ color: node.dir ? T.steel : colorFor(node.path), flexShrink: 0 }} />
         <span className="truncate flex-1" style={{ color: node.skipped ? T.text3 : active ? T.text : T.text2, fontStyle: node.skipped ? 'italic' : undefined }}>{node.name}</span>
-        {fresh && !t && <span style={{ width: 6, height: 6, borderRadius: 6, background: '#D97757' }} className="va-pulse" title="changed in the last 2 minutes" />}
+        {fresh && !t && <span style={{ width: 6, height: 6, borderRadius: 6, background: T.claude }} className="va-pulse" title="changed in the last 2 minutes" />}
         {node.dir ? (
           <span className="text-xs" style={{ color: T.text3, fontSize: 10.5 }}>{node.skipped ? '' : node.children.length}</span>
         ) : (
@@ -104,7 +104,7 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
         {t && (
           <span
             className="text-xs rounded px-1"
-            style={{ color: t.writes ? T.green : T.violet, background: t.writes ? 'rgba(74,222,128,.10)' : T.violetTint, fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}
+            style={{ color: t.writes ? T.green : T.violet, background: t.writes ? alpha(T.green, 10) : T.violetTint, fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}
             title={`${t.writes ? 'created' : 'edited'} by Claude ${ago(t.t, now)}`}
           >
             {t.writes ? 'A' : 'M'}
@@ -113,7 +113,7 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
         {changedInside && !isOpen && <span style={{ width: 5, height: 5, borderRadius: 5, background: T.violet }} />}
       </button>
       {node.dir && isOpen && (
-        <div style={{ marginLeft: 12, paddingLeft: 6, borderLeft: '1px solid #1d2127' }}>
+        <div style={{ marginLeft: 12, paddingLeft: 6, borderLeft: `1px solid ${T.treeGuide}` }}>
           {node.children.map((c) => <TreeRow key={c.path} node={c} depth={depth + 1} selected={selected} open={open} toggle={toggle} select={select} touched={touched} now={now} />)}
           {node.skipped && <div className="text-xs py-1 pl-6" style={{ color: T.text3 }}>not listed (dependencies)</div>}
           {!node.skipped && node.children.length === 0 && <div className="text-xs py-1 pl-6" style={{ color: T.text3 }}>empty</div>}
@@ -176,8 +176,8 @@ function Viewer({ id, rel, mtime, size, onPreview }: { id: string; rel: string; 
           <div className="va-term rounded-xl" style={{ border: `1px solid ${T.border}`, fontSize: 12, lineHeight: 1.6, padding: '8px 0', minWidth: 'fit-content' }}>
             {content.text.split('\n').map((l, i) => (
               <div key={i} className="va-code-line flex">
-                <span style={{ color: '#3a4049', width: 48, textAlign: 'right', paddingRight: 14, userSelect: 'none', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ color: '#C9D1D9', whiteSpace: 'pre', paddingRight: 16 }}>{l || ' '}</span>
+                <span style={{ color: TERM.gutter, width: 48, textAlign: 'right', paddingRight: 14, userSelect: 'none', flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ color: TERM.text, whiteSpace: 'pre', paddingRight: 16 }}>{l || ' '}</span>
               </div>
             ))}
             {content.truncated && <div className="px-4 pt-2 text-xs" style={{ color: T.text3 }}>File cut short here (it is large). Use Open to see all of it.</div>}
@@ -262,8 +262,8 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
       <div className="flex flex-col" style={{ width: 300, borderRight: `1px solid ${T.border}`, background: T.rail, flexShrink: 0 }}>
         <div className="px-3 pt-3 pb-2.5 flex flex-col gap-2.5" style={{ borderBottom: `1px solid ${T.border}` }}>
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center rounded-lg" style={{ width: 32, height: 32, background: 'rgba(138,164,200,.10)', border: '1px solid rgba(138,164,200,.22)', flexShrink: 0 }}>
-              <FolderOpen size={16} style={{ color: '#8AA4C8' }} />
+            <div className="flex items-center justify-center rounded-lg" style={{ width: 32, height: 32, background: alpha(T.steel, 10), border: `1px solid ${alpha(T.steel, 22)}`, flexShrink: 0 }}>
+              <FolderOpen size={16} style={{ color: T.steel }} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate" style={{ color: T.text }} title={workspace}>{folderName}</div>
@@ -279,7 +279,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
                 aria-label="Media gallery"
                 title={`Pictures, videos and audio (${mediaCount})`}
                 className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs"
-                style={{ cursor: 'pointer', color: gallery ? '#D97757' : T.text3, background: gallery ? 'rgba(217,119,87,.12)' : 'transparent', fontFamily: T.mono, fontSize: 10.5 }}
+                style={{ cursor: 'pointer', color: gallery ? T.claude : T.text3, background: gallery ? alpha(T.claude, 12) : 'transparent', fontFamily: T.mono, fontSize: 10.5 }}
               >
                 <LayoutGrid size={13} /> {mediaCount}
               </button>
@@ -293,7 +293,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
           </div>
           {touched.length > 0 && (
             <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3 }}>
-              <span className="rounded px-1" style={{ color: T.green, background: 'rgba(74,222,128,.10)', fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}>A</span>
+              <span className="rounded px-1" style={{ color: T.green, background: alpha(T.green, 10), fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}>A</span>
               {touched.filter((t) => t.writes).length} created
               <span className="rounded px-1 ml-1.5" style={{ color: T.violet, background: T.violetTint, fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}>M</span>
               {touched.filter((t) => !t.writes).length} edited by Claude

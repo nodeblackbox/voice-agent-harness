@@ -353,7 +353,11 @@ export interface VoiceSettings {
   pitch: number
 }
 
+export type ThemePref = 'dark' | 'light' | 'system'
+
 export interface BehaviourSettings {
+  /** Dark (default), light, or follow the OS. */
+  theme: ThemePref
   confirmBeforeSave: boolean
   fillerBeforeTools: boolean
   loadingSound: boolean

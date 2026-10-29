@@ -333,7 +333,7 @@ export function Transcript() {
           <div className="text-sm mt-16 text-center" style={{ color: T.text3, lineHeight: 1.6 }}>
             Press Voice and start talking, or type below.
             <br />
-            <span style={{ fontFamily: T.mono }}>Ctrl+Shift+Space</span> toggles the microphone from anywhere.
+            <span style={{ fontFamily: T.mono }}>Ctrl+Shift+Space</span> toggles the microphone while the window is focused.
           </div>
         )}
         {hidden > 0 && (

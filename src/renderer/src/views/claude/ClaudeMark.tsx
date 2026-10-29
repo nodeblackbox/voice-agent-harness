@@ -29,13 +29,13 @@ export function ClaudeMark({ size = 20, working = false, color = CLAUDE_ORANGE, 
               y1={Math.sin(r) * 1.4}
               x2={Math.cos(r) * len}
               y2={Math.sin(r) * len}
-              stroke={color}
+              style={{ stroke: color }}
               strokeWidth={2.5}
               strokeLinecap="round"
             />
           )
         })}
-        <circle r={2.3} fill={color} />
+        <circle r={2.3} style={{ fill: color }} />
       </g>
     </svg>
   )

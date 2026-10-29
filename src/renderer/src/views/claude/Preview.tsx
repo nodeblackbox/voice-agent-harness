@@ -70,14 +70,14 @@ export function Preview({ id, files, page, onPage, pulse }: { id: string; files:
         <Btn small icon={RefreshCw} onClick={() => setNonce((n) => n + 1)}>Reload</Btn>
         <Btn small icon={ExternalLink} onClick={() => void open()}>Browser</Btn>
       </div>
-      <div className="flex-1 min-h-0 flex justify-center p-3" style={{ background: 'radial-gradient(ellipse at top, #15181d, #0b0d10 70%)' }}>
+      <div className="flex-1 min-h-0 flex justify-center p-3" style={{ background: `radial-gradient(ellipse at top, ${T.raised}, ${T.bg} 70%)` }}>
         <iframe
           key={`${current}-${nonce}`}
           title="Preview"
           src={`${wsUrl(id, current)}?v=${nonce}`}
           sandbox="allow-scripts allow-forms allow-pointer-lock"
           className="va-fade"
-          style={{ width: width || '100%', maxWidth: '100%', height: '100%', border: `1px solid ${T.border}`, borderRadius: width ? 18 : 10, background: '#fff', boxShadow: '0 20px 60px rgba(0,0,0,.45)' }}
+          style={{ width: width || '100%', maxWidth: '100%', height: '100%', border: `1px solid ${T.border}`, borderRadius: width ? 18 : 10, background: '#fff', boxShadow: `0 20px 60px ${T.shadow}` }}
         />
       </div>
     </div>

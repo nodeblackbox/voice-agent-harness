@@ -3,7 +3,7 @@
  * **bold**, *italic*, `code` and [links](url). Builds React nodes (never HTML strings).
  */
 import type { ReactNode } from 'react'
-import { T } from '../../theme'
+import { T, TERM } from '../../theme'
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = []
@@ -14,7 +14,7 @@ function inline(text: string, key: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index))
     const tok = m[0]
     const k = `${key}-${i++}`
-    if (m[1]) out.push(<code key={k} style={{ fontFamily: T.mono, fontSize: '0.92em', background: T.raised, color: '#E8B7A6', borderRadius: 4, padding: '1px 5px' }}>{tok.slice(1, -1)}</code>)
+    if (m[1]) out.push(<code key={k} style={{ fontFamily: T.mono, fontSize: '0.92em', background: T.raised, color: T.claudeText, borderRadius: 4, padding: '1px 5px' }}>{tok.slice(1, -1)}</code>)
     else if (m[2]) out.push(<b key={k} style={{ color: T.text, fontWeight: 600 }}>{tok.slice(2, -2)}</b>)
     else if (m[3]) out.push(<i key={k}>{tok.slice(1, -1)}</i>)
     else {
@@ -45,7 +45,7 @@ export function Markdown({ text }: { text: string }) {
       for (i++; i < lines.length && !/^```/.test(lines[i]!); i++) body.push(lines[i]!)
       i++
       blocks.push(
-        <pre key={key} className="va-term va-scroll rounded-lg overflow-x-auto" style={{ margin: 0, padding: '10px 12px', fontSize: 12, color: '#C9D1D9', border: `1px solid ${T.border}` }}>
+        <pre key={key} className="va-term va-scroll rounded-lg overflow-x-auto" style={{ margin: 0, padding: '10px 12px', fontSize: 12, color: TERM.text, border: `1px solid ${T.border}` }}>
           {lang && <div style={{ color: T.text3, fontSize: 10.5, marginBottom: 4 }}>{lang}</div>}
           {body.join('\n')}
         </pre>

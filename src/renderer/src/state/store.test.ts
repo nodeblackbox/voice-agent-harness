@@ -17,7 +17,7 @@ const settings = {
   userName: 'me',
   voice: { engine: 'edge', voice: 'en-US-AvaNeural', rate: 0, pitch: 0 },
   audio: {},
-  behaviour: { confirmBeforeSave: false, fillerBeforeTools: true, loadingSound: true, speakTypedReplies: true, listenOnLaunch: false },
+  behaviour: { theme: 'dark', confirmBeforeSave: false, fillerBeforeTools: true, loadingSound: true, speakTypedReplies: true, listenOnLaunch: false },
   location: { mode: 'off', manual: '' },
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },

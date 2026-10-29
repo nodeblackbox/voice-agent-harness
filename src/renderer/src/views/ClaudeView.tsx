@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import type { CcAnswer, CcEvent, CcMode, CcPending, CcQuestion, CcSession } from '@shared/claude'
 import type { ClaudeSettings } from '@shared/types'
-import { T } from '../theme'
+import { T, alpha, TERM } from '../theme'
 import { useStore } from '../state/store'
 import { statusColor, statusLabel, waitingOnUser } from '../state/claude'
 import { Btn, Card, Dot, Empty, Page, SectionTitle, Tag, TextInput, Toggle } from '../components/primitives'
@@ -108,7 +108,7 @@ function PlanReview({ session, plan }: { session: CcSession; plan: Extract<CcPen
             const x = MODES[k]
             const on = k === then
             return (
-              <button key={k} type="button" role="radio" aria-checked={on} title={x.blurb} onClick={() => setThen(k)} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs" style={{ cursor: 'pointer', color: on ? x.color : T.text3, background: on ? `${x.color}17` : 'transparent' }}>
+              <button key={k} type="button" role="radio" aria-checked={on} title={x.blurb} onClick={() => setThen(k)} className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs" style={{ cursor: 'pointer', color: on ? x.color : T.text3, background: on ? `${alpha(x.color, 9)}` : 'transparent' }}>
                 <x.icon size={11} /> {x.label}
               </button>
             )
@@ -132,7 +132,7 @@ function PendingCard({ session, pending }: { session: CcSession; pending: CcPend
   // "yes, and stop asking": Auto stops plain shell questions; what the fence asks about needs Bypass
   const next: CcMode = reason ? 'bypass' : 'auto'
   return (
-    <Card pad={14} style={{ background: plan ? 'rgba(79,209,255,.06)' : T.amberTint, border: `1px solid ${accent}` }}>
+    <Card pad={14} style={{ background: plan ? alpha(T.cyan, 6) : T.amberTint, border: `1px solid ${accent}` }}>
       <div className="flex items-center gap-2 mb-2">
         {plan ? <ClipboardList size={14} style={{ color: accent }} /> : <Dot color={accent} pulse />}
         <span className="text-sm font-medium" style={{ color: accent }}>
@@ -153,7 +153,7 @@ function PendingCard({ session, pending }: { session: CcSession; pending: CcPend
               <ShieldAlert size={12} style={{ flexShrink: 0 }} /> <span className="break-all">{reason[0]!.toUpperCase() + reason.slice(1)}</span>
             </div>
           )}
-          <div className="va-term rounded-lg px-3 py-2 text-xs break-all" style={{ border: `1px solid ${T.border}`, color: '#E6EDF3' }}>
+          <div className="va-term rounded-lg px-3 py-2 text-xs break-all" style={{ border: `1px solid ${T.border}`, color: TERM.bright }}>
             {shell && <span style={{ color: T.green }}>{pending.toolName === 'PowerShell' ? 'PS> ' : '$ '}</span>}
             {pending.summary.replace(/^Run:\s*/, '')}
           </div>
@@ -173,7 +173,7 @@ function PendingCard({ session, pending }: { session: CcSession; pending: CcPend
 function StatusPill({ status }: { status: CcSession['status'] }) {
   const c = statusColor(status, T)
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs" style={{ background: `${c}17`, color: c, border: `1px solid ${c}40`, flexShrink: 0 }}>
+    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs" style={{ background: `${alpha(c, 9)}`, color: c, border: `1px solid ${alpha(c, 25)}`, flexShrink: 0 }}>
       <Dot color={c} size={6} pulse={status === 'running' || status === 'needs_input' || status === 'needs_permission'} />
       {statusLabel(status)}
     </span>
@@ -235,8 +235,8 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
     else setName(session.name)
   }
   return (
-    <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid ${T.border}`, background: 'linear-gradient(180deg, rgba(217,119,87,.07), transparent)' }}>
-      <div className="flex items-center justify-center rounded-xl" style={{ width: 40, height: 40, background: 'rgba(217,119,87,.10)', border: '1px solid rgba(217,119,87,.25)', flexShrink: 0 }}>
+    <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: `1px solid ${T.border}`, background: `linear-gradient(180deg, ${alpha(T.claude, 7)}, transparent)` }}>
+      <div className="flex items-center justify-center rounded-xl" style={{ width: 40, height: 40, background: alpha(T.claude, 10), border: `1px solid ${alpha(T.claude, 25)}`, flexShrink: 0 }}>
         <ClaudeMark size={24} working={session.status === 'running'} />
       </div>
       <div className="min-w-0 flex-1">
@@ -260,7 +260,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
           )}
           <StatusPill status={session.status} />
           {session.external && (
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" title="It works in this real project folder (fenced to it: going outside, deleting and pushing ask unless it is in Bypass mode)" style={{ background: 'rgba(138,164,200,.10)', color: '#8AA4C8', border: '1px solid rgba(138,164,200,.3)', flexShrink: 0 }}>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" title="It works in this real project folder (fenced to it: going outside, deleting and pushing ask unless it is in Bypass mode)" style={{ background: alpha(T.steel, 10), color: T.steel, border: `1px solid ${alpha(T.steel, 30)}`, flexShrink: 0 }}>
               <FolderGit2 size={11} /> your project
             </span>
           )}
@@ -311,7 +311,7 @@ function Composer({ session }: { session: CcSession }) {
           ))}
         </div>
       )}
-      <form className="flex gap-2 items-end rounded-xl p-2" style={{ background: T.surface, border: `1px solid ${busy ? 'rgba(217,119,87,.35)' : T.border}` }} onSubmit={(e) => { e.preventDefault(); send(false) }}>
+      <form className="flex gap-2 items-end rounded-xl p-2" style={{ background: T.surface, border: `1px solid ${busy ? alpha(T.claude, 35) : T.border}` }} onSubmit={(e) => { e.preventDefault(); send(false) }}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -367,7 +367,7 @@ function Detail({ session }: { session: CcSession }) {
           >
             <t.icon size={14} />
             {t.label}
-            {t.badge && <span className="text-xs rounded-full px-1.5" style={{ background: t.badge === 'live' ? 'rgba(74,222,128,.12)' : T.raised, color: t.badge === 'live' ? T.green : T.text3 }}>{t.badge}</span>}
+            {t.badge && <span className="text-xs rounded-full px-1.5" style={{ background: t.badge === 'live' ? alpha(T.green, 12) : T.raised, color: t.badge === 'live' ? T.green : T.text3 }}>{t.badge}</span>}
           </button>
         ))}
       </div>
@@ -412,9 +412,9 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
       style={{
         cursor: 'pointer',
         background: active ? T.raised : T.surface,
-        border: `1px solid ${picked ? T.red : s.pending ? T.amber : active ? 'rgba(217,119,87,.45)' : T.border}`,
+        border: `1px solid ${picked ? T.red : s.pending ? T.amber : active ? alpha(T.claude, 45) : T.border}`,
         opacity: picked === false ? 0.75 : 1,
-        boxShadow: active ? '0 0 0 3px rgba(217,119,87,.08)' : undefined
+        boxShadow: active ? `0 0 0 3px ${alpha(T.claude, 8)}` : undefined
       }}
     >
       <div className="flex items-center gap-2">
@@ -425,7 +425,7 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
         )}
         <ClaudeMark size={16} working={working} color={s.status === 'stopped' ? T.text3 : undefined} />
         <span className="text-sm font-medium truncate flex-1" style={{ color: T.text }}>{s.name}</span>
-        {s.external && <FolderGit2 size={12} style={{ color: '#8AA4C8', flexShrink: 0 }} aria-label="your project" />}
+        {s.external && <FolderGit2 size={12} style={{ color: T.steel, flexShrink: 0 }} aria-label="your project" />}
         <span className="text-xs inline-flex items-center gap-1" style={{ color: c, flexShrink: 0 }}>
           <Dot color={c} size={6} pulse={working || !!s.pending} />
           {statusLabel(s.status)}
@@ -469,9 +469,9 @@ function NewSession({ onDone, root }: { onDone: () => void; root: string }) {
     selectClaude(r.session.id)
     onDone()
   }
-  const chip = (on: boolean) => ({ cursor: 'pointer', background: on ? 'rgba(217,119,87,.15)' : T.bg, color: on ? '#E8A58C' : T.text3, border: `1px solid ${on ? 'rgba(217,119,87,.4)' : T.border}` })
+  const chip = (on: boolean) => ({ cursor: 'pointer', background: on ? alpha(T.claude, 15) : T.bg, color: on ? T.claudeText : T.text3, border: `1px solid ${on ? alpha(T.claude, 40) : T.border}` })
   return (
-    <Card pad={12} className="flex flex-col gap-2" style={{ border: '1px solid rgba(217,119,87,.4)' }}>
+    <Card pad={12} className="flex flex-col gap-2" style={{ border: `1px solid ${alpha(T.claude, 40)}` }}>
       <TextInput value={name} onChange={setName} placeholder="Session name, e.g. landing page" autoFocus />
       <textarea value={task} onChange={(e) => setTask(e.target.value)} rows={3} placeholder="First task (optional)" className="w-full rounded-lg p-2 text-sm resize-none" style={{ background: T.bg, color: T.text, border: `1px solid ${T.border}` }} />
       <div className="flex flex-col gap-1.5">
@@ -691,9 +691,9 @@ export function ClaudeView() {
           type="button"
           onClick={() => setBrowsing(!browsing)}
           className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left mt-1"
-          style={{ cursor: 'pointer', background: browsing ? 'rgba(217,119,87,.10)' : 'transparent', border: `1px dashed ${browsing ? 'rgba(217,119,87,.5)' : T.border}` }}
+          style={{ cursor: 'pointer', background: browsing ? alpha(T.claude, 10) : 'transparent', border: `1px dashed ${browsing ? alpha(T.claude, 50) : T.border}` }}
         >
-          <History size={15} style={{ color: '#D97757', flexShrink: 0 }} />
+          <History size={15} style={{ color: T.claude, flexShrink: 0 }} />
           <span className="flex flex-col min-w-0">
             <span className="text-sm" style={{ color: T.text }}>Your other sessions</span>
             <span className="text-xs" style={{ color: T.text3 }}>From the terminal, IDE and other apps</span>

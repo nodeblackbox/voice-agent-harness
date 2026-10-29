@@ -2,14 +2,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, ClipboardList, FastForward, Hand, ShieldOff, type LucideIcon } from 'lucide-react'
 import { CC_MODES, type CcMode, type CcSession } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 import { useStore } from '../../state/store'
 
 export const MODES: Record<CcMode, { label: string; icon: LucideIcon; color: string; blurb: string }> = {
   plan: { label: 'Plan', icon: ClipboardList, color: T.cyan, blurb: 'Plans first. Nothing changes until you approve the plan.' },
-  ask: { label: 'Ask', icon: Hand, color: '#8AA4C8', blurb: 'Every shell command waits for your yes.' },
+  ask: { label: 'Ask', icon: Hand, color: T.steel, blurb: 'Every shell command waits for your yes.' },
   auto: { label: 'Auto', icon: FastForward, color: T.green, blurb: 'No questions inside its folder. Going outside it, deleting or pushing asks.' },
-  bypass: { label: 'Bypass', icon: ShieldOff, color: '#FF8A5B', blurb: 'No questions at all. Deletes outside its folder ask; wiping disks never runs.' }
+  bypass: { label: 'Bypass', icon: ShieldOff, color: T.bypass, blurb: 'No questions at all. Deletes outside its folder ask; wiping disks never runs.' }
 }
 
 export const modeOf = (s: CcSession, fallback: CcMode): CcMode => s.mode ?? fallback
@@ -18,7 +18,7 @@ export const modeOf = (s: CcSession, fallback: CcMode): CcMode => s.mode ?? fall
 export function ModeBadge({ mode }: { mode: CcMode }) {
   const m = MODES[mode]
   return (
-    <span title={`${m.label} mode: ${m.blurb}`} className="inline-flex items-center gap-1 rounded-full px-1.5" style={{ fontSize: 10.5, lineHeight: '16px', color: m.color, background: `${m.color}14`, border: `1px solid ${m.color}33`, flexShrink: 0 }}>
+    <span title={`${m.label} mode: ${m.blurb}`} className="inline-flex items-center gap-1 rounded-full px-1.5" style={{ fontSize: 10.5, lineHeight: '16px', color: m.color, background: `${alpha(m.color, 8)}`, border: `1px solid ${alpha(m.color, 20)}`, flexShrink: 0 }}>
       <m.icon size={10} />
       {m.label}
     </span>
@@ -55,7 +55,7 @@ export function ModeMenu({ session, fallback }: { session: CcSession; fallback: 
         onClick={() => setOpen(!open)}
         title={m.blurb}
         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium"
-        style={{ height: 26, color: m.color, background: `${m.color}12`, border: `1px solid ${m.color}45`, cursor: 'pointer' }}
+        style={{ height: 26, color: m.color, background: `${alpha(m.color, 7)}`, border: `1px solid ${alpha(m.color, 27)}`, cursor: 'pointer' }}
       >
         <m.icon size={13} />
         {m.label}
@@ -68,8 +68,8 @@ export function ModeMenu({ session, fallback }: { session: CcSession; fallback: 
             const x = MODES[k]
             const on = k === mode
             return (
-              <button key={k} role="menuitemradio" aria-checked={on} type="button" onClick={() => void pick(k)} className="va-tree-row w-full flex items-start gap-2.5 px-3 py-2 text-left" style={{ cursor: 'pointer', background: on ? `${x.color}0D` : 'transparent' }}>
-                <span className="inline-flex items-center justify-center rounded-md" style={{ width: 24, height: 24, background: `${x.color}17`, color: x.color, flexShrink: 0 }}>
+              <button key={k} role="menuitemradio" aria-checked={on} type="button" onClick={() => void pick(k)} className="va-tree-row w-full flex items-start gap-2.5 px-3 py-2 text-left" style={{ cursor: 'pointer', background: on ? `${alpha(x.color, 5)}` : 'transparent' }}>
+                <span className="inline-flex items-center justify-center rounded-md" style={{ width: 24, height: 24, background: `${alpha(x.color, 9)}`, color: x.color, flexShrink: 0 }}>
                   <x.icon size={13} />
                 </span>
                 <span className="flex flex-col min-w-0 flex-1">
@@ -108,7 +108,7 @@ export function ModeChooser({ value, onChange, label = 'Mode' }: { value: CcMode
               onClick={() => onChange(k)}
               title={x.blurb}
               className="inline-flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs"
-              style={{ cursor: 'pointer', color: on ? x.color : T.text3, background: on ? `${x.color}17` : 'transparent', border: `1px solid ${on ? `${x.color}50` : 'transparent'}` }}
+              style={{ cursor: 'pointer', color: on ? x.color : T.text3, background: on ? `${alpha(x.color, 9)}` : 'transparent', border: `1px solid ${on ? `${alpha(x.color, 31)}` : 'transparent'}` }}
             >
               <x.icon size={12} />
               {x.label}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { KeyRound, RefreshCw, ShieldCheck, UserRound } from 'lucide-react'
 import type { CcAccount, CcSession } from '@shared/claude'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 
 /** Who sessions run as, asked of Claude Code itself. Null while checking or when the running app predates it. */
 export function useClaudeAccount(): { account: CcAccount | null; checking: boolean; recheck: () => void } {
@@ -26,7 +26,7 @@ export function AccountBadge({ account, checking, recheck }: ReturnType<typeof u
     ? { icon: UserRound, color: T.text3, border: T.border, bg: T.surface, title: 'Checking your Claude login…', sub: '' }
     : account.billing === 'subscription'
       ? {
-          icon: ShieldCheck, color: T.green, border: 'rgba(74,222,128,.28)', bg: 'rgba(74,222,128,.06)',
+          icon: ShieldCheck, color: T.green, border: alpha(T.green, 28), bg: alpha(T.green, 6),
           title: `${account.plan ?? 'Claude'} subscription`, sub: account.email ?? 'your claude login',
         }
       : account.billing === 'api-key'

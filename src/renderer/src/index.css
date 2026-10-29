@@ -1,7 +1,77 @@
 @import "tailwindcss";
 
+/* Dark is the default; the light palette (from the promo video) applies when <html data-theme="light">.
+   The renderer sets that attribute before the first paint (src/renderer/src/lib/theme-mode.ts). */
 :root {
   color-scheme: dark;
+  --va-bg: #0B0D10;
+  --va-rail: #0E1013;
+  --va-surface: #14171B;
+  --va-raised: #1B1F24;
+  --va-border: #23272D;
+  --va-text: #EDEEF0;
+  --va-text2: #8B929B;
+  --va-text3: #565C64;
+  --va-cyan: #4FD1FF;
+  --va-violet: #B98BFF;
+  --va-green: #4ADE80;
+  --va-amber: #FFB454;
+  --va-red: #FF6B6B;
+  --va-cyan-tint: rgba(79, 209, 255, 0.10);
+  --va-cyan-border: rgba(79, 209, 255, 0.35);
+  --va-violet-tint: rgba(185, 139, 255, 0.08);
+  --va-violet-border: rgba(185, 139, 255, 0.30);
+  --va-amber-tint: rgba(255, 180, 84, 0.10);
+  --va-red-tint: rgba(255, 107, 107, 0.10);
+  --va-green-tint: rgba(74, 222, 128, 0.12);
+  --va-wash: rgba(255, 255, 255, 0.04);
+  --va-wash-soft: rgba(255, 255, 255, 0.025);
+  --va-shadow: rgba(0, 0, 0, 0.6);
+  --va-shimmer: #FFFFFF;
+  --va-scrollbar: #23272D;
+  --va-tree-guide: #1D2127;
+  --va-border-strong: #2F343B;
+  --va-border-stronger: #3A4049;
+  --va-claude: #D97757;
+  --va-claude-text: #E8A58C;
+  --va-steel: #8AA4C8;
+  --va-bypass: #FF8A5B;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --va-bg: #FBF7F0;
+  --va-rail: #F3EDE2;
+  --va-surface: #FFFFFF;
+  --va-raised: #F4EEE4;
+  --va-border: #E5DCCD;
+  --va-text: #1E1B16;
+  --va-text2: #6B6458;
+  --va-text3: #A69E8F;
+  --va-cyan: #0B98D6;
+  --va-violet: #7C4DEB;
+  --va-green: #16A34A;
+  --va-amber: #D97706;
+  --va-red: #E5484D;
+  --va-cyan-tint: rgba(11, 152, 214, 0.10);
+  --va-cyan-border: rgba(11, 152, 214, 0.40);
+  --va-violet-tint: rgba(124, 77, 235, 0.08);
+  --va-violet-border: rgba(124, 77, 235, 0.35);
+  --va-amber-tint: rgba(217, 119, 6, 0.10);
+  --va-red-tint: rgba(229, 72, 77, 0.10);
+  --va-green-tint: rgba(22, 163, 74, 0.12);
+  --va-wash: rgba(30, 27, 22, 0.04);
+  --va-wash-soft: rgba(30, 27, 22, 0.025);
+  --va-shadow: rgba(90, 70, 40, 0.16);
+  --va-shimmer: #C9B8FF;
+  --va-scrollbar: #D9CFBF;
+  --va-tree-guide: #E5DCCD;
+  --va-border-strong: #CFC4B2;
+  --va-border-stronger: #BFB3A0;
+  --va-claude: #D97757;
+  --va-claude-text: #B5532F;
+  --va-steel: #4F6B91;
+  --va-bypass: #E8632F;
 }
 
 html,
@@ -9,8 +79,8 @@ body,
 #root {
   height: 100%;
   margin: 0;
-  background: #0b0d10;
-  color: #edeef0;
+  background: var(--va-bg);
+  color: var(--va-text);
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -49,10 +119,10 @@ select:focus {
 
 @keyframes vaRing {
   0% {
-    box-shadow: 0 0 0 0 rgba(79, 209, 255, 0.35);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--va-cyan) 35%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 12px rgba(79, 209, 255, 0);
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--va-cyan) 0%, transparent);
   }
 }
 
@@ -124,7 +194,7 @@ select:focus {
 }
 
 .va-shimmer {
-  background: linear-gradient(90deg, currentColor 0%, #ffffff 50%, currentColor 100%);
+  background: linear-gradient(90deg, currentColor 0%, var(--va-shimmer) 50%, currentColor 100%);
   background-size: 240px 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -135,10 +205,10 @@ select:focus {
 @keyframes vaGlow {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(185, 139, 255, 0.18);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--va-violet) 18%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(185, 139, 255, 0);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--va-violet) 0%, transparent);
   }
 }
 
@@ -155,7 +225,7 @@ select:focus {
 }
 
 .va-scroll::-webkit-scrollbar-thumb {
-  background: #23272d;
+  background: var(--va-scrollbar);
   border-radius: 8px;
 }
 
@@ -164,7 +234,7 @@ select:focus {
 }
 
 input[type='range'] {
-  accent-color: #4fd1ff;
+  accent-color: var(--va-cyan);
 }
 
 /* Claude Code view */
@@ -189,17 +259,19 @@ input[type='range'] {
   animation: vaSpin 9s linear infinite;
 }
 
+/* stays dark in both themes (see TERM in theme.ts) */
 .va-term {
   background: #07080a;
+  color-scheme: dark;
   font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
 }
 
 .va-code-line:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(255, 255, 255, 0.025); /* inside .va-term, which is always dark */
 }
 
 .va-tree-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--va-wash);
 }
 
 .va-tool-card {
@@ -207,7 +279,7 @@ input[type='range'] {
 }
 
 .va-tool-card:hover {
-  border-color: #2f343b !important;
+  border-color: var(--va-border-strong) !important;
 }
 
 .va-media-card {
@@ -215,5 +287,5 @@ input[type='range'] {
 }
 .va-media-card:hover {
   transform: translateY(-2px);
-  border-color: #3a4049;
+  border-color: var(--va-border-stronger);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { AlignLeft, Bot, ChevronDown, Folder, Headphones, HeadphoneOff, Lock, MessageSquare, Mic, MicOff, Send, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
 import type { Mode } from '@shared/types'
-import { T } from '../../theme'
+import { T, alpha } from '../../theme'
 import { keyedProviders, selectActiveModel, selectActiveProject, selectActiveStyle, useStore } from '../../state/store'
 import { toggleListening, toggleMicMuted } from '../../audio/voice'
 import { Dropdown, MenuItem } from '../primitives'
@@ -121,7 +121,7 @@ export function InputBar() {
     <div
       ref={barRef}
       className="absolute left-0 right-0 flex justify-center px-6"
-      style={{ bottom: 0, paddingTop: 28, paddingBottom: 20, pointerEvents: 'none', background: `linear-gradient(to top, ${T.bg} 0%, ${T.bg} 72%, rgba(11,13,16,0) 100%)` }}
+      style={{ bottom: 0, paddingTop: 28, paddingBottom: 20, pointerEvents: 'none', background: `linear-gradient(to top, ${T.bg} 0%, ${T.bg} 72%, ${alpha(T.bg, 0)} 100%)` }}
     >
       <div className="w-full flex flex-col gap-2" style={{ maxWidth: 720, pointerEvents: 'auto' }}>
         {claudeOn && <ClaudeStrip />}
