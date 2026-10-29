@@ -1,0 +1,1297 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e9]:
+      - heading "Navigation Menu" [level=2] [ref=e10]
+      - generic [ref=e11]:
+        - link "Homepage" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - img [ref=e15]
+        - generic [ref=e17]:
+          - navigation "Global" [ref=e18]:
+            - list [ref=e19]:
+              - listitem [ref=e20]:
+                - button "Products" [ref=e22] [cursor=pointer]:
+                  - text: Products
+                  - img [ref=e23]
+              - listitem [ref=e25]:
+                - button "Developers" [ref=e27] [cursor=pointer]:
+                  - text: Developers
+                  - img [ref=e28]
+              - listitem [ref=e30]:
+                - button "Businesses" [ref=e32] [cursor=pointer]:
+                  - text: Businesses
+                  - img [ref=e33]
+              - listitem [ref=e35]:
+                - button "Resources" [ref=e37] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e38]
+              - listitem [ref=e40]:
+                - link "Pricing" [ref=e41] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=e42]:
+            - button "Search or jump to, type / to search" [ref=e44] [cursor=pointer]:
+              - generic [ref=e47]:
+                - generic [ref=e48]: Search
+                - generic [ref=e49]: /
+            - generic [ref=e50]:
+              - link "Sign in" [ref=e52] [cursor=pointer]:
+                - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fnodeblackbox%2Fvoice-agent-harness
+                - generic [ref=e54]: Sign in
+              - link "Sign up" [ref=e55] [cursor=pointer]:
+                - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E&source=header-repo&source_repo=nodeblackbox%2Fvoice-agent-harness
+                - generic [ref=e57]: Sign up
+              - button "Appearance settings" [ref=e58] [cursor=pointer]:
+                - img [ref=e60]
+  - main [ref=e65]:
+    - generic "Global navigation menu" [ref=e68]:
+      - navigation "Breadcrumbs" [ref=e71]:
+        - list [ref=e72]:
+          - listitem [ref=e73]:
+            - link "nodeblackbox" [ref=e74] [cursor=pointer]:
+              - /url: /nodeblackbox
+              - generic [ref=e75]: nodeblackbox
+          - listitem [ref=e76]:
+            - link "voice-agent-harness" [ref=e77] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness
+              - generic [ref=e78]: voice-agent-harness
+      - heading "Repository navigation" [level=2] [ref=e80]
+      - navigation "Repository" [ref=e81]:
+        - list [ref=e82]:
+          - listitem [ref=e83]:
+            - link "Code" [ref=e84] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness
+              - img [ref=e86]
+              - generic [ref=e88]: Code
+          - listitem [ref=e89]:
+            - link "Issues" [ref=e90] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/issues
+              - img [ref=e92]
+              - generic [ref=e95]: Issues
+          - listitem [ref=e96]:
+            - link "Pull requests" [ref=e97] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/pulls
+              - img [ref=e99]
+              - generic [ref=e101]: Pull requests
+          - listitem [ref=e102]:
+            - link "Actions" [ref=e103] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/actions
+              - img [ref=e105]
+              - generic [ref=e107]: Actions
+          - listitem [ref=e108]:
+            - link "Projects" [ref=e109] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/projects
+              - img [ref=e111]
+              - generic [ref=e113]: Projects
+          - listitem [ref=e114]:
+            - link "Security and quality" [ref=e115] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/security
+              - img [ref=e117]
+              - generic [ref=e119]: Security and quality
+          - listitem [ref=e120]:
+            - link "Insights" [ref=e121] [cursor=pointer]:
+              - /url: /nodeblackbox/voice-agent-harness/pulse
+              - img [ref=e123]
+              - generic [ref=e125]: Insights
+    - generic [ref=e138]:
+      - generic [ref=e142]:
+        - generic [ref=e145]:
+          - img "nodeblackbox" [ref=e146]
+          - generic "voice-agent-harness" [ref=e147]:
+            - strong [ref=e148]:
+              - link "voice-agent-harness" [ref=e149] [cursor=pointer]:
+                - /url: /nodeblackbox/voice-agent-harness
+          - generic [ref=e150]: Public
+        - list [ref=e152]:
+          - listitem [ref=e153]:
+            - link "You must be signed in to change notification settings" [ref=e154] [cursor=pointer]:
+              - /url: /login?return_to=%2Fnodeblackbox%2Fvoice-agent-harness
+              - generic [ref=e155]:
+                - generic:
+                  - img
+                - generic [ref=e156]: Notifications
+          - listitem [ref=e157]:
+            - link "You must be signed in to fork a repository" [ref=e158] [cursor=pointer]:
+              - /url: /login?return_to=%2Fnodeblackbox%2Fvoice-agent-harness
+              - generic [ref=e159]:
+                - generic:
+                  - img
+                - generic [ref=e160]:
+                  - text: Fork
+                  - generic [ref=e161]: "0"
+                  - generic [ref=e162]: (0)
+          - listitem [ref=e163]:
+            - link "Star (0)" [ref=e164] [cursor=pointer]:
+              - /url: /login?return_to=%2Fnodeblackbox%2Fvoice-agent-harness
+              - generic [ref=e165]:
+                - generic:
+                  - img
+                - generic [ref=e166]:
+                  - text: Star
+                  - generic [ref=e167]: "0"
+                  - generic [ref=e168]: (0)
+      - generic [ref=e169]:
+        - generic [ref=e172]:
+          - generic [ref=e173]:
+            - generic [ref=e174]:
+              - button "main branch" [ref=e176] [cursor=pointer]:
+                - generic [ref=e177]:
+                  - generic:
+                    - img
+                  - generic [ref=e180]: main
+                  - generic:
+                    - img
+              - generic [ref=e181]:
+                - link "2 Branches" [ref=e182] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/branches
+                  - generic [ref=e183]:
+                    - generic:
+                      - img
+                    - generic [ref=e185]:
+                      - strong [ref=e186]: "2"
+                      - text: Branches
+                - link "0 Tags" [ref=e187] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/tags
+                  - generic [ref=e188]:
+                    - generic:
+                      - img
+                    - generic [ref=e190]:
+                      - strong [ref=e191]: "0"
+                      - text: Tags
+            - generic [ref=e192]:
+              - generic [ref=e196]:
+                - img [ref=e198]
+                - combobox "Go to file" [ref=e200]
+              - button "Code" [ref=e201] [cursor=pointer]:
+                - generic [ref=e202]:
+                  - generic:
+                    - img
+                  - generic [ref=e203]: Code
+                  - generic:
+                    - img
+          - generic [ref=e204]:
+            - generic [ref=e205]:
+              - generic [ref=e207]:
+                - heading "Latest commit" [level=2] [ref=e208]
+                - generic [ref=e209]:
+                  - generic [ref=e210]:
+                    - generic [ref=e212]:
+                      - img "nodeblackbox" [ref=e213]
+                      - img "claude" [ref=e214]
+                    - link "commits by nodeblackbox" [ref=e216] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/commits?author=nodeblackbox
+                      - text: nodeblackbox
+                    - generic [ref=e217]: and
+                    - link "commits by claude" [ref=e219] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/commits?author=claude
+                      - text: claude
+                  - generic [ref=e220]:
+                    - 'link "README: a tour of the real app, cut from the promo video" [ref=e223] [cursor=pointer]':
+                      - /url: /nodeblackbox/voice-agent-harness/commit/7069e0391959c01caac2f81a017ffe671041346d
+                    - button "Open commit details" [ref=e224] [cursor=pointer]:
+                      - img [ref=e225]
+                    - button "pending" [ref=e227] [cursor=pointer]:
+                      - img [ref=e228]
+                - generic [ref=e230]:
+                  - generic [ref=e232]:
+                    - link "Commit 7069e03" [ref=e233] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/commit/7069e0391959c01caac2f81a017ffe671041346d
+                      - text: "7069e03"
+                    - text: ·
+                    - generic "Oct 29, 2026, 21:24 GMT" [ref=e234]: Oct 29, 2026now
+                  - generic [ref=e235]:
+                    - heading "History" [level=2] [ref=e236]
+                    - link "45 Commits" [ref=e237] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/commits/main/
+                      - generic [ref=e238]:
+                        - generic:
+                          - img
+                        - generic [ref=e239]: 45 Commits
+              - heading "Folders and files" [level=2] [ref=e240]
+              - table "Folders and files" [ref=e242]:
+                - rowgroup:
+                  - row "Name Last commit message Last commit date":
+                    - columnheader "Name"
+                    - columnheader "Last commit message":
+                      - generic "Last commit message"
+                    - columnheader "Last commit date":
+                      - generic "Last commit date"
+                - rowgroup [ref=e243]:
+                  - 'row ".github/workflows, (Directory) Publish prep: no personal defaults, .env.example, hygiene Oct 29, 20266 hours ago" [ref=e244]':
+                    - cell ".github/workflows, (Directory)" [ref=e245]:
+                      - generic [ref=e246]:
+                        - img [ref=e247]
+                        - link ".github/workflows, (Directory)" [ref=e252] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/.github/workflows
+                          - text: .github/workflows
+                    - 'cell "Publish prep: no personal defaults, .env.example, hygiene" [ref=e253]':
+                      - 'link "Publish prep: no personal defaults, .env.example, hygiene" [ref=e256] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/cab2ba4ea06630ce27637d9041296f6dca7f4364
+                    - cell "Oct 29, 20266 hours ago" [ref=e257]:
+                      - generic [ref=e258]: Oct 29, 20266 hours ago
+                  - 'row "docs, (Directory) README: a tour of the real app, cut from the promo video Oct 29, 2026now" [ref=e259]':
+                    - cell "docs, (Directory)" [ref=e260]:
+                      - generic [ref=e261]:
+                        - img [ref=e262]
+                        - link "docs, (Directory)" [ref=e267] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/docs
+                          - text: docs
+                    - 'cell "README: a tour of the real app, cut from the promo video" [ref=e268]':
+                      - 'link "README: a tour of the real app, cut from the promo video" [ref=e271] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/7069e0391959c01caac2f81a017ffe671041346d
+                    - cell "Oct 29, 2026now" [ref=e272]:
+                      - generic [ref=e273]: Oct 29, 2026now
+                  - row "lab, (Directory) README and docs for the Claude Code harness; demo GIF, poster and scr… Oct 29, 20265 hours ago" [ref=e274]:
+                    - cell "lab, (Directory)" [ref=e275]:
+                      - generic [ref=e276]:
+                        - img [ref=e277]
+                        - link "lab, (Directory)" [ref=e282] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/lab
+                          - text: lab
+                    - cell "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e283]:
+                      - link "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e286] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/da49d99f9bd2b711c514d60fc5647f3fa047a290
+                    - cell "Oct 29, 20265 hours ago" [ref=e287]:
+                      - generic [ref=e288]: Oct 29, 20265 hours ago
+                  - 'row "mcp, (Directory) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e289]':
+                    - cell "mcp, (Directory)" [ref=e290]:
+                      - generic [ref=e291]:
+                        - img [ref=e292]
+                        - link "mcp, (Directory)" [ref=e297] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/mcp
+                          - text: mcp
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e298]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e301] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e302]:
+                      - generic [ref=e303]: Sep 17, 2026last month
+                  - row "scripts, (Directory) Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same… Oct 29, 20261 hour ago" [ref=e304]:
+                    - cell "scripts, (Directory)" [ref=e305]:
+                      - generic [ref=e306]:
+                        - img [ref=e307]
+                        - link "scripts, (Directory)" [ref=e312] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/scripts
+                          - text: scripts
+                    - cell "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e313]:
+                      - link "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e316] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/8c01981a02948140f189e0326ab0ba8d551778dd
+                    - cell "Oct 29, 20261 hour ago" [ref=e317]:
+                      - generic [ref=e318]: Oct 29, 20261 hour ago
+                  - 'row "search, (Directory) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e319]':
+                    - cell "search, (Directory)" [ref=e320]:
+                      - generic [ref=e321]:
+                        - img [ref=e322]
+                        - link "search, (Directory)" [ref=e327] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/search
+                          - text: search
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e328]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e331] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e332]:
+                      - generic [ref=e333]: Sep 17, 2026last month
+                  - row "sidecar, (Directory) README and docs for the Claude Code harness; demo GIF, poster and scr… Oct 29, 20265 hours ago" [ref=e334]:
+                    - cell "sidecar, (Directory)" [ref=e335]:
+                      - generic [ref=e336]:
+                        - img [ref=e337]
+                        - link "sidecar, (Directory)" [ref=e342] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/sidecar
+                          - text: sidecar
+                    - cell "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e343]:
+                      - link "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e346] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/da49d99f9bd2b711c514d60fc5647f3fa047a290
+                    - cell "Oct 29, 20265 hours ago" [ref=e347]:
+                      - generic [ref=e348]: Oct 29, 20265 hours ago
+                  - row "src, (Directory) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e349]:
+                    - cell "src, (Directory)" [ref=e350]:
+                      - generic [ref=e351]:
+                        - img [ref=e352]
+                        - link "src, (Directory)" [ref=e357] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/tree/main/src
+                          - text: src
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e358]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e361] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e362]:
+                      - generic [ref=e363]: Oct 29, 202624 minutes ago
+                  - row ".env.example, (File) Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same… Oct 29, 20261 hour ago" [ref=e364]:
+                    - cell ".env.example, (File)" [ref=e365]:
+                      - generic [ref=e366]:
+                        - img [ref=e367]
+                        - link ".env.example, (File)" [ref=e372] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/.env.example
+                          - text: .env.example
+                    - cell "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e373]:
+                      - link "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e376] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/8c01981a02948140f189e0326ab0ba8d551778dd
+                    - cell "Oct 29, 20261 hour ago" [ref=e377]:
+                      - generic [ref=e378]: Oct 29, 20261 hour ago
+                  - 'row ".gitattributes, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e379]':
+                    - cell ".gitattributes, (File)" [ref=e380]:
+                      - generic [ref=e381]:
+                        - img [ref=e382]
+                        - link ".gitattributes, (File)" [ref=e387] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/.gitattributes
+                          - text: .gitattributes
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e388]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e391] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e392]:
+                      - generic [ref=e393]: Sep 17, 2026last month
+                  - row ".gitignore, (File) Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same… Oct 29, 20261 hour ago" [ref=e394]:
+                    - cell ".gitignore, (File)" [ref=e395]:
+                      - generic [ref=e396]:
+                        - img [ref=e397]
+                        - link ".gitignore, (File)" [ref=e402] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/.gitignore
+                          - text: .gitignore
+                    - cell "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e403]:
+                      - link "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e406] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/8c01981a02948140f189e0326ab0ba8d551778dd
+                    - cell "Oct 29, 20261 hour ago" [ref=e407]:
+                      - generic [ref=e408]: Oct 29, 20261 hour ago
+                  - row "AGENTS.md, (File) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e409]:
+                    - cell "AGENTS.md, (File)" [ref=e410]:
+                      - generic [ref=e411]:
+                        - img [ref=e412]
+                        - link "AGENTS.md, (File)" [ref=e417] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/AGENTS.md
+                          - text: AGENTS.md
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e418]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e421] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e422]:
+                      - generic [ref=e423]: Oct 29, 202624 minutes ago
+                  - row "CLAUDE.md, (File) README and docs for the Claude Code harness; demo GIF, poster and scr… Oct 29, 20265 hours ago" [ref=e424]:
+                    - cell "CLAUDE.md, (File)" [ref=e425]:
+                      - generic [ref=e426]:
+                        - img [ref=e427]
+                        - link "CLAUDE.md, (File)" [ref=e432] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/CLAUDE.md
+                          - text: CLAUDE.md
+                    - cell "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e433]:
+                      - link "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e436] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/da49d99f9bd2b711c514d60fc5647f3fa047a290
+                    - cell "Oct 29, 20265 hours ago" [ref=e437]:
+                      - generic [ref=e438]: Oct 29, 20265 hours ago
+                  - row "CONTRIBUTING.md, (File) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e439]:
+                    - cell "CONTRIBUTING.md, (File)" [ref=e440]:
+                      - generic [ref=e441]:
+                        - img [ref=e442]
+                        - link "CONTRIBUTING.md, (File)" [ref=e447] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/CONTRIBUTING.md
+                          - text: CONTRIBUTING.md
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e448]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e451] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e452]:
+                      - generic [ref=e453]: Oct 29, 202624 minutes ago
+                  - row "LICENSE, (File) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e454]:
+                    - cell "LICENSE, (File)" [ref=e455]:
+                      - generic [ref=e456]:
+                        - img [ref=e457]
+                        - link "LICENSE, (File)" [ref=e462] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/LICENSE
+                          - text: LICENSE
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e463]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e466] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e467]:
+                      - generic [ref=e468]: Oct 29, 202624 minutes ago
+                  - row "NEW_ARCHITECTURE.md, (File) README and docs for the Claude Code harness; demo GIF, poster and scr… Oct 29, 20265 hours ago" [ref=e469]:
+                    - cell "NEW_ARCHITECTURE.md, (File)" [ref=e470]:
+                      - generic [ref=e471]:
+                        - img [ref=e472]
+                        - link "NEW_ARCHITECTURE.md, (File)" [ref=e477] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/NEW_ARCHITECTURE.md
+                          - text: NEW_ARCHITECTURE.md
+                    - cell "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e478]:
+                      - link "README and docs for the Claude Code harness; demo GIF, poster and scr…" [ref=e481] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/da49d99f9bd2b711c514d60fc5647f3fa047a290
+                    - cell "Oct 29, 20265 hours ago" [ref=e482]:
+                      - generic [ref=e483]: Oct 29, 20265 hours ago
+                  - 'row "README.md, (File) README: a tour of the real app, cut from the promo video Oct 29, 2026now" [ref=e484]':
+                    - cell "README.md, (File)" [ref=e485]:
+                      - generic [ref=e486]:
+                        - img [ref=e487]
+                        - link "README.md, (File)" [ref=e492] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/README.md
+                          - text: README.md
+                    - 'cell "README: a tour of the real app, cut from the promo video" [ref=e493]':
+                      - 'link "README: a tour of the real app, cut from the promo video" [ref=e496] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/7069e0391959c01caac2f81a017ffe671041346d
+                    - cell "Oct 29, 2026now" [ref=e497]:
+                      - generic [ref=e498]: Oct 29, 2026now
+                  - 'row "electron.vite.config.ts, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e499]':
+                    - cell "electron.vite.config.ts, (File)" [ref=e500]:
+                      - generic [ref=e501]:
+                        - img [ref=e502]
+                        - link "electron.vite.config.ts, (File)" [ref=e507] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/electron.vite.config.ts
+                          - text: electron.vite.config.ts
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e508]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e511] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e512]:
+                      - generic [ref=e513]: Sep 17, 2026last month
+                  - row "package.json, (File) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e514]:
+                    - cell "package.json, (File)" [ref=e515]:
+                      - generic [ref=e516]:
+                        - img [ref=e517]
+                        - link "package.json, (File)" [ref=e522] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/package.json
+                          - text: package.json
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e523]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e526] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e527]:
+                      - generic [ref=e528]: Oct 29, 202624 minutes ago
+                  - row "pnpm-lock.yaml, (File) Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same… Oct 29, 20261 hour ago" [ref=e529]:
+                    - cell "pnpm-lock.yaml, (File)" [ref=e530]:
+                      - generic [ref=e531]:
+                        - img [ref=e532]
+                        - link "pnpm-lock.yaml, (File)" [ref=e537] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/pnpm-lock.yaml
+                          - text: pnpm-lock.yaml
+                    - cell "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e538]:
+                      - link "Hosted voices (ElevenLabs, Fish Audio, Inworld, Qwen) behind the same…" [ref=e541] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/8c01981a02948140f189e0326ab0ba8d551778dd
+                    - cell "Oct 29, 20261 hour ago" [ref=e542]:
+                      - generic [ref=e543]: Oct 29, 20261 hour ago
+                  - row "proxies.example.txt, (File) Rename to Voice Agent Harness; README rebuilt; the model knows its vo… Oct 29, 202624 minutes ago" [ref=e544]:
+                    - cell "proxies.example.txt, (File)" [ref=e545]:
+                      - generic [ref=e546]:
+                        - img [ref=e547]
+                        - link "proxies.example.txt, (File)" [ref=e552] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/proxies.example.txt
+                          - text: proxies.example.txt
+                    - cell "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e553]:
+                      - link "Rename to Voice Agent Harness; README rebuilt; the model knows its vo…" [ref=e556] [cursor=pointer]:
+                        - /url: /nodeblackbox/voice-agent-harness/commit/799fbcd8971c295efc787dd40fc37abeecda2aa2
+                    - cell "Oct 29, 202624 minutes ago" [ref=e557]:
+                      - generic [ref=e558]: Oct 29, 202624 minutes ago
+                  - 'row "tsconfig.json, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e559]':
+                    - cell "tsconfig.json, (File)" [ref=e560]:
+                      - generic [ref=e561]:
+                        - img [ref=e562]
+                        - link "tsconfig.json, (File)" [ref=e567] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/tsconfig.json
+                          - text: tsconfig.json
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e568]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e571] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e572]:
+                      - generic [ref=e573]: Sep 17, 2026last month
+                  - 'row "tsconfig.node.json, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e574]':
+                    - cell "tsconfig.node.json, (File)" [ref=e575]:
+                      - generic [ref=e576]:
+                        - img [ref=e577]
+                        - link "tsconfig.node.json, (File)" [ref=e582] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/tsconfig.node.json
+                          - text: tsconfig.node.json
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e583]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e586] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e587]:
+                      - generic [ref=e588]: Sep 17, 2026last month
+                  - 'row "tsconfig.web.json, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e589]':
+                    - cell "tsconfig.web.json, (File)" [ref=e590]:
+                      - generic [ref=e591]:
+                        - img [ref=e592]
+                        - link "tsconfig.web.json, (File)" [ref=e597] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/tsconfig.web.json
+                          - text: tsconfig.web.json
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e598]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e601] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e602]:
+                      - generic [ref=e603]: Sep 17, 2026last month
+                  - 'row "vitest.config.ts, (File) Voice Agent: Electron + TypeScript desktop voice assistant Sep 17, 2026last month" [ref=e604]':
+                    - cell "vitest.config.ts, (File)" [ref=e605]:
+                      - generic [ref=e606]:
+                        - img [ref=e607]
+                        - link "vitest.config.ts, (File)" [ref=e612] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/vitest.config.ts
+                          - text: vitest.config.ts
+                    - 'cell "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e613]':
+                      - 'link "Voice Agent: Electron + TypeScript desktop voice assistant" [ref=e616] [cursor=pointer]':
+                        - /url: /nodeblackbox/voice-agent-harness/commit/0a75785c439a705c07ecfbe6b25d60f571efe5d4
+                    - cell "Sep 17, 2026last month" [ref=e617]:
+                      - generic [ref=e618]: Sep 17, 2026last month
+            - generic [ref=e620]:
+              - generic [ref=e621]:
+                - heading "Repository files navigation" [level=2] [ref=e622]
+                - navigation "Repository files" [ref=e623]:
+                  - list [ref=e624]:
+                    - listitem [ref=e625]:
+                      - link "README" [ref=e626] [cursor=pointer]:
+                        - /url: "#"
+                        - img [ref=e628]
+                        - generic [ref=e630]: README
+                    - listitem [ref=e631]:
+                      - link "Contributing" [ref=e632] [cursor=pointer]:
+                        - /url: "#"
+                        - img [ref=e634]
+                        - generic [ref=e636]: Contributing
+                    - listitem [ref=e637]:
+                      - link "MIT license" [ref=e638] [cursor=pointer]:
+                        - /url: "#"
+                        - img [ref=e640]
+                        - generic [ref=e642]: MIT license
+                - button "Outline" [ref=e643] [cursor=pointer]:
+                  - img [ref=e644]
+              - article [ref=e647]:
+                - generic [ref=e648]:
+                  - 'link "Voice Agent Harness: a harness for Claude Code" [ref=e649] [cursor=pointer]':
+                    - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/banner.jpg
+                    - 'img "Voice Agent Harness: a harness for Claude Code" [ref=e650]'
+                  - generic [ref=e651]:
+                    - heading "Voice Agent Harness" [level=1] [ref=e652]
+                    - 'link "Permalink: Voice Agent Harness" [ref=e653] [cursor=pointer]':
+                      - /url: "#voice-agent-harness"
+                      - img [ref=e654]
+                  - generic [ref=e656]:
+                    - heading "Run your Claude Code sessions by voice." [level=3] [ref=e657]
+                    - 'link "Permalink: Run your Claude Code sessions by voice." [ref=e658] [cursor=pointer]':
+                      - /url: "#run-your-claude-code-sessions-by-voice"
+                      - img [ref=e659]
+                  - paragraph [ref=e661]:
+                    - text: Talk to one agent. It starts and steers every coding session in parallel, asks you out loud before anything risky,
+                    - text: and tells you when they're done. Built on the Claude Agent SDK, with a full voice loop of its own.
+                  - paragraph [ref=e662]:
+                    - link "CI" [ref=e663] [cursor=pointer]:
+                      - /url: https://github.com/nodeblackbox/voice-agent-harness/actions/workflows/ci.yml
+                      - img "CI" [ref=e664]
+                    - link "Claude Agent SDK" [ref=e665] [cursor=pointer]:
+                      - /url: https://camo.githubusercontent.com/2fc1b9c65eb5149074723be4993d9f5526a8f1a82c8d35c475ebf33eb1277243/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f436c617564655f4167656e745f53444b2d4439373735373f6c6f676f3d616e7468726f706963266c6f676f436f6c6f723d7768697465
+                      - img "Claude Agent SDK" [ref=e666]
+                    - link "Electron" [ref=e667] [cursor=pointer]:
+                      - /url: https://camo.githubusercontent.com/db8987b6f73389379450ef5a45784dcc4c4311b041f65676a82191e457103ae0/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f456c656374726f6e2d34342d3437383438463f6c6f676f3d656c656374726f6e266c6f676f436f6c6f723d7768697465
+                      - img "Electron" [ref=e668]
+                    - link "React" [ref=e669] [cursor=pointer]:
+                      - /url: https://camo.githubusercontent.com/5db4de9dcd72e7b8e95fe25f33f5520c571e9c3f93522d691a10cff804fb795d/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f52656163742d31392d3631444146423f6c6f676f3d7265616374266c6f676f436f6c6f723d626c61636b
+                      - img "React" [ref=e670]
+                    - link "TypeScript" [ref=e671] [cursor=pointer]:
+                      - /url: https://camo.githubusercontent.com/284bb1f372759e321966b5711b3edb087b9fd971f2a06d8e6dbd886db85ae07f/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f547970655363726970742d352e392d3331373843363f6c6f676f3d74797065736372697074266c6f676f436f6c6f723d7768697465
+                      - img "TypeScript" [ref=e672]
+                    - link "Python" [ref=e673] [cursor=pointer]:
+                      - /url: https://camo.githubusercontent.com/e7716dbbb101baaff85724da7435b8059c4585b3988b6f7f91a9c29f5d278a7f/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f507974686f6e2d332e31312d3337373641423f6c6f676f3d707974686f6e266c6f676f436f6c6f723d7768697465
+                      - img "Python" [ref=e674]
+                    - 'link "License: MIT" [ref=e675] [cursor=pointer]':
+                      - /url: https://camo.githubusercontent.com/04f64fa424c7a27558c1cc30199ff7a64baf8f430efb9eab62ccef532ba9e009/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f4c6963656e73652d4d49542d344144453830
+                      - 'img "License: MIT" [ref=e676]'
+                  - paragraph [ref=e677]:
+                    - link "The tour" [ref=e678] [cursor=pointer]:
+                      - /url: "#the-tour"
+                      - strong [ref=e679]: The tour
+                    - text: ·
+                    - link "Features" [ref=e680] [cursor=pointer]:
+                      - /url: "#everything-else-in-the-box"
+                      - strong [ref=e681]: Features
+                    - text: ·
+                    - link "Quick start" [ref=e682] [cursor=pointer]:
+                      - /url: "#quick-start"
+                      - strong [ref=e683]: Quick start
+                    - text: ·
+                    - link "How it works" [ref=e684] [cursor=pointer]:
+                      - /url: "#how-it-works"
+                      - strong [ref=e685]: How it works
+                    - text: ·
+                    - link "Docs" [ref=e686] [cursor=pointer]:
+                      - /url: "#documentation"
+                      - strong [ref=e687]: Docs
+                  - 'link "Highlights: four sessions spun up by voice, a live timeline, a spoken status update, a question answered out loud, a plan approved, a live preview, the payoff" [ref=e689] [cursor=pointer]':
+                    - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/hero.gif
+                    - 'img "Highlights: four sessions spun up by voice, a live timeline, a spoken status update, a question answered out loud, a plan approved, a live preview, the payoff" [ref=e690]'
+                  - paragraph [ref=e691]:
+                    - subscript [ref=e692]: "Thirty seconds of the real app: spin up four sessions, watch one work, ask how it's going, answer its question, approve a plan, preview the result."
+                - generic [ref=e693]:
+                  - heading "Why" [level=2] [ref=e694]
+                  - 'link "Permalink: Why" [ref=e695] [cursor=pointer]':
+                    - /url: "#why"
+                    - img [ref=e696]
+                - paragraph [ref=e698]:
+                  - text: Running four Claude Code sessions sounds fast, until you are the one switching tabs. Which one finished? Which one has been waiting on you for ten minutes? That is the
+                  - strong [ref=e699]: context-switching tax
+                  - text: ", and it eats the time the agents were supposed to save."
+                - paragraph [ref=e700]: "Voice Agent Harness is the fix I wanted: one agent you talk to. It spins the sessions up, queues your follow-ups, answers \"how's the login fix going?\" in a sentence, and only interrupts you when a session genuinely needs a decision. You hand off the work, do something else, and come back to review the results."
+                - table [ref=e702]:
+                  - rowgroup [ref=e703]:
+                    - 'row "Four terminals, one person switching between them Before: four terminals and you, switching tabs. By hand the sessions run one after another; with the harness they run side by side After: the sessions run side by side while you do something else." [ref=e704]':
+                      - 'cell "Four terminals, one person switching between them Before: four terminals and you, switching tabs." [ref=e705]':
+                        - link "Four terminals, one person switching between them" [ref=e706] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/problem.jpg
+                          - img "Four terminals, one person switching between them" [ref=e707]
+                        - subscript [ref=e708]: "Before: four terminals and you, switching tabs."
+                      - 'cell "By hand the sessions run one after another; with the harness they run side by side After: the sessions run side by side while you do something else." [ref=e709]':
+                        - link "By hand the sessions run one after another; with the harness they run side by side" [ref=e710] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/payoff-still.jpg
+                          - img "By hand the sessions run one after another; with the harness they run side by side" [ref=e711]
+                        - subscript [ref=e712]: "After: the sessions run side by side while you do something else."
+                - generic [ref=e713]:
+                  - heading "The tour" [level=2] [ref=e714]
+                  - 'link "Permalink: The tour" [ref=e715] [cursor=pointer]':
+                    - /url: "#the-tour"
+                    - img [ref=e716]
+                - paragraph [ref=e718]: Every clip below is the real app, cut from the two-minute promo.
+                - table [ref=e720]:
+                  - rowgroup [ref=e721]:
+                    - 'row "Four Claude Code sessions starting from one spoken sentence 1 · Spin up sessions by voice Permalink: 1 · Spin up sessions by voice \"Spin up four sessions: a pricing page, a users API, fix the login test, and update the README.\" Each one is a real Claude Code session in its own folder, and they all work at the same time. Say \"all\" to reach every session at once." [ref=e722]':
+                      - cell "Four Claude Code sessions starting from one spoken sentence" [ref=e723]:
+                        - link "Four Claude Code sessions starting from one spoken sentence" [ref=e725] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/deploy.gif
+                          - img "Four Claude Code sessions starting from one spoken sentence" [ref=e726]
+                      - 'cell "1 · Spin up sessions by voice Permalink: 1 · Spin up sessions by voice \"Spin up four sessions: a pricing page, a users API, fix the login test, and update the README.\" Each one is a real Claude Code session in its own folder, and they all work at the same time. Say \"all\" to reach every session at once." [ref=e727]':
+                        - generic [ref=e728]:
+                          - heading "1 · Spin up sessions by voice" [level=3] [ref=e729]
+                          - 'link "Permalink: 1 · Spin up sessions by voice" [ref=e730] [cursor=pointer]':
+                            - /url: "#1--spin-up-sessions-by-voice"
+                            - img [ref=e731]
+                        - paragraph [ref=e733]:
+                          - emphasis [ref=e734]: "\"Spin up four sessions: a pricing page, a users API, fix the login test, and update the README.\""
+                        - paragraph [ref=e735]: Each one is a real Claude Code session in its own folder, and they all work at the same time. Say "all" to reach every session at once.
+                    - 'row "2 · Watch it work Permalink: 2 · Watch it work Open any session and its timeline is live: shell commands render as a terminal, edits as diffs, to-do lists as checklists, plans as Markdown. A side panel tracks the plan''s progress and every file changed. A session''s live timeline with terminal output, a diff and a task list" [ref=e736]':
+                      - 'cell "2 · Watch it work Permalink: 2 · Watch it work Open any session and its timeline is live: shell commands render as a terminal, edits as diffs, to-do lists as checklists, plans as Markdown. A side panel tracks the plan''s progress and every file changed." [ref=e737]':
+                        - generic [ref=e738]:
+                          - heading "2 · Watch it work" [level=3] [ref=e739]
+                          - 'link "Permalink: 2 · Watch it work" [ref=e740] [cursor=pointer]':
+                            - /url: "#2--watch-it-work"
+                            - img [ref=e741]
+                        - paragraph [ref=e743]: "Open any session and its timeline is live: shell commands render as a terminal, edits as diffs, to-do lists as checklists, plans as Markdown. A side panel tracks the plan's progress and every file changed."
+                      - cell "A session's live timeline with terminal output, a diff and a task list" [ref=e744]:
+                        - link "A session's live timeline with terminal output, a diff and a task list" [ref=e746] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/activity.gif
+                          - img "A session's live timeline with terminal output, a diff and a task list" [ref=e747]
+                    - 'row "A follow-up queued by voice while the session keeps working 3 · Steer while it works Permalink: 3 · Steer while it works \"Oh, and add rate limiting to the API.\" The follow-up is queued and runs when the current task finishes. Or stop the session and redirect it, by voice or with a click." [ref=e748]':
+                      - cell "A follow-up queued by voice while the session keeps working" [ref=e749]:
+                        - link "A follow-up queued by voice while the session keeps working" [ref=e751] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/steer.gif
+                          - img "A follow-up queued by voice while the session keeps working" [ref=e752]
+                      - 'cell "3 · Steer while it works Permalink: 3 · Steer while it works \"Oh, and add rate limiting to the API.\" The follow-up is queued and runs when the current task finishes. Or stop the session and redirect it, by voice or with a click." [ref=e753]':
+                        - generic [ref=e754]:
+                          - heading "3 · Steer while it works" [level=3] [ref=e755]
+                          - 'link "Permalink: 3 · Steer while it works" [ref=e756] [cursor=pointer]':
+                            - /url: "#3--steer-while-it-works"
+                            - img [ref=e757]
+                        - paragraph [ref=e759]:
+                          - emphasis [ref=e760]: "\"Oh, and add rate limiting to the API.\""
+                          - text: The follow-up is queued and runs when the current task finishes. Or stop the session and redirect it, by voice or with a click.
+                    - 'row "4 · Ask how it''s going Permalink: 4 · Ask how it''s going \"Hey, how''s the login fix going?\" gets one spoken sentence: \"Found the bug, an expired token check. All twelve tests pass now.\" No scrolling through logs. The voice model sees a one-line brief per session and fetches details only when you ask. A spoken status update about the login fix session" [ref=e761]':
+                      - 'cell "4 · Ask how it''s going Permalink: 4 · Ask how it''s going \"Hey, how''s the login fix going?\" gets one spoken sentence: \"Found the bug, an expired token check. All twelve tests pass now.\" No scrolling through logs. The voice model sees a one-line brief per session and fetches details only when you ask." [ref=e762]':
+                        - generic [ref=e763]:
+                          - heading "4 · Ask how it's going" [level=3] [ref=e764]
+                          - 'link "Permalink: 4 · Ask how it''s going" [ref=e765] [cursor=pointer]':
+                            - /url: "#4--ask-how-its-going"
+                            - img [ref=e766]
+                        - paragraph [ref=e768]:
+                          - emphasis [ref=e769]: "\"Hey, how's the login fix going?\""
+                          - text: "gets one spoken sentence:"
+                          - emphasis [ref=e770]: "\"Found the bug, an expired token check. All twelve tests pass now.\""
+                          - text: No scrolling through logs. The voice model sees a one-line brief per session and fetches details only when you ask.
+                      - cell "A spoken status update about the login fix session" [ref=e771]:
+                        - link "A spoken status update about the login fix session" [ref=e773] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/status.gif
+                          - img "A spoken status update about the login fix session" [ref=e774]
+                    - 'row "A session asks which prices to show; the answer is given out loud 5 · It asks, you decide Permalink: 5 · It asks, you decide When a session needs a decision, it asks you out loud with numbered options. \"The third one.\" A command that needs approval is a spoken yes or no." [ref=e775]':
+                      - cell "A session asks which prices to show; the answer is given out loud" [ref=e776]:
+                        - link "A session asks which prices to show; the answer is given out loud" [ref=e778] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/question.gif
+                          - img "A session asks which prices to show; the answer is given out loud" [ref=e779]
+                      - 'cell "5 · It asks, you decide Permalink: 5 · It asks, you decide When a session needs a decision, it asks you out loud with numbered options. \"The third one.\" A command that needs approval is a spoken yes or no." [ref=e780]':
+                        - generic [ref=e781]:
+                          - heading "5 · It asks, you decide" [level=3] [ref=e782]
+                          - 'link "Permalink: 5 · It asks, you decide" [ref=e783] [cursor=pointer]':
+                            - /url: "#5--it-asks-you-decide"
+                            - img [ref=e784]
+                        - paragraph [ref=e786]:
+                          - text: When a session needs a decision, it asks you out loud with numbered options.
+                          - emphasis [ref=e787]: "\"The third one.\""
+                          - text: A command that needs approval is a spoken yes or no.
+                    - 'row "6 · Approve plans, choose how much it asks Permalink: 6 · Approve plans, choose how much it asks \"README has a plan ready. Want to approve it?\" \"Yep, go ahead.\" Each session runs in one of four modes: Plan (plans first, waits for your sign-off), Ask (every command checks with you), Auto (just works, fenced to its folder), Bypass (no prompts). A plan approved by voice The four session modes: Plan, Ask, Auto, Bypass" [ref=e788]':
+                      - 'cell "6 · Approve plans, choose how much it asks Permalink: 6 · Approve plans, choose how much it asks \"README has a plan ready. Want to approve it?\" \"Yep, go ahead.\" Each session runs in one of four modes: Plan (plans first, waits for your sign-off), Ask (every command checks with you), Auto (just works, fenced to its folder), Bypass (no prompts)." [ref=e789]':
+                        - generic [ref=e790]:
+                          - heading "6 · Approve plans, choose how much it asks" [level=3] [ref=e791]
+                          - 'link "Permalink: 6 · Approve plans, choose how much it asks" [ref=e792] [cursor=pointer]':
+                            - /url: "#6--approve-plans-choose-how-much-it-asks"
+                            - img [ref=e793]
+                        - paragraph [ref=e795]:
+                          - emphasis [ref=e796]: "\"README has a plan ready. Want to approve it?\" \"Yep, go ahead.\""
+                        - paragraph [ref=e797]:
+                          - text: "Each session runs in one of four modes:"
+                          - strong [ref=e798]: Plan
+                          - text: (plans first, waits for your sign-off),
+                          - strong [ref=e799]: Ask
+                          - text: (every command checks with you),
+                          - strong [ref=e800]: Auto
+                          - text: (just works, fenced to its folder),
+                          - strong [ref=e801]: Bypass
+                          - text: (no prompts).
+                      - 'cell "A plan approved by voice The four session modes: Plan, Ask, Auto, Bypass" [ref=e802]':
+                        - link "A plan approved by voice" [ref=e804] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/approve.gif
+                          - img "A plan approved by voice" [ref=e805]
+                        - 'link "The four session modes: Plan, Ask, Auto, Bypass" [ref=e807] [cursor=pointer]':
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/modes.gif
+                          - 'img "The four session modes: Plan, Ask, Auto, Bypass" [ref=e808]'
+                    - 'row "Reviewing changed files and a live preview of the built page 7 · Review the result Permalink: 7 · Review the result Every file it changed, marked added or modified, with viewers for code, Markdown, images, video, audio and PDF. Web pages it builds get a live preview at desktop, tablet and phone widths." [ref=e809]':
+                      - cell "Reviewing changed files and a live preview of the built page" [ref=e810]:
+                        - link "Reviewing changed files and a live preview of the built page" [ref=e812] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/review.gif
+                          - img "Reviewing changed files and a live preview of the built page" [ref=e813]
+                      - 'cell "7 · Review the result Permalink: 7 · Review the result Every file it changed, marked added or modified, with viewers for code, Markdown, images, video, audio and PDF. Web pages it builds get a live preview at desktop, tablet and phone widths." [ref=e814]':
+                        - generic [ref=e815]:
+                          - heading "7 · Review the result" [level=3] [ref=e816]
+                          - 'link "Permalink: 7 · Review the result" [ref=e817] [cursor=pointer]':
+                            - /url: "#7--review-the-result"
+                            - img [ref=e818]
+                        - paragraph [ref=e820]: Every file it changed, marked added or modified, with viewers for code, Markdown, images, video, audio and PDF. Web pages it builds get a live preview at desktop, tablet and phone widths.
+                    - 'row "8 · Continue any session Permalink: 8 · Continue any session It lists the Claude Code sessions saved on your machine from the terminal and the IDE, and continues any of them here, on a copy. The original stays untouched. The list of Claude Code sessions started in the terminal and IDE" [ref=e821]':
+                      - 'cell "8 · Continue any session Permalink: 8 · Continue any session It lists the Claude Code sessions saved on your machine from the terminal and the IDE, and continues any of them here, on a copy. The original stays untouched." [ref=e822]':
+                        - generic [ref=e823]:
+                          - heading "8 · Continue any session" [level=3] [ref=e824]
+                          - 'link "Permalink: 8 · Continue any session" [ref=e825] [cursor=pointer]':
+                            - /url: "#8--continue-any-session"
+                            - img [ref=e826]
+                        - paragraph [ref=e828]: It lists the Claude Code sessions saved on your machine from the terminal and the IDE, and continues any of them here, on a copy. The original stays untouched.
+                      - cell "The list of Claude Code sessions started in the terminal and IDE" [ref=e829]:
+                        - link "The list of Claude Code sessions started in the terminal and IDE" [ref=e831] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/resume.gif
+                          - img "The list of Claude Code sessions started in the terminal and IDE" [ref=e832]
+                    - 'row "A command outside the session''s folder waits for a yes or no 9 · Fenced and safe Permalink: 9 · Fenced and safe Each session is fenced to its own folder. Anything outside it, any delete, any push, asks you first. Machine-level commands are refused in every mode. Sessions run on your Claude login, never on an API key." [ref=e833]':
+                      - cell "A command outside the session's folder waits for a yes or no" [ref=e834]:
+                        - link "A command outside the session's folder waits for a yes or no" [ref=e836] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/fence.gif
+                          - img "A command outside the session's folder waits for a yes or no" [ref=e837]
+                      - 'cell "9 · Fenced and safe Permalink: 9 · Fenced and safe Each session is fenced to its own folder. Anything outside it, any delete, any push, asks you first. Machine-level commands are refused in every mode. Sessions run on your Claude login, never on an API key." [ref=e838]':
+                        - generic [ref=e839]:
+                          - heading "9 · Fenced and safe" [level=3] [ref=e840]
+                          - 'link "Permalink: 9 · Fenced and safe" [ref=e841] [cursor=pointer]':
+                            - /url: "#9--fenced-and-safe"
+                            - img [ref=e842]
+                        - paragraph [ref=e844]: Each session is fenced to its own folder. Anything outside it, any delete, any push, asks you first. Machine-level commands are refused in every mode. Sessions run on your Claude login, never on an API key.
+                    - 'row "10 · Ask it afterwards Permalink: 10 · Ask it afterwards \"What did it just do?\" gives a spoken digest of the last turn; \"read me the plan\" goes deeper. Session timelines are saved, so the answers survive a restart, and every voice turn is written to a structured trace you can open in the Diagnostics view. Stop babysitting terminals: hand off the work, come back to review" [ref=e845]':
+                      - 'cell "10 · Ask it afterwards Permalink: 10 · Ask it afterwards \"What did it just do?\" gives a spoken digest of the last turn; \"read me the plan\" goes deeper. Session timelines are saved, so the answers survive a restart, and every voice turn is written to a structured trace you can open in the Diagnostics view." [ref=e846]':
+                        - generic [ref=e847]:
+                          - heading "10 · Ask it afterwards" [level=3] [ref=e848]
+                          - 'link "Permalink: 10 · Ask it afterwards" [ref=e849] [cursor=pointer]':
+                            - /url: "#10--ask-it-afterwards"
+                            - img [ref=e850]
+                        - paragraph [ref=e852]:
+                          - emphasis [ref=e853]: "\"What did it just do?\""
+                          - text: gives a spoken digest of the last turn;
+                          - emphasis [ref=e854]: "\"read me the plan\""
+                          - text: goes deeper. Session timelines are saved, so the answers survive a restart, and every voice turn is written to a structured trace you can open in the Diagnostics view.
+                      - 'cell "Stop babysitting terminals: hand off the work, come back to review" [ref=e855]':
+                        - 'link "Stop babysitting terminals: hand off the work, come back to review" [ref=e857] [cursor=pointer]':
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/payoff.gif
+                          - 'img "Stop babysitting terminals: hand off the work, come back to review" [ref=e858]'
+                - generic [ref=e859]:
+                  - heading "Everything else in the box" [level=2] [ref=e860]
+                  - 'link "Permalink: Everything else in the box" [ref=e861] [cursor=pointer]':
+                    - /url: "#everything-else-in-the-box"
+                    - img [ref=e862]
+                - table [ref=e865]:
+                  - rowgroup [ref=e866]:
+                    - row [ref=e867]:
+                      - columnheader [ref=e868]
+                      - columnheader [ref=e869]
+                  - rowgroup [ref=e870]:
+                    - row "🎙️ A real voice loop Parakeet speech recognition on your GPU, an end-of-turn model instead of a silence timer, replies that start speaking after the first sentence, barge-in that cancels everything in about 100 ms, and \"go on\" that resumes from the exact cut." [ref=e871]:
+                      - cell "🎙️ A real voice loop" [ref=e872]:
+                        - text: 🎙️
+                        - strong [ref=e873]: A real voice loop
+                      - cell "Parakeet speech recognition on your GPU, an end-of-turn model instead of a silence timer, replies that start speaking after the first sentence, barge-in that cancels everything in about 100 ms, and \"go on\" that resumes from the exact cut." [ref=e874]
+                    - row "🔊 Any voice Edge TTS by default (free, keyless), Kokoro as the local fallback, or ElevenLabs, Fish Audio, Inworld and Qwen with their voices and models listed live in Settings. Expressive engines get [laughs]-style delivery cues from the model." [ref=e875]:
+                      - cell "🔊 Any voice" [ref=e876]:
+                        - text: 🔊
+                        - strong [ref=e877]: Any voice
+                      - cell "Edge TTS by default (free, keyless), Kokoro as the local fallback, or ElevenLabs, Fish Audio, Inworld and Qwen with their voices and models listed live in Settings. Expressive engines get [laughs]-style delivery cues from the model." [ref=e878]:
+                        - text: Edge TTS by default (free, keyless), Kokoro as the local fallback, or ElevenLabs, Fish Audio, Inworld and Qwen with their voices and models listed live in Settings. Expressive engines get
+                        - code [ref=e879]: "[laughs]"
+                        - text: "-style delivery cues from the model."
+                    - row "🧠 Any brain Anthropic, OpenAI, Groq, Google Gemini or xAI. Only providers you have a key for are offered, and a rate-limited or failing model falls through to the next one mid-turn." [ref=e880]:
+                      - cell "🧠 Any brain" [ref=e881]:
+                        - text: 🧠
+                        - strong [ref=e882]: Any brain
+                      - cell "Anthropic, OpenAI, Groq, Google Gemini or xAI. Only providers you have a key for are offered, and a rate-limited or failing model falls through to the next one mid-turn." [ref=e883]
+                    - row "🗂️ Memory and projects SQLite with full-text search, global and per-project, with a history and undo. Projects carry a folder, notes and a default prompt style." [ref=e884]:
+                      - cell "🗂️ Memory and projects" [ref=e885]:
+                        - text: 🗂️
+                        - strong [ref=e886]: Memory and projects
+                      - cell "SQLite with full-text search, global and per-project, with a history and undo. Projects carry a folder, notes and a default prompt style." [ref=e887]
+                    - row "🧩 Styles, skills, MCP Prompt styles drafted with AI, trigger-and-procedure skills, any MCP server (stdio or streamable HTTP) added from Settings." [ref=e888]:
+                      - cell "🧩 Styles, skills, MCP" [ref=e889]:
+                        - text: 🧩
+                        - strong [ref=e890]: Styles, skills, MCP
+                      - cell "Prompt styles drafted with AI, trigger-and-procedure skills, any MCP server (stdio or streamable HTTP) added from Settings." [ref=e891]
+                    - row "🔎 Local web search SearXNG started on demand, with web_search, read_page and research tools." [ref=e892]:
+                      - cell "🔎 Local web search" [ref=e893]:
+                        - text: 🔎
+                        - strong [ref=e894]: Local web search
+                      - cell "SearXNG started on demand, with web_search, read_page and research tools." [ref=e895]:
+                        - text: SearXNG started on demand, with
+                        - code [ref=e896]: web_search
+                        - text: ","
+                        - code [ref=e897]: read_page
+                        - text: and
+                        - code [ref=e898]: research
+                        - text: tools.
+                    - row "🎛️ Tuning and diagnostics Every timing parameter documented in-app, an advisor that reads your session and suggests values, a per-turn latency timeline." [ref=e899]:
+                      - cell "🎛️ Tuning and diagnostics" [ref=e900]:
+                        - text: 🎛️
+                        - strong [ref=e901]: Tuning and diagnostics
+                      - cell "Every timing parameter documented in-app, an advisor that reads your session and suggests values, a per-turn latency timeline." [ref=e902]
+                    - row "🌗 Light and dark Both themes, or follow the system." [ref=e903]:
+                      - cell "🌗 Light and dark" [ref=e904]:
+                        - text: 🌗
+                        - strong [ref=e905]: Light and dark
+                      - cell "Both themes, or follow the system." [ref=e906]
+                - table [ref=e908]:
+                  - rowgroup [ref=e909]:
+                    - 'row "The Claude Code view in the dark theme The Claude Code view: four sessions, one open on its timeline Asking about a session from the chat The chat: \"How''s the login fix going?\" answered from the session" [ref=e910]':
+                      - 'cell "The Claude Code view in the dark theme The Claude Code view: four sessions, one open on its timeline" [ref=e911]':
+                        - link "The Claude Code view in the dark theme" [ref=e912] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/screenshot-claude.png
+                          - img "The Claude Code view in the dark theme" [ref=e913]
+                        - subscript [ref=e914]: "The Claude Code view: four sessions, one open on its timeline"
+                      - 'cell "Asking about a session from the chat The chat: \"How''s the login fix going?\" answered from the session" [ref=e915]':
+                        - link "Asking about a session from the chat" [ref=e916] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/screenshot-chat.png
+                          - img "Asking about a session from the chat" [ref=e917]
+                        - subscript [ref=e918]: "The chat: \"How's the login fix going?\" answered from the session"
+                    - 'row "Voice output settings with Inworld selected Voice output: engine, model and voice listed live, cues, proxy The Claude Code view in the light theme The light theme" [ref=e919]':
+                      - 'cell "Voice output settings with Inworld selected Voice output: engine, model and voice listed live, cues, proxy" [ref=e920]':
+                        - link "Voice output settings with Inworld selected" [ref=e921] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/screenshot-voice.png
+                          - img "Voice output settings with Inworld selected" [ref=e922]
+                        - subscript [ref=e923]: "Voice output: engine, model and voice listed live, cues, proxy"
+                      - cell "The Claude Code view in the light theme The light theme" [ref=e924]:
+                        - link "The Claude Code view in the light theme" [ref=e925] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/media/screenshot-claude-light.png
+                          - img "The Claude Code view in the light theme" [ref=e926]
+                        - subscript [ref=e927]: The light theme
+                - generic [ref=e928]:
+                  - heading "Quick start" [level=2] [ref=e929]
+                  - 'link "Permalink: Quick start" [ref=e930] [cursor=pointer]':
+                    - /url: "#quick-start"
+                    - img [ref=e931]
+                - paragraph [ref=e933]:
+                  - strong [ref=e934]: "Requirements:"
+                  - text: Node.js 22.13+ and
+                  - link "pnpm" [ref=e935] [cursor=pointer]:
+                    - /url: https://pnpm.io
+                  - text: 10, plus one LLM API key (Anthropic, OpenAI, Groq, Gemini or xAI). Python 3.11 and
+                  - link "uv" [ref=e936] [cursor=pointer]:
+                    - /url: https://docs.astral.sh/uv/
+                  - text: for voice input; an NVIDIA GPU with a CUDA 12 driver makes it fast (CPU works). Claude Code sessions need a Claude login. Developed and tested on Windows 11; macOS and Linux are untested.
+                - generic [ref=e937]:
+                  - generic [ref=e938]:
+                    - text: git clone https://github.com/nodeblackbox/voice-agent-harness.git cd voice-agent-harness pnpm install copy .env.example .env
+                    - generic [ref=e939]: "# then add at least one API key (or paste it in Settings > Providers)"
+                    - text: pnpm dev
+                  - button "Copy code to clipboard" [ref=e941] [cursor=pointer]:
+                    - img [ref=e942]
+                - paragraph [ref=e945]: That is enough for typed chat, the Claude Code view, memory, projects and the Edge voice. Keys are read only by the Electron main process, and stored encrypted when pasted in Settings; they never reach the renderer.
+                - group [ref=e946]:
+                  - generic "Enable voice input" [ref=e947] [cursor=pointer]
+                - group [ref=e948]:
+                  - generic "Enable Claude Code sessions" [ref=e949] [cursor=pointer]
+                - group [ref=e950]:
+                  - generic "Pick a voice" [ref=e951] [cursor=pointer]
+                - generic [ref=e952]:
+                  - heading "Configuration" [level=2] [ref=e953]
+                  - 'link "Permalink: Configuration" [ref=e954] [cursor=pointer]':
+                    - /url: "#configuration"
+                    - img [ref=e955]
+                - paragraph [ref=e957]:
+                  - text: Everything lives in
+                  - code [ref=e958]: .env
+                  - text: (copied from
+                  - code [ref=e959]: .env.example
+                  - text: ). Keys pasted in
+                  - strong [ref=e960]: Settings → Providers
+                  - text: win over
+                  - code [ref=e961]: .env
+                  - text: .
+                - table [ref=e963]:
+                  - rowgroup [ref=e964]:
+                    - row "Variable Purpose" [ref=e965]:
+                      - columnheader "Variable" [ref=e966]
+                      - columnheader "Purpose" [ref=e967]
+                  - rowgroup [ref=e968]:
+                    - row "ANTHROPIC_API_KEY · OPENAI_API_KEY · GROQ_API_KEY · GOOGLE_GENERATIVE_AI_API_KEY · XAI_API_KEY At least one. GROQ_KEYS takes a list of Groq keys to rotate." [ref=e969]:
+                      - cell "ANTHROPIC_API_KEY · OPENAI_API_KEY · GROQ_API_KEY · GOOGLE_GENERATIVE_AI_API_KEY · XAI_API_KEY" [ref=e970]:
+                        - code [ref=e971]: ANTHROPIC_API_KEY
+                        - text: ·
+                        - code [ref=e972]: OPENAI_API_KEY
+                        - text: ·
+                        - code [ref=e973]: GROQ_API_KEY
+                        - text: ·
+                        - code [ref=e974]: GOOGLE_GENERATIVE_AI_API_KEY
+                        - text: ·
+                        - code [ref=e975]: XAI_API_KEY
+                      - cell "At least one. GROQ_KEYS takes a list of Groq keys to rotate." [ref=e976]:
+                        - text: At least one.
+                        - code [ref=e977]: GROQ_KEYS
+                        - text: takes a list of Groq keys to rotate.
+                    - row "ELEVENLABS_API_KEY · FISH_API_KEY · INWORLD_API_KEY · DASHSCOPE_API_KEY Hosted voices; each has *_VOICE_ID and *_MODEL defaults (QWEN_* for Qwen, plus DASHSCOPE_HOST for a workspace endpoint)." [ref=e978]:
+                      - cell "ELEVENLABS_API_KEY · FISH_API_KEY · INWORLD_API_KEY · DASHSCOPE_API_KEY" [ref=e979]:
+                        - code [ref=e980]: ELEVENLABS_API_KEY
+                        - text: ·
+                        - code [ref=e981]: FISH_API_KEY
+                        - text: ·
+                        - code [ref=e982]: INWORLD_API_KEY
+                        - text: ·
+                        - code [ref=e983]: DASHSCOPE_API_KEY
+                      - cell "Hosted voices; each has *_VOICE_ID and *_MODEL defaults (QWEN_* for Qwen, plus DASHSCOPE_HOST for a workspace endpoint)." [ref=e984]:
+                        - text: Hosted voices; each has
+                        - code [ref=e985]: "*_VOICE_ID"
+                        - text: and
+                        - code [ref=e986]: "*_MODEL"
+                        - text: defaults (
+                        - code [ref=e987]: QWEN_*
+                        - text: for Qwen, plus
+                        - code [ref=e988]: DASHSCOPE_HOST
+                        - text: for a workspace endpoint).
+                    - row "TTS_PROXY http://user:pass@host:port, switched on per engine in Settings." [ref=e989]:
+                      - cell "TTS_PROXY" [ref=e990]:
+                        - code [ref=e991]: TTS_PROXY
+                      - cell "http://user:pass@host:port, switched on per engine in Settings." [ref=e992]:
+                        - code [ref=e993]: http://user:pass@host:port
+                        - text: ", switched on per engine in Settings."
+                    - row "VA_PYTHON Python for the ear sidecar when it is not sidecar/.venv." [ref=e994]:
+                      - cell "VA_PYTHON" [ref=e995]:
+                        - code [ref=e996]: VA_PYTHON
+                      - cell "Python for the ear sidecar when it is not sidecar/.venv." [ref=e997]:
+                        - text: Python for the ear sidecar when it is not
+                        - code [ref=e998]: sidecar/.venv
+                        - text: .
+                    - row "RECORD_TRAINING_DATA · RECORD_DIR Opt-in voice-clone dataset capture (docs/TRAINING_RECORDING.md)." [ref=e999]:
+                      - cell "RECORD_TRAINING_DATA · RECORD_DIR" [ref=e1000]:
+                        - code [ref=e1001]: RECORD_TRAINING_DATA
+                        - text: ·
+                        - code [ref=e1002]: RECORD_DIR
+                      - cell "Opt-in voice-clone dataset capture (docs/TRAINING_RECORDING.md)." [ref=e1003]:
+                        - text: Opt-in voice-clone dataset capture (
+                        - link "docs/TRAINING_RECORDING.md" [ref=e1004] [cursor=pointer]:
+                          - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/TRAINING_RECORDING.md
+                        - text: ).
+                - paragraph [ref=e1005]:
+                  - text: Model, backup model, prompt style, voice, microphone, theme, session modes, workspace folder and every timing parameter are changed in-app under
+                  - strong [ref=e1006]: Settings
+                  - text: .
+                  - link "docs/SETUP.md" [ref=e1007] [cursor=pointer]:
+                    - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/SETUP.md
+                  - text: is the step-by-step version, with every download and where it lands.
+                - generic [ref=e1008]:
+                  - heading "Scripts" [level=2] [ref=e1009]
+                  - 'link "Permalink: Scripts" [ref=e1010] [cursor=pointer]':
+                    - /url: "#scripts"
+                    - img [ref=e1011]
+                - table [ref=e1014]:
+                  - rowgroup [ref=e1015]:
+                    - row "Command What it does" [ref=e1016]:
+                      - columnheader "Command" [ref=e1017]
+                      - columnheader "What it does" [ref=e1018]
+                  - rowgroup [ref=e1019]:
+                    - row "pnpm dev Electron + Vite with hot reload" [ref=e1020]:
+                      - cell "pnpm dev" [ref=e1021]:
+                        - code [ref=e1022]: pnpm dev
+                      - cell "Electron + Vite with hot reload" [ref=e1023]
+                    - row "pnpm build Production build into out/" [ref=e1024]:
+                      - cell "pnpm build" [ref=e1025]:
+                        - code [ref=e1026]: pnpm build
+                      - cell "Production build into out/" [ref=e1027]:
+                        - text: Production build into
+                        - code [ref=e1028]: out/
+                    - row "pnpm check Typecheck and the TypeScript test suite" [ref=e1029]:
+                      - cell "pnpm check" [ref=e1030]:
+                        - code [ref=e1031]: pnpm check
+                      - cell "Typecheck and the TypeScript test suite" [ref=e1032]
+                    - row "pnpm test · pnpm test:coverage · pnpm test:py Vitest (core, main, renderer) · with coverage · pytest for the sidecars, no GPU needed" [ref=e1033]:
+                      - cell "pnpm test · pnpm test:coverage · pnpm test:py" [ref=e1034]:
+                        - code [ref=e1035]: pnpm test
+                        - text: ·
+                        - code [ref=e1036]: pnpm test:coverage
+                        - text: ·
+                        - code [ref=e1037]: pnpm test:py
+                      - cell "Vitest (core, main, renderer) · with coverage · pytest for the sidecars, no GPU needed" [ref=e1038]
+                    - row "pnpm sidecar:install · pnpm searxng:install The Python ears and Kokoro · local web search from source" [ref=e1039]:
+                      - cell "pnpm sidecar:install · pnpm searxng:install" [ref=e1040]:
+                        - code [ref=e1041]: pnpm sidecar:install
+                        - text: ·
+                        - code [ref=e1042]: pnpm searxng:install
+                      - cell "The Python ears and Kokoro · local web search from source" [ref=e1043]
+                    - row "pnpm tts:latency -- --proxies proxies.txt Time to first audio for every voice you have a key for, direct and through each proxy" [ref=e1044]:
+                      - cell "pnpm tts:latency -- --proxies proxies.txt" [ref=e1045]:
+                        - code [ref=e1046]: pnpm tts:latency -- --proxies proxies.txt
+                      - cell "Time to first audio for every voice you have a key for, direct and through each proxy" [ref=e1047]
+                    - row "pnpm lab:* Runnable experiments against the real Claude Agent SDK, with findings in lab/" [ref=e1048]:
+                      - cell "pnpm lab:*" [ref=e1049]:
+                        - code [ref=e1050]: pnpm lab:*
+                      - cell "Runnable experiments against the real Claude Agent SDK, with findings in lab/" [ref=e1051]:
+                        - text: Runnable experiments against the real Claude Agent SDK, with findings in
+                        - code [ref=e1052]: lab/
+                - paragraph [ref=e1053]:
+                  - code [ref=e1054]: VA_USER_DATA=<dir>
+                  - text: before
+                  - code [ref=e1055]: pnpm dev
+                  - text: runs against a separate data folder.
+                  - code [ref=e1056]: VA_SAY
+                  - text: ","
+                  - code [ref=e1057]: VA_WAV
+                  - text: ","
+                  - code [ref=e1058]: VA_VIEW
+                  - text: and
+                  - code [ref=e1059]: VA_SCREENSHOT
+                  - text: drive the app for tests and screenshots (see
+                  - code [ref=e1060]: .env.example
+                  - text: ).
+                - generic [ref=e1061]:
+                  - heading "How it works" [level=2] [ref=e1062]
+                  - 'link "Permalink: How it works" [ref=e1063] [cursor=pointer]':
+                    - /url: "#how-it-works"
+                    - img [ref=e1064]
+                - generic [ref=e1066]:
+                  - code [ref=e1068]: "mic ─► renderer (16 kHz) ─ws─► ear sidecar: Silero VAD ─ Smart Turn v3.2 ─ Parakeet ─► text ─► agent core: prompt + memory + tools ─► LLM stream ─► SentenceChunker ─► voice engine ─► audio ─► claude_* tools ─► Claude Agent SDK sessions (one per folder, fenced) ─► digests, questions, \"done\" you talk over it ─► sidecar \"barge-in\" ─► audio stops, model and tools cancelled, the cut point is remembered"
+                  - button "Copy code to clipboard" [ref=e1070] [cursor=pointer]:
+                    - img [ref=e1071]
+                - paragraph [ref=e1074]: The brain stays in Electron, where it holds the keys, the memory and the Claude session manager. The ear sidecar is only ears, so it stays small and swappable. Every voice engine turns one sentence into audio behind the same interface, so streaming, barge-in, retries and the Kokoro fallback work for all of them. Each Claude Code session does its heavy work in its own context; the voice model sees a one-line brief per session and fetches details on demand, which is why it still answers in about a second after an hour of parallel sessions.
+                - table [ref=e1076]:
+                  - rowgroup [ref=e1077]:
+                    - row "Layer Tech" [ref=e1078]:
+                      - columnheader "Layer" [ref=e1079]
+                      - columnheader "Tech" [ref=e1080]
+                  - rowgroup [ref=e1081]:
+                    - row "Shell & UI Electron 44, React 19, Tailwind, Zustand" [ref=e1082]:
+                      - cell "Shell & UI" [ref=e1083]
+                      - cell "Electron 44, React 19, Tailwind, Zustand" [ref=e1084]
+                    - 'row "Agent core TypeScript with no Electron imports: Vercel AI SDK providers, prompt composition, turn runner, SQLite FTS5 memory" [ref=e1085]':
+                      - cell "Agent core" [ref=e1086]
+                      - 'cell "TypeScript with no Electron imports: Vercel AI SDK providers, prompt composition, turn runner, SQLite FTS5 memory" [ref=e1087]'
+                    - row "Claude Code Claude Agent SDK, per-session fence, Plan / Ask / Auto / Bypass modes, persisted timelines" [ref=e1088]:
+                      - cell "Claude Code" [ref=e1089]
+                      - cell "Claude Agent SDK, per-session fence, Plan / Ask / Auto / Bypass modes, persisted timelines" [ref=e1090]
+                    - row "Voice Python ear sidecar (Silero VAD, Smart Turn v3.2, Parakeet TDT 0.6B v2 on ONNX Runtime), Edge TTS, Kokoro-82M, ElevenLabs, Fish Audio, Inworld, Qwen-Audio TTS" [ref=e1091]:
+                      - cell "Voice" [ref=e1092]
+                      - cell "Python ear sidecar (Silero VAD, Smart Turn v3.2, Parakeet TDT 0.6B v2 on ONNX Runtime), Edge TTS, Kokoro-82M, ElevenLabs, Fish Audio, Inworld, Qwen-Audio TTS" [ref=e1093]
+                    - row "Models Anthropic, OpenAI, Groq, Google Gemini, xAI, streamed, with prompt caching on the stable half of the system prompt" [ref=e1094]:
+                      - cell "Models" [ref=e1095]
+                      - cell "Anthropic, OpenAI, Groq, Google Gemini, xAI, streamed, with prompt caching on the stable half of the system prompt" [ref=e1096]
+                    - row "Search & tools SearXNG (local), MCP servers (stdio and streamable HTTP), first-party tools" [ref=e1097]:
+                      - cell "Search & tools" [ref=e1098]
+                      - cell "SearXNG (local), MCP servers (stdio and streamable HTTP), first-party tools" [ref=e1099]
+                - generic [ref=e1100]:
+                  - heading "Documentation" [level=2] [ref=e1101]
+                  - 'link "Permalink: Documentation" [ref=e1102] [cursor=pointer]':
+                    - /url: "#documentation"
+                    - img [ref=e1103]
+                - list [ref=e1105]:
+                  - listitem [ref=e1106]:
+                    - link "Architecture" [ref=e1107] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/ARCHITECTURE.md
+                    - text: ": processes, the life of a turn, interruption, prompt composition, the error policy."
+                  - listitem [ref=e1108]:
+                    - link "Claude Code sessions" [ref=e1109] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/CLAUDE_SESSIONS.md
+                    - text: ": voice-managed sessions, modes, the fence, what the agent can tell you afterwards."
+                  - listitem [ref=e1110]:
+                    - link "Setup" [ref=e1111] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/SETUP.md
+                    - text: ": a fresh machine to a working install, every download and where it lands, troubleshooting."
+                  - listitem [ref=e1112]:
+                    - link "Extending" [ref=e1113] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/EXTENDING.md
+                    - text: ": add a provider, a voice, a tool, an MCP server, a style, a tuning parameter."
+                    - link "AGENTS.md" [ref=e1114] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/AGENTS.md
+                    - text: is the one-page map for coding agents.
+                  - listitem [ref=e1115]:
+                    - link "Tuning" [ref=e1116] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/TUNING.md
+                    - text: and
+                    - link "Debugging" [ref=e1117] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/DEBUGGING.md
+                    - text: ": every parameter, every trace event, the Diagnostics view."
+                  - listitem [ref=e1118]:
+                    - link "Training recording" [ref=e1119] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/docs/TRAINING_RECORDING.md
+                    - text: ": the opt-in voice-clone capture mode."
+                    - link "sidecar/PROTOCOL.md" [ref=e1120] [cursor=pointer]:
+                      - /url: /nodeblackbox/voice-agent-harness/blob/main/sidecar/PROTOCOL.md
+                    - text: is the ears' wire protocol.
+                - generic [ref=e1121]:
+                  - heading "Roadmap" [level=2] [ref=e1122]
+                  - 'link "Permalink: Roadmap" [ref=e1123] [cursor=pointer]':
+                    - /url: "#roadmap"
+                    - img [ref=e1124]
+                - list [ref=e1126]:
+                  - listitem [ref=e1127]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1128]
+                    - text: Packaged installer with the sidecars bundled (today you run from source).
+                  - listitem [ref=e1129]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1130]
+                    - text: "Playbooks for sessions: \"when X finishes, …\", auto-answer rules, stacked-prompt templates, image hand-off."
+                  - listitem [ref=e1131]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1132]
+                    - text: The agent itself as an MCP server.
+                  - listitem [ref=e1133]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1134]
+                    - text: Semantic memory behind the same
+                    - code [ref=e1135]: recall
+                    - text: "interface (today: FTS5 BM25)."
+                  - listitem [ref=e1136]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1137]
+                    - text: Streaming audio from the hosted voices instead of per-sentence buffers.
+                  - listitem [ref=e1138]:
+                    - checkbox "Incomplete task" [disabled] [ref=e1139]
+                    - text: macOS and Linux (the sidecar launcher and the fence's shell parsing are Windows-first).
+                - generic [ref=e1140]:
+                  - heading "Contributing" [level=2] [ref=e1141]
+                  - 'link "Permalink: Contributing" [ref=e1142] [cursor=pointer]':
+                    - /url: "#contributing"
+                    - img [ref=e1143]
+                - paragraph [ref=e1145]:
+                  - text: Issues and PRs are welcome. See
+                  - link "CONTRIBUTING.md" [ref=e1146] [cursor=pointer]:
+                    - /url: /nodeblackbox/voice-agent-harness/blob/main/CONTRIBUTING.md
+                  - text: . Please never commit
+                  - code [ref=e1147]: .env
+                  - text: or paste live keys into issues or logs.
+                - generic [ref=e1148]:
+                  - heading "License" [level=2] [ref=e1149]
+                  - 'link "Permalink: License" [ref=e1150] [cursor=pointer]':
+                    - /url: "#license"
+                    - img [ref=e1151]
+                - paragraph [ref=e1153]: MIT © 2026 Anas Nasseur
+        - generic [ref=e1156]:
+          - generic [ref=e1157]:
+            - heading "About" [level=2] [ref=e1158]
+            - paragraph [ref=e1159]: "A voice harness for Claude Code: talk to one agent, and it runs all your sessions in parallel, asks before it acts, and tells you when they're done."
+            - heading "Resources" [level=3] [ref=e1160]
+            - link "Readme" [ref=e1162] [cursor=pointer]:
+              - /url: "#readme-ov-file"
+              - img [ref=e1163]
+              - text: Readme
+            - link "MIT license" [ref=e1166] [cursor=pointer]:
+              - /url: "#MIT-1-ov-file"
+              - img [ref=e1167]
+              - text: MIT license
+            - heading "Contributing" [level=3] [ref=e1169]
+            - link "Contributing" [ref=e1171] [cursor=pointer]:
+              - /url: "#contributing-ov-file"
+              - img [ref=e1172]
+              - text: Contributing
+            - generic [ref=e1174]:
+              - link "Activity" [ref=e1177] [cursor=pointer]:
+                - /url: /nodeblackbox/voice-agent-harness/activity
+                - img [ref=e1178]
+                - text: Activity
+              - generic [ref=e1180]:
+                - heading "Stars" [level=3] [ref=e1181]
+                - generic [ref=e1183]:
+                  - img [ref=e1184]
+                  - strong [ref=e1186]: "0"
+                  - text: stars
+                - heading "Watchers" [level=3] [ref=e1187]
+                - generic [ref=e1189]:
+                  - img [ref=e1190]
+                  - strong [ref=e1192]: "0"
+                  - text: watching
+                - heading "Forks" [level=3] [ref=e1193]
+                - link "0 forks" [ref=e1195] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/forks
+                  - img [ref=e1196]
+                  - strong [ref=e1199]: "0"
+                  - text: forks
+            - link "Report repository" [ref=e1201] [cursor=pointer]:
+              - /url: /contact/report-content?content_url=https%3A%2F%2Fgithub.com%2Fnodeblackbox%2Fvoice-agent-harness&report=nodeblackbox+%28user%29
+          - generic [ref=e1202]:
+            - heading "Releases" [level=2] [ref=e1203]:
+              - link "Releases" [ref=e1205] [cursor=pointer]:
+                - /url: /nodeblackbox/voice-agent-harness/releases
+            - generic [ref=e1206]: No releases published
+          - generic [ref=e1207]:
+            - heading "Contributors (2)" [level=2] [ref=e1208]:
+              - generic [ref=e1209]:
+                - link "Contributors" [ref=e1210] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/graphs/contributors
+                - generic [ref=e1211]: "2"
+                - generic [ref=e1212]: (2)
+            - list [ref=e1213]:
+              - listitem [ref=e1214]:
+                - link "@nodeblackbox" [ref=e1215] [cursor=pointer]:
+                  - /url: /nodeblackbox
+                  - img "@nodeblackbox" [ref=e1216]
+                - generic "nodeblackbox NASA" [ref=e1217]:
+                  - link "nodeblackboxNASA" [ref=e1218] [cursor=pointer]:
+                    - /url: /nodeblackbox
+                    - strong [ref=e1219]: nodeblackbox
+                    - text: NASA
+              - listitem [ref=e1220]:
+                - link "@claude" [ref=e1221] [cursor=pointer]:
+                  - /url: /claude
+                  - img "@claude" [ref=e1222]
+                - generic "claude Claude" [ref=e1223]:
+                  - link "claudeClaude" [ref=e1224] [cursor=pointer]:
+                    - /url: /claude
+                    - strong [ref=e1225]: claude
+                    - text: Claude
+          - generic [ref=e1226]:
+            - heading "Languages" [level=2] [ref=e1227]
+            - generic [ref=e1229]:
+              - 'progressbar "TypeScript: 89.4%" [ref=e1230]'
+              - 'progressbar "Python: 9.1%" [ref=e1231]'
+              - 'progressbar "Other: 1.5%" [ref=e1232]'
+            - list [ref=e1233]:
+              - listitem [ref=e1234]:
+                - link "TypeScript 89.4%" [ref=e1235] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/search?l=typescript
+                  - generic [ref=e1237]: TypeScript
+                  - generic [ref=e1238]: 89.4%
+              - listitem [ref=e1239]:
+                - link "Python 9.1%" [ref=e1240] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/search?l=python
+                  - generic [ref=e1242]: Python
+                  - generic [ref=e1243]: 9.1%
+              - listitem [ref=e1244]:
+                - link "Other 1.5%" [ref=e1245] [cursor=pointer]:
+                  - /url: /nodeblackbox/voice-agent-harness/search?l=Other
+                  - generic [ref=e1247]: Other
+                  - generic [ref=e1248]: 1.5%
+  - contentinfo [ref=e1250]:
+    - heading "Footer" [level=2] [ref=e1251]
+    - generic [ref=e1252]:
+      - generic [ref=e1253]:
+        - link "GitHub Homepage" [ref=e1254] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e1255]
+        - generic [ref=e1257]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e1258]:
+        - heading "Footer navigation" [level=3] [ref=e1259]
+        - list "Footer navigation" [ref=e1260]:
+          - listitem [ref=e1261]:
+            - link "Terms" [ref=e1262] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e1263]:
+            - link "Privacy" [ref=e1264] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e1265]:
+            - link "Security" [ref=e1266] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e1267]:
+            - link "Status" [ref=e1268] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e1269]:
+            - link "Community" [ref=e1270] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e1271]:
+            - link "Docs" [ref=e1272] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e1273]:
+            - link "Contact" [ref=e1274] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e1275]:
+            - button "Manage cookies" [ref=e1277] [cursor=pointer]
+          - listitem [ref=e1278]:
+            - button "Do not share my personal information" [ref=e1280] [cursor=pointer]
