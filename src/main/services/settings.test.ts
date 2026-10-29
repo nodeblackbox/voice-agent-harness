@@ -20,6 +20,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'va-settings-'))
   env = join(dir, '.env')
   delete process.env.ANTHROPIC_API_KEY
+  delete process.env.OPENAI_API_KEY
   delete process.env.GROQ_KEYS
   delete process.env.GROQ_API_KEY
   delete process.env.ANTHROPIC_WORKSPACE_ID
@@ -49,6 +50,14 @@ describe('SettingsService', () => {
     expect(new SettingsService(dir, env).get().voice.rate).toBeCloseTo(0.2)
     writeFileSync(join(dir, 'settings.json'), JSON.stringify({ voice: { engine: 'edge', voice: 'en-US-AvaNeural', rate: 0.15, pitch: 0 } }))
     expect(new SettingsService(dir, env).get().voice.rate).toBe(0.15)
+  })
+
+  it('reads OPENAI_API_KEY from .env and reports every provider in keyStatus', () => {
+    writeFileSync(env, 'OPENAI_API_KEY=sk-test')
+    const s = new SettingsService(dir, env)
+    expect(s.keysFor('openai')).toEqual(['sk-test'])
+    expect(s.keyStatus().map((k) => k.provider).sort()).toEqual(['anthropic', 'google', 'groq', 'openai', 'xai'])
+    expect(s.keyStatus().find((k) => k.provider === 'openai')?.set).toBe(true)
   })
 
   it('reads GROQ_KEYS in the pool format [{ key, label, proxy }]', () => {

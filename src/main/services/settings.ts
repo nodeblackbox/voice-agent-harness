@@ -38,6 +38,7 @@ export interface SettingsOptions {
 
 const ENV_KEYS: Record<Provider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
+  openai: ['OPENAI_API_KEY'],
   groq: ['GROQ_KEYS', 'GROQ_API_KEY'],
   google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   xai: ['XAI_API_KEY', 'GROK_API_KEY']

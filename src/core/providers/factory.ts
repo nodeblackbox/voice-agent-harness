@@ -1,5 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGroq } from '@ai-sdk/groq'
+import { createOpenAI } from '@ai-sdk/openai'
 import { createGoogle } from '@ai-sdk/google'
 import { createXai } from '@ai-sdk/xai'
 import type { LanguageModel } from 'ai'
@@ -28,6 +29,8 @@ export class ModelFactory {
     switch (info.provider) {
       case 'anthropic':
         return { model: createAnthropic({ apiKey: key, headers: this.keys.headersFor?.('anthropic') })(info.model), key }
+      case 'openai':
+        return { model: createOpenAI({ apiKey: key })(info.model), key }
       case 'groq':
         return { model: createGroq({ apiKey: key })(info.model), key }
       case 'google':

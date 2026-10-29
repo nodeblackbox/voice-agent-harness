@@ -139,6 +139,7 @@ export function Btn({
 export interface SelectOption {
   id: string
   label: string
+  disabled?: boolean
 }
 
 export function Select({
@@ -161,7 +162,7 @@ export function Select({
         style={{ color: T.text, background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer' }}
       >
         {options.map((o) => (
-          <option key={o.id} value={o.id}>
+          <option key={o.id} value={o.id} disabled={o.disabled}>
             {o.label}
           </option>
         ))}
@@ -335,18 +336,25 @@ export function MenuItem({
   title,
   sub,
   selected,
+  disabled,
+  hint,
   onClick
 }: {
   title: string
   sub?: string
   selected?: boolean
+  /** Shown dimmed; still clickable so the caller can explain or route somewhere (e.g. to add a key). */
+  disabled?: boolean
+  /** A short amber line under the item, e.g. why it is disabled. */
+  hint?: string
   onClick?: () => void
 }) {
   return (
     <button
       onClick={onClick}
+      aria-disabled={disabled || undefined}
       className="w-full text-left px-3 py-2 flex items-start gap-2"
-      style={{ background: selected ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', cursor: 'pointer' }}
+      style={{ background: selected ? 'rgba(255,255,255,0.04)' : 'transparent', border: 'none', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}
     >
       <span style={{ width: 14, paddingTop: 3, color: T.cyan, flexShrink: 0 }}>{selected ? <Check size={12} /> : null}</span>
       <span className="flex flex-col gap-0.5 min-w-0">
@@ -356,6 +364,11 @@ export function MenuItem({
         {sub && (
           <span className="text-xs" style={{ color: T.text3, lineHeight: 1.4 }}>
             {sub}
+          </span>
+        )}
+        {hint && (
+          <span className="text-xs" style={{ color: T.amber, lineHeight: 1.4 }}>
+            {hint}
           </span>
         )}
       </span>

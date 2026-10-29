@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode, useMemo } from 'react'
 import {
   Check,
   CircleDot,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { KeyStatus, Provider, ServiceStatus, VoiceInfo } from '@shared/types'
 import { T, serviceColor, serviceLabel } from '../theme'
-import { useStore } from '../state/store'
+import { keyedProviders, useStore } from '../state/store'
 import { Btn, Card, Dot, Page, Row, Select, TextInput, Toggle } from '../components/primitives'
 import { listDevices, type DeviceLists } from '../audio/devices'
 import { McpSection } from './settings/McpSection'
@@ -34,6 +34,7 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
 
 const PROVIDERS: Array<{ id: Provider; label: string }> = [
   { id: 'anthropic', label: 'Anthropic' },
+  { id: 'openai', label: 'OpenAI' },
   { id: 'groq', label: 'Groq' },
   { id: 'google', label: 'Google Gemini' },
   { id: 'xai', label: 'xAI Grok' }
@@ -346,6 +347,8 @@ function Providers() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const reloadKeys = useStore((s) => s.reloadKeys)
+  const reloadServices = useStore((s) => s.reloadServices)
+  const keyed = useMemo(() => keyedProviders(keys), [keys])
   const pushToast = useStore((s) => s.pushToast)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [value, setValue] = useState('')
@@ -354,6 +357,7 @@ function Providers() {
     try {
       await window.api.keys.set(p, value.trim())
       await reloadKeys()
+      await reloadServices()
       setEditing(null)
       setValue('')
     } catch (err) {
@@ -384,7 +388,7 @@ function Providers() {
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2 text-xs" style={{ color: T.text2 }}>
-                    <Dot color={st?.set ? T.green : T.text3} />
+                    <Dot color={st?.set ? T.green : T.amber} />
                     <span style={{ fontFamily: T.mono }}>{st?.set ? (st.hint ?? '••••••••') : 'not set'}</span>
                     <Btn
                       small
@@ -405,7 +409,10 @@ function Providers() {
             <Select
               value={settings?.fallbackModelId ?? ''}
               onChange={(v) => void updateSettings({ fallbackModelId: v })}
-              options={models.map((m) => ({ id: m.id, label: `${m.label} · ${m.providerLabel}` }))}
+              options={models.map((m) => {
+                const locked = keyed !== null && !keyed.has(m.provider)
+                return { id: m.id, label: `${m.label} · ${m.providerLabel}${locked ? ' · no key' : ''}`, disabled: locked }
+              })}
               width={260}
             />
           </Row>

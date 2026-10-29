@@ -7,6 +7,7 @@ import { earConfig } from '@shared/tuning'
 import { Agent } from '@core/agent'
 import { MemoryStore } from '@core/memory/store'
 import { findModel } from '@core/providers/models'
+import { resolveModel } from '@core/providers/resolve'
 import { initLog, log, logAt, logError, trace, tracePath, type LogLevel } from './services/log'
 import { SettingsService } from './services/settings'
 import { SidecarService } from './services/sidecar'
@@ -23,6 +24,12 @@ const projectRoot = resolve(here, '..', '..')
 const isDev = !app.isPackaged
 
 app.setName('Voice Agent')
+// VA_USER_DATA=<dir>: run against a separate data folder (fresh-user testing, screenshots) without touching the real one
+if (isDev && process.env.VA_USER_DATA) {
+  const dir = resolve(process.env.VA_USER_DATA)
+  app.setPath('userData', dir)
+  app.setPath('sessionData', join(dir, 'session'))
+}
 // Live preview of Claude Code workspaces (served read-only by ClaudeService.serve)
 protocol.registerSchemesAsPrivileged([{ scheme: 'ccws', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -228,8 +235,10 @@ app.whenReady().then(async () => {
   })
 
   const services = (): ServiceStatus[] => {
-    const model = findModel(settings.get().modelId)
-    const hasKey = model ? settings.keysFor(model.provider).length > 0 : false
+    const wanted = findModel(settings.get().modelId)
+    const resolved = resolveModel(settings.get().modelId, settings)
+    const hasKey = !!resolved
+    const model = resolved?.model ?? wanted
     return [
       sidecar.status,
       {
@@ -237,7 +246,11 @@ app.whenReady().then(async () => {
         state: settings.get().voice.engine === 'system' ? 'off' : 'ready',
         detail: `${settings.get().voice.engine === 'kokoro' ? settings.get().voice.kokoroVoice : settings.get().voice.voice}${kokoro.ready() ? ' · Kokoro loaded' : ''}`
       },
-      { name: 'llm', state: hasKey ? 'ready' : 'error', detail: hasKey ? model?.label : `no API key for ${model?.providerLabel ?? 'model'}` },
+      {
+        name: 'llm',
+        state: hasKey ? 'ready' : 'error',
+        detail: !hasKey ? 'no API key for any provider' : resolved?.substituted ? `${model?.label} (no key for ${resolved.substituted.from.providerLabel})` : model?.label
+      },
       searxng.status,
       mcp.status
     ]

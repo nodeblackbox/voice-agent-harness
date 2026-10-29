@@ -2,6 +2,7 @@ import type { ModelInfo, Provider } from '@shared/types'
 
 export const PROVIDER_LABELS: Record<Provider, string> = {
   anthropic: 'Anthropic',
+  openai: 'OpenAI',
   groq: 'Groq',
   google: 'Google',
   xai: 'xAI'
@@ -23,6 +24,9 @@ export const MODELS: ModelInfo[] = [
   m('anthropic', 'claude-sonnet-5-5', 'Claude Sonnet 5.5', { effort: true, note: 'Newest Sonnet: smarter, slower.' }),
   m('anthropic', 'claude-opus-5', 'Claude Opus 5', { effort: true, note: 'Best reasoning, slowest.' }),
   m('anthropic', 'claude-opus-5-5', 'Claude Opus 5.5', { effort: true, note: 'Newest Opus: best reasoning, slowest.' }),
+  m('openai', 'gpt-5-mini', 'GPT-5 mini', { fast: true, note: 'Fast and cheap.' }),
+  m('openai', 'gpt-5', 'GPT-5', { note: 'Smarter, slower.' }),
+  m('openai', 'gpt-4.1-mini', 'GPT-4.1 mini', { fast: true }),
   m('groq', 'openai/gpt-oss-20b', 'GPT-OSS 20B', { fast: true, reasoning: true, note: 'Very fast on Groq.' }),
   m('groq', 'openai/gpt-oss-120b', 'GPT-OSS 120B', { reasoning: true }),
   m('groq', 'llama-3.3-70b-versatile', 'Llama 3.3 70B'),

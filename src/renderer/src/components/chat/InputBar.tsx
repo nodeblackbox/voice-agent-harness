@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { AlignLeft, Bot, ChevronDown, Folder, Headphones, HeadphoneOff, Lock, MessageSquare, Mic, MicOff, Send, Sparkles, Wand2, type LucideIcon } from 'lucide-react'
 import type { Mode } from '@shared/types'
 import { T } from '../../theme'
-import { selectActiveModel, selectActiveProject, selectActiveStyle, useStore } from '../../state/store'
+import { keyedProviders, selectActiveModel, selectActiveProject, selectActiveStyle, useStore } from '../../state/store'
 import { toggleListening, toggleMicMuted } from '../../audio/voice'
 import { Dropdown, MenuItem } from '../primitives'
 import { VoiceBars } from '../VoiceBars'
@@ -51,6 +51,8 @@ export function InputBar() {
   const models = useStore((s) => s.models)
   const styles = useStore((s) => s.styles)
   const model = useStore(selectActiveModel)
+  const keyStatus = useStore((s) => s.keys)
+  const keyed = useMemo(() => keyedProviders(keyStatus), [keyStatus])
   const style = useStore(selectActiveStyle)
   const project = useStore(selectActiveProject)
   const listening = useStore((s) => s.listening)
@@ -199,18 +201,27 @@ export function InputBar() {
               <div className="relative">
                 {menuBtn('model', Sparkles, model?.label ?? 'Model')}
                 <Dropdown open={open === 'model'} onClose={() => setOpen(null)} width={260}>
-                  {models.map((m) => (
-                    <MenuItem
-                      key={m.id}
-                      title={m.label}
-                      sub={m.note ? `${m.providerLabel} · ${m.note}` : m.providerLabel}
-                      selected={model?.id === m.id}
-                      onClick={() => {
-                        void updateSettings({ modelId: m.id })
-                        setOpen(null)
-                      }}
-                    />
-                  ))}
+                  {[...models]
+                    // models you can actually use come first; the rest stay visible, dimmed, with the way to unlock them
+                    .sort((a, b) => Number(keyed?.has(b.provider) ?? true) - Number(keyed?.has(a.provider) ?? true))
+                    .map((m) => {
+                      const locked = keyed !== null && !keyed.has(m.provider)
+                      return (
+                        <MenuItem
+                          key={m.id}
+                          title={m.label}
+                          sub={m.note ? `${m.providerLabel} · ${m.note}` : m.providerLabel}
+                          selected={model?.id === m.id}
+                          disabled={locked}
+                          hint={locked ? `No ${m.providerLabel} key · add one in Settings` : undefined}
+                          onClick={() => {
+                            setOpen(null)
+                            if (locked) setView('settings')
+                            else void updateSettings({ modelId: m.id })
+                          }}
+                        />
+                      )
+                    })}
                 </Dropdown>
               </div>
               <div className="relative">

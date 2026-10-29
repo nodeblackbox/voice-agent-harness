@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   ContextSnapshot,
   KeyStatus,
+  Provider,
   ModelInfo,
   PendingMemorySave,
   Project,
@@ -405,6 +406,11 @@ export const selectActiveProject = (s: Store): Project | undefined =>
 export const selectActiveStyle = (s: Store): PromptStyle | undefined =>
   s.styles.find((p) => p.id === s.settings?.styleId)
 
+/** Providers with an API key; null until the key status has loaded (it always lists every provider). Derive it with useMemo: a Set is a fresh object each call. */
+export const keyedProviders = (keys: KeyStatus[]): Set<Provider> | null =>
+  keys.length ? new Set(keys.filter((k) => k.set).map((k) => k.provider)) : null
+/** false = loaded and no provider has a key (the chat shows how to add one); null = not loaded yet. */
+export const selectHasAnyKey = (s: Store): boolean | null => (s.keys.length ? s.keys.some((k) => k.set) : null)
 export const selectActiveModel = (s: Store): ModelInfo | undefined =>
   s.models.find((m) => m.id === s.settings?.modelId)
 

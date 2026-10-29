@@ -4,7 +4,7 @@
 import type { CcManagerEvent, CcMode } from './claude'
 import type { TuningValues } from './tuning'
 
-export type Provider = 'anthropic' | 'groq' | 'google' | 'xai'
+export type Provider = 'anthropic' | 'openai' | 'groq' | 'google' | 'xai'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 

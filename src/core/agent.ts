@@ -21,6 +21,7 @@ import { SpeakableFilter } from './prompts/speakable'
 import { ModelFactory } from './providers/factory'
 import type { KeySource } from './providers/keys'
 import { DEFAULT_FALLBACK_MODEL_ID, findModel } from './providers/models'
+import { resolveModel } from './providers/resolve'
 import { SentenceChunker } from './speech/chunker'
 import { toolLabel } from './speech/fillers'
 import { describeInput, describeOutput, mcpServerOf, toolKind } from './tools/describe'
@@ -681,8 +682,13 @@ export class Agent {
     }
 
     const style = this.style(settings)
-    const model = findModel(settings.modelId) ?? findModel('anthropic:claude-haiku-4-5')!
-    const fallback = findModel(settings.fallbackModelId) ?? null
+    // the configured model when its provider has a key, else a model from a provider that does (the runner reports
+    // the no-key case itself in the reply; the toasts below say it once rather than every turn)
+    const resolved = resolveModel(settings.modelId, this.deps.keys)
+    const model = resolved?.model ?? findModel(settings.modelId) ?? findModel('anthropic:claude-haiku-4-5')!
+    this.noticeModelChoice(resolved)
+    const chosenFallback = findModel(settings.fallbackModelId) ?? null
+    const fallback = chosenFallback && this.deps.keys.keysFor(chosenFallback.provider).length ? chosenFallback : null
     // the chosen backup, then Claude Haiku 5.5 as a last resort when there's an Anthropic key: fast, cheap and roomy,
     // so a slow or rate-limited model never leaves a turn with nothing to say
     const lastResort = this.deps.keys.keysFor('anthropic').length ? findModel(DEFAULT_FALLBACK_MODEL_ID) : undefined
@@ -1262,6 +1268,16 @@ export class Agent {
     } else this.messages.push(m)
     if (m.streaming) this.flusher.push(m.id, m)
     else this.flusher.now(m.id, m)
+  }
+
+  private modelNotice = ''
+  /** One toast per situation: no keys at all, or the configured model standing aside for a keyed provider. */
+  private noticeModelChoice(resolved: ReturnType<typeof resolveModel>): void {
+    const key = resolved ? (resolved.substituted ? `${resolved.substituted.from.id}>${resolved.model.id}` : '') : 'none'
+    if (key === this.modelNotice) return
+    this.modelNotice = key
+    if (!resolved) this.toast('warn', 'No API key for any provider yet. Add one in Settings \u2192 Providers.')
+    else if (resolved.substituted) this.toast('info', `No key for ${resolved.substituted.from.providerLabel}: using ${resolved.model.label} (${resolved.model.providerLabel}).`)
   }
 
   private toast(kind: 'info' | 'warn' | 'error', text: string): void {

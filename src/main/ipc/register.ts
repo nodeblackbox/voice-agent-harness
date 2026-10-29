@@ -4,6 +4,7 @@ import { IPC } from '@shared/ipc'
 import type { LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft } from '@shared/types'
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
+import { resolveModel } from '@core/providers/resolve'
 import { BUILTIN_STYLES } from '@core/prompts/styles'
 import { ModelFactory } from '@core/providers/factory'
 import type { MemoryStore } from '@core/memory/store'
@@ -97,7 +98,8 @@ export function registerIpc(d: IpcDeps): void {
     d.settings.deleteStyle(id)
     return allStyles()
   })
-  const draftModel = () => new ModelFactory(d.settings).create(findModel(d.settings.get().modelId) ?? MODELS[0]!).model
+  // drafting styles/skills uses the same model a turn would: the configured one, or one whose provider has a key
+  const draftModel = () => new ModelFactory(d.settings).create(resolveModel(d.settings.get().modelId, d.settings)?.model ?? findModel(d.settings.get().modelId) ?? MODELS[0]!).model
   h(IPC.stylesGenerate, async (_e, brief: string, base?: { label: string; body: string }): Promise<StyleDraft> => {
     const prompt = base ? `CURRENT LABEL: ${base.label}\nCURRENT PROMPT:\n${base.body}\n\nINSTRUCTION: ${brief}` : brief
     const { text } = await generateText({ model: draftModel(), system: base ? STYLE_REFINE_PROMPT : STYLE_DRAFT_PROMPT, prompt, abortSignal: AbortSignal.timeout(30_000) })

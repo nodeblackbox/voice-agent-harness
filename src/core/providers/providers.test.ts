@@ -46,7 +46,8 @@ describe('models registry', () => {
 
   it('accepts an ad-hoc provider:model id and rejects unknown providers', () => {
     expect(findModel('groq:some/new-model')).toMatchObject({ provider: 'groq', model: 'some/new-model', label: 'some/new-model' })
-    expect(findModel('openai:gpt-4o')).toBeUndefined()
+    expect(findModel('openai:gpt-5-mini')).toMatchObject({ provider: 'openai', providerLabel: 'OpenAI', fast: true })
+    expect(findModel('mistral:large')).toBeUndefined()
     expect(findModel('nonsense')).toBeUndefined()
   })
 })
