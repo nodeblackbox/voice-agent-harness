@@ -16,6 +16,21 @@ export function usableProviders(keys: KeySource): Set<Provider> {
 }
 
 /**
+ * One spare model (the fast one) per keyed provider not already represented: the tail of a turn's chain, so a
+ * rejected or stale key on one provider still ends in an answer from another.
+ */
+export function spareModels(keys: KeySource, exclude: Iterable<Provider>): ModelInfo[] {
+  const skip = new Set(exclude)
+  const out: ModelInfo[] = []
+  for (const p of usableProviders(keys)) {
+    if (skip.has(p)) continue
+    const pick = MODELS.find((m) => m.provider === p && m.fast) ?? MODELS.find((m) => m.provider === p)
+    if (pick) out.push(pick)
+  }
+  return out
+}
+
+/**
  * The model a turn should run on: the configured one when its provider has a key, otherwise the first fast model
  * (then any model) of a provider that does. Null when no provider has a key. Never writes settings: the user's
  * choice stays, and comes back the moment its key is added.

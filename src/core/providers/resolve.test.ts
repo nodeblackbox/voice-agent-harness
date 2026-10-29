@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Provider } from '@shared/types'
 import type { KeySource } from './keys'
-import { resolveModel, usableProviders } from './resolve'
+import { resolveModel, spareModels, usableProviders } from './resolve'
 
 const keys = (...providers: Provider[]): KeySource => ({ keysFor: (p) => (providers.includes(p) ? ['k'] : []) })
 
@@ -23,6 +23,13 @@ describe('resolveModel', () => {
   it('falls back to the default model for an unknown id, then resolves that', () => {
     expect(resolveModel('nonsense', keys('anthropic'))?.model.id).toBe('anthropic:claude-haiku-4-5')
     expect(resolveModel('nonsense', keys('openai'))?.model.provider).toBe('openai')
+  })
+
+  it('offers one spare model per keyed provider the chain does not cover yet', () => {
+    const spares = spareModels(keys('anthropic', 'groq', 'openai'), ['anthropic'])
+    expect(spares.map((m) => m.provider)).toEqual(['openai', 'groq'])
+    expect(spares.every((m) => m.fast)).toBe(true)
+    expect(spareModels(keys('anthropic'), ['anthropic'])).toEqual([])
   })
 
   it('lists the providers that have keys', () => {
