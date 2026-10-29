@@ -33,7 +33,8 @@ const api: VoiceAgentApi = {
   speak: {
     message: (id) => invoke(IPC.speakMessage, id),
     stop: () => invoke(IPC.speakStop),
-    preview: (voice) => invoke(IPC.ttsPreview, voice),
+    preview: (voice, engine) => invoke(IPC.ttsPreview, voice, engine),
+    catalog: (provider) => invoke(IPC.ttsCatalog, provider),
     voices: () => invoke(IPC.voicesList)
   },
   playback: {

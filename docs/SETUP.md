@@ -40,7 +40,19 @@ win over `.env`.
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Google Gemini |
 | `XAI_API_KEY` | xAI Grok |
 
-Edge TTS (the default voice) needs no key.
+Edge TTS (the default voice) needs no key. For a hosted voice add its key too and pick it under **Settings →
+Voice output**; the engine picker only offers providers that have a key.
+
+| Variable | Voice provider | Also |
+|---|---|---|
+| `ELEVENLABS_API_KEY` | ElevenLabs (free tier works) | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` |
+| `FISH_API_KEY` | Fish Audio (`s2.1-pro-free` needs no credit) | `FISH_VOICE_ID`, `FISH_MODEL` |
+| `INWORLD_API_KEY` | Inworld (the Base64 credential, as given) | `INWORLD_VOICE_ID`, `INWORLD_MODEL` |
+| `DASHSCOPE_API_KEY` | Qwen on Alibaba Model Studio | `DASHSCOPE_HOST` (your workspace host), `QWEN_VOICE_ID`, `QWEN_MODEL` |
+
+`TTS_PROXY` (`http://user:pass@host:port`) is the proxy the Voice output section can switch on for Edge and for
+the hosted voices; Microsoft throttles the free Edge voice per IP address, and `pnpm tts:latency -- --proxies
+proxies.txt` shows which route is fastest for you.
 
 ## 4. The ears
 
@@ -119,7 +131,9 @@ Delete the folder to start over. To try the fresh-user experience without touchi
 | Ears exit code 3, "CUDA is not available" | no usable CUDA; set the STT device to `cpu` |
 | Ears exit code 1, "model load failed" | the first Parakeet download was interrupted, or Smart Turn is missing: rerun `pnpm sidecar:install`, check `HF_HOME` has space |
 | "ears crashed 3 times" | see `logs/app.log`; most often a Python path pointing at an old venv |
-| Voice switched to Kokoro, toast about Edge | Edge TTS rate-limited you; the app probes it in the background and announces when it is back. Kokoro needs the sidecar venv |
+| Voice switched to Kokoro, toast about Edge | Edge TTS rate-limited you; the app probes it in the background and announces when it is back. Kokoro needs the sidecar venv. Slow first audio from Edge (2 s and more) usually means your IP is throttled: set `TTS_PROXY` and switch the Edge toggle on |
+| "ElevenLabs 404: voice_not_found" or "402" toast | the voice id is not on that account, or the account is out of credit; the turn finishes on Kokoro. Pick a listed voice or the free model |
+| The engine picker shows "no key" on a voice | add the provider's key in Settings → Providers or `.env` |
 | "Couldn't check your Claude login" | run `claude` in a terminal and `/login`, then press the refresh icon on the badge |
 | `node:sqlite` error at startup | Node older than 22.13 |
 | A `tests` package in site-packages breaks `pytest` | the suite is a regular package so it should not; if it does, run `pnpm test:py` from the repo root |

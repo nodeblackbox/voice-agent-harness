@@ -3,14 +3,13 @@ import type {
   AgentEvent,
   AudioChunk,
   ChatMessage,
+  CloudTtsProvider,
   ContextSnapshot,
   KeyStatus,
   LogFileInfo,
   LogLevel,
   McpServerConfig,
   McpServerStatus,
-  Skill,
-  StyleDraft,
   MemoryEntry,
   MemoryHistoryEntry,
   MemoryScope,
@@ -23,7 +22,11 @@ import type {
   SessionAnalysis,
   SessionSummary,
   Settings,
+  Skill,
+  StyleDraft,
   TraceEvent,
+  TtsCatalog,
+  TtsEngineId,
   TuningSuggestion,
   VoiceInfo
 } from '../shared/types'
@@ -36,7 +39,7 @@ export interface VoiceAgentApi {
   models: { list(): Promise<ModelInfo[]> }
   keys: {
     status(): Promise<KeyStatus[]>
-    set(provider: Provider, key: string): Promise<KeyStatus[]>
+    set(provider: Provider | CloudTtsProvider, key: string): Promise<KeyStatus[]>
   }
   chat: {
     send(text: string): Promise<void>
@@ -59,7 +62,8 @@ export interface VoiceAgentApi {
   speak: {
     message(messageId: string): Promise<void>
     stop(): Promise<void>
-    preview(voice: string): Promise<void>
+    preview(voice: string, engine?: TtsEngineId): Promise<void>
+    catalog(provider: CloudTtsProvider): Promise<TtsCatalog>
     voices(): Promise<VoiceInfo[]>
   }
   playback: {

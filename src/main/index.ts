@@ -1,10 +1,15 @@
 import { app, BrowserWindow, nativeTheme, protocol, session, shell } from 'electron'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { ProxyAgent, fetch as undiciFetch } from 'undici'
 import { IPC } from '@shared/ipc'
-import type { AgentEvent, AudioChunk, ServiceStatus, Settings } from '@shared/types'
+import type { AgentEvent, AudioChunk, CloudTtsProvider, ServiceStatus, Settings } from '@shared/types'
+import { TTS_ENGINE_LABELS, isCloudTts, requestFields } from '@shared/tts'
 import { earConfig } from '@shared/tuning'
-import { Agent } from '@core/agent'
+import { Agent, type CloudTtsEngine } from '@core/agent'
+import { ElevenLabsEngine, FishEngine, InworldEngine, type CloudTtsDeps } from '@core/speech/cloud'
+import { QwenEngine } from '@core/speech/qwen'
 import { MemoryStore } from '@core/memory/store'
 import { findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
@@ -221,6 +226,48 @@ app.whenReady().then(async () => {
   const claude = new ClaudeService(userData, () => settings.get())
   protocol.handle('ccws', (req) => claude.serve(req))
 
+  // Hosted voices. One proxy URL serves both the Edge socket (an https Agent) and the HTTP engines (an undici
+  // dispatcher); each is built once per URL and only used when its toggle is on.
+  let proxy: { url: string; agent: HttpsProxyAgent<string>; dispatcher: ProxyAgent } | null = null
+  const proxyFor = (url: string) => {
+    if (!url) return null
+    if (proxy?.url !== url) {
+      try {
+        proxy = { url, agent: new HttpsProxyAgent(url), dispatcher: new ProxyAgent(url) }
+      } catch (e) {
+        logAt('warn', 'tts', `bad proxy URL: ${(e as Error).message}`)
+        return null
+      }
+    }
+    return proxy
+  }
+  const edgeAgent = (): unknown => (settings.get().voice.proxy.edge ? proxyFor(settings.get().voice.proxy.url)?.agent : undefined)
+  const cloudAgent = (): unknown => (settings.get().voice.proxy.cloud ? proxyFor(settings.get().voice.proxy.url)?.agent : undefined)
+  const cloudFetch: typeof fetch = (input, init) => {
+    const d = settings.get().voice.proxy.cloud ? proxyFor(settings.get().voice.proxy.url)?.dispatcher : undefined
+    if (!d) return fetch(input, init)
+    return undiciFetch(input as never, { ...(init as object), dispatcher: d } as never) as unknown as Promise<Response>
+  }
+  const cloudDeps = (p: CloudTtsProvider): CloudTtsDeps => ({
+    key: () => settings.keysFor(p)[0] ?? '',
+    fetch: cloudFetch,
+    timeoutMs: () => settings.get().speech.ttsTimeoutMs,
+    log: (m) => log('tts', m)
+  })
+  const cloudTts: Record<CloudTtsProvider, CloudTtsEngine> = {
+    elevenlabs: new ElevenLabsEngine(cloudDeps('elevenlabs')),
+    fish: new FishEngine(cloudDeps('fish')),
+    inworld: new InworldEngine(cloudDeps('inworld')),
+    qwen: new QwenEngine({
+      key: () => settings.keysFor('qwen')[0] ?? '',
+      host: () => settings.qwenHost(),
+      agent: cloudAgent,
+      poolSize: settings.get().speech.ttsPoolSize,
+      timeoutMs: () => settings.get().speech.ttsTimeoutMs,
+      log: (m) => log('tts', m)
+    })
+  }
+
   const agent = new Agent({
     store,
     settings: () => training?.settings(settings.get()) ?? settings.get(),
@@ -237,12 +284,26 @@ app.whenReady().then(async () => {
       restartStuck: () => sidecar.ready && sidecar.restart()
     },
     kokoro,
+    cloudTts,
+    edgeAgent,
     emit,
     emitAudio: (chunk: AudioChunk) => send(IPC.audioChunk, chunk),
     cancelAudio: (turnId) => send(IPC.audioCancel, turnId),
     log: (m) => log('agent', m),
     trace
   })
+
+  const ttsStatus = (): ServiceStatus => {
+    const v = settings.get().voice
+    const noKey = isCloudTts(v.engine) && !settings.keysFor(v.engine).length
+    const raw = requestFields(v, v.engine).voice
+    const voice = v.engine === 'edge' ? raw.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '') : raw
+    return {
+      name: 'tts',
+      state: v.engine === 'system' ? 'off' : noKey ? 'error' : 'ready',
+      detail: noKey ? `${TTS_ENGINE_LABELS[v.engine]}: no API key` : `${TTS_ENGINE_LABELS[v.engine]}${voice ? ` · ${voice.length > 28 ? `${voice.slice(0, 26)}…` : voice}` : ''}${kokoro.ready() ? ' · Kokoro loaded' : ''}`
+    }
+  }
 
   const services = (): ServiceStatus[] => {
     const wanted = findModel(settings.get().modelId)
@@ -251,11 +312,7 @@ app.whenReady().then(async () => {
     const model = resolved?.model ?? wanted
     return [
       sidecar.status,
-      {
-        name: 'tts',
-        state: settings.get().voice.engine === 'system' ? 'off' : 'ready',
-        detail: `${settings.get().voice.engine === 'kokoro' ? settings.get().voice.kokoroVoice : settings.get().voice.voice}${kokoro.ready() ? ' · Kokoro loaded' : ''}`
-      },
+      ttsStatus(),
       {
         name: 'llm',
         state: hasKey ? 'ready' : 'error',
@@ -272,6 +329,7 @@ app.whenReady().then(async () => {
     previousSettings = s
     if (Object.keys(changed).length) trace({ ev: 'settings.changed', sid: agent.currentSessionId, changed })
     if ('behaviour.theme' in changed) applyNativeTheme(s)
+    if (Object.keys(changed).some((k) => k.startsWith('voice.proxy'))) agent.resetTts()
     sidecar.applyConfig()
     emit({ type: 'settings-changed', settings: s })
     emit({ type: 'context', snapshot: agent.snapshot() })

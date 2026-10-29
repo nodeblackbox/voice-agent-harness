@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const setMetadata = vi.fn(async () => {})
+const constructed: unknown[] = []
 vi.mock('msedge-tts', () => ({
   MsEdgeTTS: class {
+    constructor(opts?: { agent?: unknown }) {
+      constructed.push(opts?.agent)
+    }
     setMetadata = setMetadata
     close = vi.fn()
   },
@@ -90,5 +94,20 @@ describe('EdgeTtsEngine.warm', () => {
     expect(setMetadata).toHaveBeenLastCalledWith('en-US-AvaNeural', 'mp3')
     setMetadata.mockRejectedValueOnce(new Error('offline'))
     await expect(engine.warm('en-US-AvaNeural')).resolves.toBe(false)
+  })
+})
+
+describe('EdgeTtsEngine proxy', () => {
+  it('opens its sockets through the agent given, and reopens when the agent changes', async () => {
+    constructed.length = 0
+    let agent: unknown = undefined
+    const e = new EdgeTtsEngine(1, 1000, () => agent)
+    await e.warm('en-US-AvaNeural')
+    expect(constructed).toEqual([undefined])
+    agent = { proxy: 'http://h:1' }
+    await e.warm('en-US-AvaNeural')
+    expect(constructed).toEqual([undefined, { proxy: 'http://h:1' }])
+    await e.warm('en-US-AvaNeural')
+    expect(constructed).toHaveLength(2)
   })
 })

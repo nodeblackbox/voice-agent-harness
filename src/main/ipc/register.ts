@@ -1,7 +1,7 @@
 import { ipcMain, shell, type BrowserWindow } from 'electron'
 import { generateText } from 'ai'
 import { IPC } from '@shared/ipc'
-import type { LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft } from '@shared/types'
+import type { CloudTtsProvider, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
@@ -60,7 +60,7 @@ export function registerIpc(d: IpcDeps): void {
   })
   h(IPC.modelsList, () => MODELS)
   h(IPC.keysStatus, () => d.settings.keyStatus())
-  h(IPC.keysSet, (_e, provider: Provider, key: string) => d.settings.setKey(provider, key))
+  h(IPC.keysSet, (_e, provider: Provider | CloudTtsProvider, key: string) => d.settings.setKey(provider, key))
 
   h(IPC.chatSend, (_e, text: string) => d.agent.send(text))
   h(IPC.chatCancel, () => d.agent.cancel())
@@ -81,7 +81,8 @@ export function registerIpc(d: IpcDeps): void {
 
   h(IPC.speakMessage, (_e, id: string) => d.agent.speakMessage(id))
   h(IPC.speakStop, () => d.agent.stopReading())
-  h(IPC.ttsPreview, (_e, voice: string) => d.agent.preview(voice))
+  h(IPC.ttsPreview, (_e, voice: string, engine?: TtsEngineId) => d.agent.preview(voice, engine))
+  h(IPC.ttsCatalog, (_e, provider: CloudTtsProvider) => d.agent.catalog(provider))
   h(IPC.voicesList, () => d.agent.voices())
 
   ipcMain.on(IPC.playbackStarted, (_e, turnId: string, seq: number, emittedAt?: number) => d.agent.onPlaybackStarted(turnId, seq, typeof emittedAt === 'number' ? emittedAt : undefined))

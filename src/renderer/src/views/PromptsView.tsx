@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Clock, PenLine, Sparkles, Trash2, Volume2, Wand2 } from 'lucide-react'
 import type { PromptStyle, StyleDraft, StyleFormat, StyleLength } from '@shared/types'
+import { requestFields } from '@shared/tts'
 import { T } from '../theme'
 import { useStore } from '../state/store'
 import { Btn, Card, Page, Select, TextInput } from '../components/primitives'
@@ -213,7 +214,7 @@ export function PromptsView() {
                       Use this style
                     </Btn>
                   )}
-                  <Btn small icon={Volume2} onClick={() => void window.api.speak.preview(settings?.voice.voice ?? 'en-US-AvaNeural')}>
+                  <Btn small icon={Volume2} onClick={() => settings && void window.api.speak.preview(requestFields(settings.voice, settings.voice.engine).voice, settings.voice.engine)}>
                     Preview voice
                   </Btn>
                   {sel.kind === 'custom' && <Btn small danger icon={Trash2} onClick={() => void remove(sel.id)} />}

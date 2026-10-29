@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream'
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts'
+import type { TtsEngineId } from '@shared/types'
 import { DEFAULT_TUNING } from '@shared/tuning'
 
 /** Frames msedge-tts delivered for a request whose stream was already destroyed (abort/timeout) or not yet registered. */
@@ -25,7 +26,12 @@ if (proto._pushMetadata) proto._pushMetadata = guardStreamPush(proto._pushMetada
 
 export interface TtsRequest {
   text: string
+  /** The voice as this engine names it (see requestFields in @shared/tts). */
   voice: string
+  /** Hosted engines: the model id; empty = the provider default. */
+  model?: string
+  /** Qwen: a delivery instruction sent with the sentence. */
+  instruction?: string
   rate: number
   pitch: number
   /** Called once with request -> first audio byte latency, when the engine can measure it. */
@@ -34,8 +40,10 @@ export interface TtsRequest {
 
 // Returns MP3 bytes, or null when the renderer should speak the text itself (system voice).
 export interface TtsEngine {
-  readonly name: 'edge' | 'system' | 'kokoro'
+  readonly name: TtsEngineId
   synth(req: TtsRequest, signal: AbortSignal): Promise<Buffer | null>
+  /** True when inline delivery cues ("[laughs]") are understood for this request; absent = never (they are stripped). */
+  acceptsTags?(req: Pick<TtsRequest, 'model'>): boolean
 }
 
 export class SystemTtsEngine implements TtsEngine {
@@ -96,9 +104,16 @@ export class KokoroTtsEngine implements TtsEngine {
 const escapeXml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
 
+/** An http(s) Agent for the Edge socket (a proxy), or undefined for a direct connection. */
+export type AgentSource = () => unknown
+
 class Worker {
-  tts = new MsEdgeTTS()
+  readonly tts: MsEdgeTTS
   voice = ''
+
+  constructor(readonly agent: unknown) {
+    this.tts = new MsEdgeTTS(agent ? { agent: agent as never } : undefined)
+  }
 
   async ensure(voice: string): Promise<void> {
     if (this.voice === voice) return
@@ -131,27 +146,36 @@ export class EdgeTtsEngine implements TtsEngine {
 
   constructor(
     private readonly max: number = DEFAULT_TUNING.speech.ttsPoolSize,
-    private readonly timeoutMs: number | (() => number) = DEFAULT_TUNING.speech.ttsTimeoutMs
+    private readonly timeoutMs: number | (() => number) = DEFAULT_TUNING.speech.ttsTimeoutMs,
+    /** Proxy agent to open sockets with; read on every acquire so a settings change takes effect on the next sentence. */
+    private readonly agent: AgentSource = () => undefined
   ) {}
 
   private get timeout(): number {
     return typeof this.timeoutMs === 'function' ? this.timeoutMs() : this.timeoutMs
   }
 
-  private acquire(): Promise<Worker> {
-    const w = this.idle.pop()
-    if (w) return Promise.resolve(w)
-    if (this.count < this.max) {
-      this.count++
-      return Promise.resolve(new Worker())
+  private async acquire(): Promise<Worker> {
+    let w = this.idle.pop()
+    if (!w) {
+      if (this.count < this.max) {
+        this.count++
+        return new Worker(this.agent())
+      }
+      w = await new Promise<Worker>((resolve) => this.waiters.push(resolve))
     }
-    return new Promise((resolve) => this.waiters.push(resolve))
+    // the proxy setting changed since this socket was opened: reopen on the new route
+    if (w.agent !== this.agent()) {
+      w.dispose()
+      w = new Worker(this.agent())
+    }
+    return w
   }
 
   private release(w: Worker, healthy: boolean): void {
     if (!healthy) {
       w.dispose()
-      w = new Worker()
+      w = new Worker(this.agent())
     }
     const waiter = this.waiters.shift()
     if (waiter) waiter(w)

@@ -3,7 +3,7 @@ import type { Provider } from '@shared/types'
 import type { KeySource } from './keys'
 import { resolveModel, spareModels, usableProviders } from './resolve'
 
-const keys = (...providers: Provider[]): KeySource => ({ keysFor: (p) => (providers.includes(p) ? ['k'] : []) })
+const keys = (...providers: Provider[]): KeySource => ({ keysFor: (p) => (providers.includes(p as Provider) ? ['k'] : []) })
 
 describe('resolveModel', () => {
   it('keeps the configured model when its provider has a key', () => {

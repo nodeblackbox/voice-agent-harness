@@ -1,6 +1,8 @@
 import type { AudioChunk, VoiceSettings } from '@shared/types'
+import { requestFields } from '@shared/tts'
 import { DEFAULT_TUNING } from '@shared/tuning'
-import { isAbort, type TtsEngine } from './tts'
+import { stripTags } from './tags'
+import { isAbort, type TtsEngine, type TtsRequest } from './tts'
 
 export interface SpeakerDeps {
   silent?: boolean
@@ -21,9 +23,10 @@ export interface SpeakerDeps {
 type Kind = AudioChunk['kind']
 type Item = { seq: number; text: string; kind: Kind; result: Promise<Buffer | null | 'skip'> }
 
-// The engine can't be reached at all (handshake refused, DNS, connect timeout): retrying the next
-// sentences against it only adds silence, so the turn degrades on the first one.
-const UNREACHABLE = /unexpected server response|websocket error|connection (timed out|closed)|enotfound|econnrefused|eai_again/i
+// The engine can't be reached at all (handshake refused, DNS, connect timeout), or it refuses us outright (no key,
+// rejected key, no credit, unknown voice): retrying the next sentences against it only adds silence, so the turn
+// degrades on the first one.
+const UNREACHABLE = /unexpected server response|websocket error|connection (timed out|closed)|enotfound|econnrefused|eai_again|no api key|\b40[1-4]\b|insufficient|not found|unauthori[sz]ed|forbidden/i
 
 /** Rough speaking rate used to estimate how long emitted audio keeps the speaker busy. */
 const CHARS_PER_SECOND = 15
@@ -83,18 +86,22 @@ export class Speaker {
     return this.busyForMs(now) === 0
   }
 
+  /** The request for `engine`: its own voice/model, and the delivery cues removed unless it understands them. */
+  private request(engine: TtsEngine, text: string, onFirstByte: (ms: number) => void): TtsRequest | null {
+    const fields = requestFields(this.deps.voice, engine.name)
+    const spoken = engine.acceptsTags?.(fields) ? text : stripTags(text)
+    if (!spoken) return null
+    return { text: spoken, ...fields, rate: this.deps.voice.rate, pitch: this.deps.voice.pitch, onFirstByte }
+  }
+
   private async synth(text: string, seq: number, kind: Kind): Promise<Buffer | null | 'skip'> {
     const t0 = performance.now()
     let firstByte: number | undefined
-    const req = {
-      text,
-      voice: this.deps.voice.voice,
-      rate: this.deps.voice.rate,
-      pitch: this.deps.voice.pitch,
-      onFirstByte: (ms: number) => {
-        firstByte = ms
-      }
+    const onFirstByte = (ms: number): void => {
+      firstByte = ms
     }
+    const req = this.request(this.deps.engine, text, onFirstByte)
+    const fallbackReq = (): TtsRequest | null => (this.deps.fallback === this.deps.engine ? req : this.request(this.deps.fallback, text, onFirstByte))
     const done = (outcome: 'ok' | 'skip' | 'fallback', attempts: number, bytes?: number): void => {
       const ms = Math.round(performance.now() - t0)
       if (kind === 'speech' && this.firstSynthMs === undefined && outcome !== 'skip') {
@@ -113,8 +120,18 @@ export class Speaker {
         engine: outcome === 'fallback' ? this.deps.fallback.name : this.deps.engine.name
       })
     }
+    // a sentence that was only a cue ("[laughs]") has nothing left to say once the cue is stripped
+    if (!req) {
+      done('skip', 0)
+      return 'skip'
+    }
     if (this.degraded) {
-      const out = await this.deps.fallback.synth(req, this.signal)
+      const fr = fallbackReq()
+      if (!fr) {
+        done('skip', 0)
+        return 'skip'
+      }
+      const out = await this.deps.fallback.synth(fr, this.signal)
       done('fallback', 0)
       return out
     }
@@ -142,9 +159,14 @@ export class Speaker {
       this.degraded = true
       this.deps.onDegraded(lastError)
     }
-    // a sentence Edge couldn't produce is still spoken, in the fallback voice, rather than dropped
+    // a sentence the engine couldn't produce is still spoken, in the fallback voice, rather than dropped
     try {
-      const out = await this.deps.fallback.synth(req, this.signal)
+      const fr = fallbackReq()
+      if (!fr) {
+        done('skip', tried)
+        return 'skip'
+      }
+      const out = await this.deps.fallback.synth(fr, this.signal)
       done('fallback', tried)
       return out
     } catch (e) {

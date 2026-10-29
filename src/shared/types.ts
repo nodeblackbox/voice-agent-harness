@@ -344,13 +344,39 @@ export interface SttSettings {
   pythonPath: string
 }
 
+/** Hosted voice APIs; each needs a key (Settings > Providers or .env). Metadata lives in ./tts. */
+export type CloudTtsProvider = 'elevenlabs' | 'fish' | 'inworld' | 'qwen'
+export type TtsEngineId = 'edge' | 'kokoro' | 'system' | CloudTtsProvider
+
+export interface CloudVoiceChoice {
+  /** Voice id as the provider names it; empty = the provider's default (or the .env default). */
+  voice?: string
+  model?: string
+  /** Qwen only: a free-text delivery instruction sent with every sentence. */
+  instruction?: string
+}
+
+export interface TtsProxySettings {
+  /** http://user:pass@host:port; empty = direct. Seeded from TTS_PROXY. */
+  url: string
+  /** Route Edge TTS through it (Microsoft throttles the free voice per IP). */
+  edge: boolean
+  /** Route the hosted voice APIs through it too. */
+  cloud: boolean
+}
+
 export interface VoiceSettings {
-  engine: 'edge' | 'kokoro' | 'system'
+  engine: TtsEngineId
   voice: string
   /** Kokoro voice id (e.g. af_heart); used when Edge is unreachable or Kokoro is the engine. */
   kokoroVoice: string
   rate: number
   pitch: number
+  /** Per hosted provider: the voice and model to use, kept so switching engines remembers choices. */
+  cloud: Partial<Record<CloudTtsProvider, CloudVoiceChoice>>
+  /** Tell the model it may write delivery cues ([laughs], (sighing) …) when the engine understands them. */
+  expressive: boolean
+  proxy: TtsProxySettings
 }
 
 export type ThemePref = 'dark' | 'light' | 'system'
@@ -409,7 +435,7 @@ export interface Settings {
 }
 
 export interface KeyStatus {
-  provider: Provider
+  provider: Provider | CloudTtsProvider
   set: boolean
   hint?: string
 }
@@ -445,6 +471,23 @@ export interface VoiceInfo {
   shortName: string
   locale: string
   gender: string
+}
+
+export interface TtsModelInfo {
+  id: string
+  label: string
+  note?: string
+  /** Understands inline delivery cues (see ./tts for the syntax per provider). */
+  tags?: boolean
+}
+
+/** What a hosted voice provider offers: live where the API lists it, otherwise the built-in list. */
+export interface TtsCatalog {
+  provider: CloudTtsProvider
+  voices: VoiceInfo[]
+  models: TtsModelInfo[]
+  /** Set when the listing call failed (no key, offline); the built-in entries are returned instead. */
+  error?: string
 }
 
 export interface ContextSnapshot {

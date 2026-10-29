@@ -178,6 +178,7 @@ export function TextInput({
   placeholder,
   mono,
   onKeyDown,
+  onBlur,
   autoFocus,
   type = 'text',
   style
@@ -187,6 +188,7 @@ export function TextInput({
   placeholder?: string
   mono?: boolean
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
+  onBlur?: () => void
   autoFocus?: boolean
   type?: 'text' | 'password'
   style?: CSSProperties
@@ -198,6 +200,7 @@ export function TextInput({
       autoFocus={autoFocus}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
+      onBlur={onBlur}
       placeholder={placeholder}
       className="rounded-lg px-2.5 py-1.5 text-sm w-full"
       style={{

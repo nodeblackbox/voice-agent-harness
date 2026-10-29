@@ -1,4 +1,6 @@
 import { Folder, Headphones, PanelLeft, PanelRight, Volume2, VolumeX } from 'lucide-react'
+import type { VoiceSettings } from '@shared/types'
+import { TTS_ENGINE_LABELS, isCloudTts, requestFields } from '@shared/tts'
 import { T } from '../../theme'
 import { selectActiveProject, selectActiveSession, useStore } from '../../state/store'
 import { IconBtn } from '../primitives'
@@ -8,6 +10,17 @@ import { formatTokens } from '../../lib/format'
 export function friendlyVoice(name: string | undefined): string {
   if (!name) return 'Ava'
   return name.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '')
+}
+
+/** What the header calls the current voice: the Edge voice's short name, a hosted voice's name, or the engine when the voice is an opaque id. */
+export function voiceLabel(v: VoiceSettings | undefined): string {
+  if (!v) return 'Ava'
+  if (v.engine === 'edge') return friendlyVoice(v.voice)
+  if (v.engine === 'system') return TTS_ENGINE_LABELS.system
+  const voice = requestFields(v, v.engine).voice
+  const opaque = /^[0-9a-f]{16,}$|^[A-Za-z0-9]{20,}$|-/.test(voice)
+  if (!isCloudTts(v.engine)) return voice || TTS_ENGINE_LABELS[v.engine]
+  return opaque || !voice ? TTS_ENGINE_LABELS[v.engine] : `${voice} · ${TTS_ENGINE_LABELS[v.engine]}`
 }
 
 export function ChatHeader() {
@@ -55,7 +68,7 @@ export function ChatHeader() {
         <StateIndicator state={agentState} toolLabel={toolLabel} toolSummary={toolSummary} services={services} micMuted={micMuted} />
         <span className="text-xs ml-2 mr-1 inline-flex items-center gap-1.5" style={{ color: T.text3 }}>
           <Headphones size={12} />
-          {friendlyVoice(settings?.voice.voice)}
+          {voiceLabel(settings?.voice)}
         </span>
         {ttfa !== undefined && (
           <span className="text-xs mr-1" style={{ color: T.text3, fontFamily: T.mono }} title={ttfaTitle}>

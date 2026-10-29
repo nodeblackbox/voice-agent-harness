@@ -114,4 +114,12 @@ describe('mergeSkills', () => {
     const merged = mergeSkills([shadow])
     expect(merged.filter((s) => s.id === shadow.id)).toHaveLength(1)
   })
+
+  it('puts the delivery-cue guide in the cached part, before the tool rules, only when given', () => {
+    const { stable, live } = composeSystemParts(style('short'), { ...ctx, expressiveBlock: 'Delivery cues: [laughs] is fine.' })
+    expect(stable.indexOf('Delivery cues:')).toBeGreaterThan(0)
+    expect(stable.indexOf('Delivery cues:')).toBeLessThan(stable.indexOf('You have tools:'))
+    expect(live).not.toContain('Delivery cues:')
+    expect(composeSystemParts(style('short'), ctx).stable).not.toContain('Delivery cues:')
+  })
 })

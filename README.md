@@ -83,6 +83,7 @@ flowchart LR
 - **Barge-in that cancels everything.** Talk over it: playback cuts about 100 ms after you start speaking, aborting the model, any running tool, the TTS sockets and the audio queue. The next turn knows exactly which sentences you heard.
 - **Resume from the cut.** "Go on" replays from the sentence that was interrupted, with no model call.
 - **One steady voice.** Edge TTS is free and keyless. When it is rate-limited, a local Kokoro-82M voice takes over and the app probes Edge in the background until it is back.
+- **Or a hosted one.** ElevenLabs, Fish Audio, Inworld and Qwen (Alibaba Model Studio) plug into the same sentence pipeline: add a key, pick the voice and model from the live listing, and the model may write delivery cues (`[laughs]`, `(sighing)`) for engines that understand them. A proxy toggle gets Edge past a throttled IP; `pnpm tts:latency` compares every route.
 - **A model chain that survives bad days.** The configured model, then your backup, then a last resort; models that are rate-limited or too small for the request are skipped; Groq keys rotate; auth failures fall straight through. A spoken filler and a soft cue cover tool calls.
 
 ## Also in the box
@@ -129,6 +130,7 @@ Press **Voice** (or `Ctrl+Shift+Space` while the window is focused) and talk. `E
 |---|---|
 | Nothing but Node | The app opens, Edge TTS speaks, typed chat tells you it needs a key. |
 | One LLM key (any of Anthropic, OpenAI, Groq, Google, xAI) | Typed chat, memory, projects, styles, skills, MCP, the tuning advisor. |
+| A voice key (ElevenLabs, Fish Audio, Inworld or Qwen) | That voice instead of Edge, with its voices and models listed in Settings. |
 | + Python and the sidecar | Voice: ears, barge-in, resume, the Kokoro fallback voice. CPU works; a CUDA GPU makes it fast. |
 | + SearXNG | `web_search`, `read_page` and `research` tools. |
 | + a Claude login | Voice-managed Claude Code sessions. They bill your subscription, not your key. |
@@ -144,7 +146,7 @@ flowchart LR
     M --> C["agent core<br/>pure TypeScript"]
   end
   C --> LLM["LLM providers"]
-  C --> TTS["Edge TTS"]
+  C --> TTS["voices<br/>Edge · ElevenLabs · Fish · Inworld · Qwen"]
   C --> CC["Claude Code sessions<br/>Claude Agent SDK · fence"]
   C --> DB[("SQLite FTS5")]
   C --> SX["SearXNG"]

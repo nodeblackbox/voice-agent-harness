@@ -12,13 +12,15 @@ import {
   Clock,
   type LucideIcon
 } from 'lucide-react'
-import type { KeyStatus, Provider, ServiceStatus, ThemePref, VoiceInfo } from '@shared/types'
+import type { CloudTtsProvider, KeyStatus, Provider, ServiceStatus, ThemePref } from '@shared/types'
+import { CLOUD_TTS_PROVIDERS, TTS_PROVIDERS } from '@shared/tts'
 import { T, serviceColor, serviceLabel } from '../theme'
 import { keyedProviders, useStore } from '../state/store'
 import { Btn, Card, Dot, Page, Row, Select, TextInput, Toggle } from '../components/primitives'
 import { listDevices, type DeviceLists } from '../audio/devices'
 import { McpSection } from './settings/McpSection'
 import { TuningSection } from './settings/TuningSection'
+import { VoiceOutput } from './settings/VoiceOutput'
 
 function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
   return (
@@ -32,130 +34,14 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
   )
 }
 
-const PROVIDERS: Array<{ id: Provider; label: string }> = [
+const PROVIDERS: Array<{ id: Provider | CloudTtsProvider; label: string; voice?: boolean }> = [
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'groq', label: 'Groq' },
   { id: 'google', label: 'Google Gemini' },
-  { id: 'xai', label: 'xAI Grok' }
+  { id: 'xai', label: 'xAI Grok' },
+  ...CLOUD_TTS_PROVIDERS.map((id) => ({ id, label: TTS_PROVIDERS[id].label, voice: true }))
 ]
-
-function VoiceOutput() {
-  const settings = useStore((s) => s.settings)
-  const updateSettings = useStore((s) => s.updateSettings)
-  const services = useStore((s) => s.services)
-  const [voices, setVoices] = useState<VoiceInfo[]>([])
-  const [previewing, setPreviewing] = useState<string | null>(null)
-
-  useEffect(() => {
-    window.api.speak
-      .voices()
-      .then((v) => {
-        const en = v.filter((x) => x.locale.startsWith('en-'))
-        en.sort((a, b) => {
-          const aAva = /Ava/.test(a.shortName) ? 0 : 1
-          const bAva = /Ava/.test(b.shortName) ? 0 : 1
-          return aAva - bAva || a.locale.localeCompare(b.locale) || a.name.localeCompare(b.name)
-        })
-        setVoices(en)
-      })
-      .catch(() => setVoices([]))
-  }, [])
-
-  if (!settings) return null
-  const v = settings.voice
-  const preview = async (name: string) => {
-    setPreviewing(name)
-    try {
-      await window.api.speak.preview(name)
-    } finally {
-      setPreviewing(null)
-    }
-  }
-  const tts = services.tts
-
-  return (
-    <Section icon={Headphones} title="Voice output">
-      <Card pad={0}>
-        <div className="px-4">
-          <Row label="Engine" sub="Edge TTS, streamed sentence by sentence. If Edge is unreachable it switches to the local Kokoro voice (the Windows voice covers while Kokoro loads).">
-            <span className="inline-flex items-center gap-2 text-xs" style={{ color: T.text2 }}>
-              <Dot color={serviceColor(tts?.state)} />
-              <span style={{ color: T.text3 }}>{tts?.detail ?? serviceLabel(tts?.state)}</span>
-              <Select
-                value={v.engine}
-                width={130}
-                onChange={(engine) => void updateSettings({ voice: { ...v, engine: engine as typeof v.engine } })}
-                options={[
-                  { id: 'edge', label: 'Edge TTS' },
-                  { id: 'kokoro', label: 'Kokoro (local)' },
-                  { id: 'system', label: 'Windows voice' }
-                ]}
-              />
-            </span>
-          </Row>
-          <Row label="Kokoro voice" sub="Local voice used as the contingency (or as the engine). af_ = American female, am_ = male, bf_/bm_ = British.">
-            <Select
-              value={v.kokoroVoice}
-              width={130}
-              onChange={(kokoroVoice) => void updateSettings({ voice: { ...v, kokoroVoice } })}
-              options={['af_heart', 'af_bella', 'af_nicole', 'am_michael', 'am_fenrir', 'bf_emma', 'bm_george'].map((id) => ({ id, label: id }))}
-            />
-          </Row>
-          <Row label="Rate" sub={`${v.rate > 0 ? '+' : ''}${Math.round(v.rate * 100)}%`}>
-            <input type="range" min={-0.5} max={0.5} step={0.05} value={v.rate} onChange={(e) => void updateSettings({ voice: { ...v, rate: Number(e.target.value) } })} />
-          </Row>
-          <Row label="Pitch" sub={`${v.pitch > 0 ? '+' : ''}${Math.round(v.pitch)}Hz`}>
-            <input type="range" min={-50} max={50} step={5} value={v.pitch} onChange={(e) => void updateSettings({ voice: { ...v, pitch: Number(e.target.value) } })} />
-          </Row>
-        </div>
-        <div className="px-4 py-3 flex flex-col gap-1.5">
-          <span className="text-xs font-medium" style={{ color: T.text3 }}>
-            Voice
-          </span>
-          {voices.length === 0 && (
-            <span className="text-xs" style={{ color: T.text3 }}>
-              Voice list unavailable (offline?). Current: {v.voice}
-            </span>
-          )}
-          {voices.map((voice) => {
-            const selected = v.voice === voice.shortName
-            const isDefault = voice.shortName === 'en-US-AvaNeural'
-            return (
-              <button
-                key={voice.shortName}
-                onClick={() => void updateSettings({ voice: { ...v, voice: voice.shortName } })}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-left"
-                style={{ background: selected ? T.raised : 'transparent', border: `1px solid ${selected ? T.cyanBorder : 'transparent'}`, cursor: 'pointer' }}
-              >
-                <span style={{ width: 14, color: T.cyan }}>{selected ? <Check size={13} /> : null}</span>
-                <span className="text-sm" style={{ width: 110 }}>
-                  {voice.name}
-                </span>
-                <span className="text-xs" style={{ color: T.text3, fontFamily: T.mono, width: 50 }}>
-                  {voice.locale}
-                </span>
-                <span className="text-xs flex-1" style={{ color: T.text2 }}>
-                  {isDefault ? 'Default · warm, quick' : voice.gender}
-                </span>
-                <span
-                  className="inline-flex items-center gap-1 text-xs"
-                  style={{ color: previewing === voice.shortName ? T.cyan : T.text3, cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void preview(voice.shortName)
-                  }}
-                >
-                  <Play size={11} /> preview
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </Card>
-    </Section>
-  )
-}
 
 function VoiceInput() {
   const settings = useStore((s) => s.settings)
@@ -362,10 +248,10 @@ function Providers() {
   const reloadServices = useStore((s) => s.reloadServices)
   const keyed = useMemo(() => keyedProviders(keys), [keys])
   const pushToast = useStore((s) => s.pushToast)
-  const [editing, setEditing] = useState<Provider | null>(null)
+  const [editing, setEditing] = useState<Provider | CloudTtsProvider | null>(null)
   const [value, setValue] = useState('')
 
-  const save = async (p: Provider) => {
+  const save = async (p: Provider | CloudTtsProvider) => {
     try {
       await window.api.keys.set(p, value.trim())
       await reloadKeys()
@@ -377,7 +263,7 @@ function Providers() {
     }
   }
 
-  const status = (p: Provider): KeyStatus | undefined => keys.find((k) => k.provider === p)
+  const status = (p: Provider | CloudTtsProvider): KeyStatus | undefined => keys.find((k) => k.provider === p)
 
   return (
     <Section icon={KeyRound} title="Providers">
@@ -387,7 +273,7 @@ function Providers() {
             const st = status(p.id)
             const isDefault = models.find((m) => m.id === settings?.modelId)?.provider === p.id
             return (
-              <Row key={p.id} label={p.label} sub={isDefault ? 'default' : p.id === 'groq' ? 'one key, or a JSON list of keys to rotate' : undefined}>
+              <Row key={p.id} label={p.label} sub={p.voice ? 'voice' : isDefault ? 'default' : p.id === 'groq' ? 'one key, or a JSON list of keys to rotate' : undefined}>
                 {editing === p.id ? (
                   <span className="inline-flex items-center gap-2">
                     <TextInput type="password" value={value} onChange={setValue} placeholder="API key" autoFocus style={{ width: 260 }} onKeyDown={(e) => e.key === 'Enter' && void save(p.id)} />

@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
-import type { ClaudeSettings, KeyStatus, PromptStyle, Provider, Settings, Skill } from '@shared/types'
+import type { ClaudeSettings, CloudTtsProvider, KeyStatus, PromptStyle, Provider, Settings, Skill, VoiceSettings } from '@shared/types'
 import { CC_MODES } from '@shared/claude'
+import { CLOUD_TTS_PROVIDERS, QWEN_DEFAULT_HOST, QWEN_HOST_ENV, TTS_PROVIDERS } from '@shared/tts'
 import { defaultTuning, sanitizeTuning, stripTuningDefaults, type TuningMigration } from '@shared/tuning'
 import { DEFAULT_FALLBACK_MODEL_ID, DEFAULT_MODEL_ID, OLD_FALLBACK_MODEL_IDS } from '@core/providers/models'
 import { DEFAULT_STYLE_ID } from '@core/prompts/styles'
@@ -19,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentName: 'Ava',
   userName: 'the user',
   aboutUser: '',
-  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0 },
+  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false } },
   audio: {},
   ...defaultTuning(),
   stt: { model: 'nemo-parakeet-tdt-0.6b-v2', device: 'hybrid', pythonPath: '' },
@@ -36,12 +37,18 @@ export interface SettingsOptions {
   defaultWorkspaceRoot?: string
 }
 
-const ENV_KEYS: Record<Provider, string[]> = {
+export type KeyedProvider = Provider | CloudTtsProvider
+
+const ENV_KEYS: Record<KeyedProvider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
   groq: ['GROQ_KEYS', 'GROQ_API_KEY'],
   google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-  xai: ['XAI_API_KEY', 'GROK_API_KEY']
+  xai: ['XAI_API_KEY', 'GROK_API_KEY'],
+  elevenlabs: TTS_PROVIDERS.elevenlabs.envKeys,
+  fish: TTS_PROVIDERS.fish.envKeys,
+  inworld: TTS_PROVIDERS.inworld.envKeys,
+  qwen: TTS_PROVIDERS.qwen.envKeys
 }
 
 function deepMerge<T>(base: T, patch: Partial<T>): T {
@@ -73,7 +80,7 @@ function parseDotEnv(path: string): Record<string, string> {
 
 export class SettingsService implements KeySource {
   private settings: Settings
-  private keys: Partial<Record<Provider, string[]>> = {}
+  private keys: Partial<Record<KeyedProvider, string[]>> = {}
   private customStyles: PromptStyle[] = []
   private storedSkills: Skill[] = []
   private readonly settingsPath: string
@@ -114,10 +121,33 @@ export class SettingsService implements KeySource {
     if (OLD_FALLBACK_MODEL_IDS.includes(this.settings.fallbackModelId)) this.settings.fallbackModelId = DEFAULT_FALLBACK_MODEL_ID
     // a stored root always wins; only an empty one (fresh install, or a cleared field) takes the machine default
     if (!this.settings.claude.workspaceRoot) this.settings.claude = { ...this.settings.claude, workspaceRoot: opts.defaultWorkspaceRoot ?? join(userData, 'workspaces') }
+    this.settings.voice = this.voiceEnvDefaults(this.settings.voice)
     this.migrations = migrated
     this.customStyles = this.readJson<PromptStyle[]>(this.stylesPath, [])
     this.storedSkills = this.readJson<Skill[]>(this.skillsPath, [])
     this.loadKeys()
+  }
+
+  /** Hosted-voice choices and the proxy URL left empty in Settings take the .env values (ELEVENLABS_VOICE_ID, TTS_PROXY …). */
+  private voiceEnvDefaults(v: VoiceSettings): VoiceSettings {
+    const cloud = { ...v.cloud }
+    for (const p of CLOUD_TTS_PROVIDERS) {
+      const info = TTS_PROVIDERS[p]
+      const cur = cloud[p] ?? {}
+      const next = {
+        voice: cur.voice?.trim() || this.env[info.envVoice]?.trim() || '',
+        model: cur.model?.trim() || this.env[info.envModel]?.trim() || '',
+        instruction: cur.instruction?.trim() || (info.envInstruction ? this.env[info.envInstruction]?.trim() : '') || ''
+      }
+      if (next.voice || next.model || next.instruction) cloud[p] = next
+    }
+    const proxy = { ...v.proxy, url: v.proxy?.url?.trim() || this.env.TTS_PROXY?.trim() || '' }
+    return { ...v, cloud, proxy }
+  }
+
+  /** The Qwen WebSocket host from DASHSCOPE_HOST (a workspace host), else the public Singapore endpoint. */
+  qwenHost(): string {
+    return this.env[QWEN_HOST_ENV]?.trim() || QWEN_DEFAULT_HOST
   }
 
   private readJson<T>(path: string, fallback: T): T {
@@ -193,8 +223,8 @@ export class SettingsService implements KeySource {
 
   // ---- keys -------------------------------------------------------------------------------
   private loadKeys(): void {
-    const stored = this.readJson<Partial<Record<Provider, string>>>(this.keysPath, {})
-    for (const [provider, enc] of Object.entries(stored) as Array<[Provider, string]>) {
+    const stored = this.readJson<Partial<Record<KeyedProvider, string>>>(this.keysPath, {})
+    for (const [provider, enc] of Object.entries(stored) as Array<[KeyedProvider, string]>) {
       try {
         const plain = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(enc, 'base64')) : Buffer.from(enc, 'base64').toString('utf8')
         this.keys[provider] = this.split(plain)
@@ -222,10 +252,10 @@ export class SettingsService implements KeySource {
       .filter(Boolean)
   }
 
-  keysFor(provider: Provider): string[] {
+  keysFor(provider: KeyedProvider): string[] {
     const stored = this.keys[provider]
     if (stored?.length) return stored
-    for (const name of ENV_KEYS[provider]) {
+    for (const name of ENV_KEYS[provider] ?? []) {
       const v = this.env[name]
       if (v) return this.split(v)
     }
@@ -243,9 +273,9 @@ export class SettingsService implements KeySource {
     return ws ? { 'anthropic-workspace-id': ws } : undefined
   }
 
-  setKey(provider: Provider, raw: string): KeyStatus[] {
+  setKey(provider: KeyedProvider, raw: string): KeyStatus[] {
     const keys = this.split(raw)
-    const stored = this.readJson<Partial<Record<Provider, string>>>(this.keysPath, {})
+    const stored = this.readJson<Partial<Record<KeyedProvider, string>>>(this.keysPath, {})
     if (!keys.length) {
       delete stored[provider]
       delete this.keys[provider]
@@ -259,7 +289,7 @@ export class SettingsService implements KeySource {
   }
 
   keyStatus(): KeyStatus[] {
-    return (Object.keys(ENV_KEYS) as Provider[]).map((provider) => {
+    return (Object.keys(ENV_KEYS) as KeyedProvider[]).map((provider) => {
       const keys = this.keysFor(provider)
       const first = keys[0]
       return {

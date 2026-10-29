@@ -1,5 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { EOL, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,6 +24,7 @@ beforeEach(() => {
   delete process.env.GROQ_KEYS
   delete process.env.GROQ_API_KEY
   delete process.env.ANTHROPIC_WORKSPACE_ID
+  for (const k of ['ELEVENLABS_API_KEY', 'ELEVEN_LABS_API_KEY', 'XI_API_KEY', 'FISH_API_KEY', 'FISH_AUDIO_API_KEY', 'INWORLD_API_KEY', 'DASHSCOPE_API_KEY', 'TTS_PROXY', 'DASHSCOPE_HOST']) delete process.env[k]
 })
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -56,7 +57,7 @@ describe('SettingsService', () => {
     writeFileSync(env, 'OPENAI_API_KEY=sk-test')
     const s = new SettingsService(dir, env)
     expect(s.keysFor('openai')).toEqual(['sk-test'])
-    expect(s.keyStatus().map((k) => k.provider).sort()).toEqual(['anthropic', 'google', 'groq', 'openai', 'xai'])
+    expect(s.keyStatus().map((k) => k.provider).sort()).toEqual(['anthropic', 'elevenlabs', 'fish', 'google', 'groq', 'inworld', 'openai', 'qwen', 'xai'])
     expect(s.keyStatus().find((k) => k.provider === 'openai')?.set).toBe(true)
   })
 
@@ -149,5 +150,30 @@ describe('SettingsService', () => {
     expect(again.skills().at(-1)).toMatchObject({ id: 'c1', kind: 'custom' })
     again.deleteSkill('c1')
     expect(again.skills().some((k) => k.id === 'c1')).toBe(false)
+  })
+
+  it('reads the voice provider keys from .env (several spellings) and stores a pasted one encrypted', () => {
+    writeFileSync(env, ['ELEVEN_LABS_API_KEY=sk_e', 'FISH_API_KEY=sk-fish', 'INWORLD_API_KEY=b64==', 'DASHSCOPE_API_KEY=sk-ws'].join(EOL))
+    const s = new SettingsService(dir, env)
+    expect(s.keysFor('elevenlabs')).toEqual(['sk_e'])
+    expect(s.keysFor('fish')).toEqual(['sk-fish'])
+    expect(s.keysFor('inworld')).toEqual(['b64=='])
+    expect(s.keysFor('qwen')).toEqual(['sk-ws'])
+    s.setKey('inworld', 'pasted==')
+    expect(s.keysFor('inworld')).toEqual(['pasted=='])
+    expect(readFileSync(join(dir, 'keys.json'), 'utf8')).not.toContain('pasted==')
+    expect(s.keyStatus().find((k) => k.provider === 'inworld')).toMatchObject({ set: true })
+  })
+
+  it('fills empty hosted-voice choices, the proxy URL and the Qwen host from .env, keeping stored values', () => {
+    writeFileSync(env, ['FISH_VOICE_ID=my-clone', 'FISH_MODEL=s1', 'QWEN_VOICE_ID=qv', 'QWEN_INSTRUCTION=calm', 'TTS_PROXY=http://u:p@h:1', 'DASHSCOPE_HOST=ws-x.ap-southeast-1.maas.aliyuncs.com'].join(EOL))
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ voice: { cloud: { fish: { voice: 'stored' } } } }))
+    const s = new SettingsService(dir, env)
+    expect(s.get().voice.cloud.fish).toEqual({ voice: 'stored', model: 's1', instruction: '' })
+    expect(s.get().voice.cloud.qwen).toEqual({ voice: 'qv', model: '', instruction: 'calm' })
+    expect(s.get().voice.cloud.elevenlabs).toBeUndefined()
+    expect(s.get().voice.proxy).toEqual({ url: 'http://u:p@h:1', edge: false, cloud: false })
+    expect(s.qwenHost()).toBe('ws-x.ap-southeast-1.maas.aliyuncs.com')
+    expect(new SettingsService(dir, join(dir, 'none.env')).qwenHost()).toBe('dashscope-intl.aliyuncs.com')
   })
 })

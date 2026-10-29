@@ -1,7 +1,7 @@
-import type { Provider } from '@shared/types'
+import type { CloudTtsProvider, Provider } from '@shared/types'
 
 export interface KeySource {
-  keysFor(provider: Provider): string[]
+  keysFor(provider: Provider | CloudTtsProvider): string[]
   // Extra request headers a provider needs (e.g. Anthropic keys not scoped to a workspace)
   headersFor?(provider: Provider): Record<string, string> | undefined
 }

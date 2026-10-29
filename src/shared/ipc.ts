@@ -15,6 +15,7 @@ export const IPC = {
   speakMessage: 'speak:message',
   speakStop: 'speak:stop',
   ttsPreview: 'tts:preview',
+  ttsCatalog: 'tts:catalog',
   voicesList: 'voices:list',
   stylesList: 'styles:list',
   stylesSave: 'styles:save',

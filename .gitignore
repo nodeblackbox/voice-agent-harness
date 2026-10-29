@@ -33,3 +33,5 @@ video/
 backup/
 backups/
 *.bak
+# proxy list for pnpm tts:latency (holds passwords)
+proxies.txt

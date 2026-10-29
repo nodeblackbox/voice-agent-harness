@@ -15,6 +15,8 @@ export interface PromptContext {
   fillerEnabled: boolean
   /** Live summary of Claude Code sessions; present only when voice control of Claude is on. */
   claudeBlock?: string
+  /** Delivery-cue guidance for the current voice engine (expressive mode on and the engine understands cues). */
+  expressiveBlock?: string
 }
 
 const PERSONA = `You are {agent_name}, a voice assistant talking with {user_name} out loud through a speaker. Everything you write is spoken by a text-to-speech engine the moment a sentence ends, so write the way a sharp, friendly person talks, not the way documents look.
@@ -105,6 +107,7 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
       .replaceAll('{claude}', ctx.claudeBlock ?? '')
 
   const parts = [fill(PERSONA), `Style: ${style.label}\n${fill(style.body)}`, fill(style.format === 'plain' ? PLAIN_RULES : MARKDOWN_RULES)]
+  if (ctx.expressiveBlock) parts.push(ctx.expressiveBlock)
   if (ctx.toolNames.length) parts.push(fill(TOOL_RULES))
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
   if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))

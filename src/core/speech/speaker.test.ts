@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AudioChunk } from '@shared/types'
+import type { AudioChunk, VoiceSettings } from '@shared/types'
 import { Speaker, type SpeakerDeps } from './speaker'
 import type { TtsEngine, TtsRequest } from './tts'
 
-const voice = { engine: 'edge' as const, voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0 }
+const voice: VoiceSettings = { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false } }
 
 const engine = (impl: (req: TtsRequest, signal: AbortSignal) => Promise<Buffer | null>): TtsEngine => ({ name: 'edge', synth: impl })
 const okEngine = (delayFor: (text: string) => number = () => 0) =>
@@ -145,5 +145,43 @@ describe('Speaker', () => {
     controller.abort()
     await done
     expect(chunks).toEqual([])
+  })
+
+  it('strips delivery cues for engines that do not understand them, keeps them for ones that do', async () => {
+    const seen: string[] = []
+    const plain = engine(async (r) => {
+      seen.push(r.text)
+      return Buffer.from('x')
+    })
+    const { speaker } = make({ engine: plain })
+    speaker.say('[laughs] That went well.')
+    speaker.say('(sighing)')
+    await speaker.finish()
+    expect(seen).toEqual(['That went well.'])
+    const tagged: TtsEngine = { name: 'inworld', acceptsTags: () => true, synth: async (r) => Buffer.from(r.text) }
+    const { speaker: s2, chunks } = make({ engine: tagged, voice: { ...voice, engine: 'inworld' } })
+    s2.say('[laugh] That went well.')
+    await s2.finish()
+    expect(text(chunks[0]!.mp3)).toBe('[laugh] That went well.')
+  })
+
+  it('gives the fallback engine its own voice when the main engine is a hosted one', async () => {
+    const fallbackReqs: TtsRequest[] = []
+    const hosted: TtsEngine = { name: 'elevenlabs', synth: async () => Promise.reject(new Error('ElevenLabs 401: bad key')) }
+    const fallback: TtsEngine = {
+      name: 'kokoro',
+      synth: async (r) => {
+        fallbackReqs.push(r)
+        return Buffer.from('k')
+      }
+    }
+    const onDegraded = vi.fn()
+    const { speaker } = make({ engine: hosted, fallback, onDegraded, voice: { ...voice, engine: 'elevenlabs', cloud: { elevenlabs: { voice: 'abc' } } } })
+    speaker.say('One.')
+    speaker.say('Two.')
+    await speaker.finish()
+    // a rejected key is not retried: the turn degrades on the first sentence
+    expect(onDegraded).toHaveBeenCalledWith('ElevenLabs 401: bad key')
+    expect(fallbackReqs.map((r) => r.voice)).toEqual(['af_heart', 'af_heart'])
   })
 })

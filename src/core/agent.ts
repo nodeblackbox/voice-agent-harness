@@ -3,6 +3,7 @@ import type {
   AgentEvent,
   AudioChunk,
   ChatMessage,
+  CloudTtsProvider,
   ContextSnapshot,
   PendingMemorySave,
   PromptStyle,
@@ -10,8 +11,11 @@ import type {
   SessionSummary,
   Settings,
   Skill,
+  TtsCatalog,
+  TtsEngineId,
   TurnMetrics,
-  UserTiming
+  UserTiming,
+  VoiceSettings
 } from '@shared/types'
 import { GLOBAL_SCOPE, type MemoryStore } from './memory/store'
 import { LocationProvider, relativeTime, timeContext } from './context'
@@ -30,7 +34,8 @@ import type { ClaudeSessionManager } from './claude/manager'
 import { skillsBlock } from './prompts/skills'
 import { Speaker } from './speech/speaker'
 import { EdgeHealth } from './speech/edge-health'
-import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type KokoroBackend, type TtsEngine } from './speech/tts'
+import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type AgentSource, type KokoroBackend, type TtsEngine } from './speech/tts'
+import { TTS_ENGINE_LABELS, expressiveGuide, isCloudTts, requestFields } from '@shared/tts'
 import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
 import { searchTools, type SearchDeps } from './tools/search'
@@ -68,12 +73,18 @@ export interface AgentDeps {
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
+  /** Hosted voices (ElevenLabs, Fish, Inworld, Qwen), built by the main process with its keys and proxy. */
+  cloudTts?: Partial<Record<CloudTtsProvider, CloudTtsEngine>>
+  /** Proxy agent for the Edge socket, when the user routes Edge through one. */
+  edgeAgent?: AgentSource
   emit(event: AgentEvent): void
   emitAudio(chunk: AudioChunk): void
   cancelAudio(turnId: string | null): void
   log(msg: string): void
   trace: Trace
 }
+
+export type CloudTtsEngine = TtsEngine & { catalog(): Promise<TtsCatalog>; reset?(): void }
 
 export interface SpeechEndInfo {
   reason: 'done' | 'timeout'
@@ -149,9 +160,8 @@ export class Agent {
   private edge: EdgeTtsEngine
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
-  /** After Edge degrades a turn, later turns skip straight to the fallback voice until then. */
-  /** Edge TTS health: once it fails the local voice is kept until a background probe succeeds. */
-  private edgeHealth = new EdgeHealth()
+  /** Health per remote voice (Edge and the hosted ones): once one fails the local voice is kept until a background probe succeeds. */
+  private ttsHealth = new Map<TtsEngineId, EdgeHealth>()
   private location = new LocationProvider()
   private sessionId = ''
   private messages: ChatMessage[] = []
@@ -189,7 +199,7 @@ export class Agent {
       deps.emit({ type: 'state', state })
     })
     this.factory = new ModelFactory(deps.keys)
-    this.edge = new EdgeTtsEngine(deps.settings().speech.ttsPoolSize, () => deps.settings().speech.ttsTimeoutMs)
+    this.edge = new EdgeTtsEngine(deps.settings().speech.ttsPoolSize, () => deps.settings().speech.ttsTimeoutMs, deps.edgeAgent)
     if (deps.kokoro) this.kokoro = new KokoroTtsEngine(deps.kokoro, () => deps.settings().voice.kokoroVoice, deps.log)
     const sessions = deps.store.sessions()
     const latest = sessions[0]
@@ -600,7 +610,7 @@ export class Agent {
           this.turn.chunks.set(chunk.seq, { seq: chunk.seq, text: chunk.text, kind: chunk.kind })
           this.deps.emitAudio({ ...chunk, emittedAt: Date.now() })
         },
-        onDegraded: (reason) => this.edgeDegraded(reason),
+        onDegraded: (reason) => this.engineDegraded(this.engineFor(settings).name, reason),
         log: this.deps.log,
         trace: (ev, data) => this.tr(ev, data)
       },
@@ -632,7 +642,7 @@ export class Agent {
     const speaker = this.newSpeaker(turnId, settings, !speakThisTurn, controller)
     // Open the Edge socket while the model thinks so the first sentence skips the handshake.
     const engine = this.engineFor(settings)
-    this.probeEdge(settings)
+    this.probeEngine(settings)
     if (speakThisTurn && engine === this.edge) {
       const t0 = Date.now()
       void this.edge.warm(settings.voice.voice).then((ok) => {
@@ -707,6 +717,7 @@ export class Agent {
       memoryBlock: memory.block,
       skillsBlock: skillsBlock(this.deps.skills()),
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
+      expressiveBlock: this.expressiveBlock(settings),
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -1002,13 +1013,31 @@ export class Agent {
     await this.readText(m.text, this.style(this.deps.settings()).format, this.deps.settings().voice)
   }
 
-  async preview(voice: string): Promise<void> {
+  /** Speak a sample with `voice` on `engine` (default: the Edge voice list's engine), without changing settings. */
+  async preview(voice: string, engine: TtsEngineId = 'edge'): Promise<void> {
     const s = this.deps.settings()
-    await this.readText(`Hi, I'm ${s.agentName}. This is how I sound with this voice.`, 'plain', { ...s.voice, voice })
+    const v: VoiceSettings = isCloudTts(engine)
+      ? { ...s.voice, engine, cloud: { ...s.voice.cloud, [engine]: { ...s.voice.cloud?.[engine], voice } } }
+      : engine === 'kokoro'
+        ? { ...s.voice, engine, kokoroVoice: voice }
+        : { ...s.voice, engine, voice }
+    await this.readText(`Hi, I'm ${s.agentName}. This is how I sound with this voice.`, 'plain', v)
   }
 
   async voices() {
     return this.edge.listVoices()
+  }
+
+  /** Voices and models a hosted provider offers (live listing where it has one). */
+  catalog(provider: CloudTtsProvider): Promise<TtsCatalog> {
+    const engine = this.deps.cloudTts?.[provider]
+    if (!engine) return Promise.resolve({ provider, voices: [], models: [], error: 'not configured' })
+    return engine.catalog()
+  }
+
+  /** The proxy or host settings changed: drop pooled sockets so the next sentence uses the new route. */
+  resetTts(): void {
+    for (const e of Object.values(this.deps.cloudTts ?? {})) e?.reset?.()
   }
 
   private async readText(text: string, format: PromptStyle['format'], voice: Settings['voice']): Promise<void> {
@@ -1020,10 +1049,11 @@ export class Agent {
     this.sm.think()
     this.deps.ears.agentSpeaking(true)
     const s = this.deps.settings()
+    const engine = this.engineFor({ ...s, voice })
     const speaker = new Speaker(
       id,
       {
-        engine: this.engineFor(s),
+        engine,
         fallback: this.fallbackEngine(),
         voice,
         attempts: s.speech.ttsAttempts,
@@ -1031,7 +1061,7 @@ export class Agent {
         emit: (c) => {
           if (this.readTurn?.id === id) this.deps.emitAudio(c)
         },
-        onDegraded: (reason) => this.edgeDegraded(reason),
+        onDegraded: (reason) => this.engineDegraded(engine.name, reason),
         log: this.deps.log
       },
       controller.signal
@@ -1084,38 +1114,66 @@ export class Agent {
   }
 
   // ---- helpers ----------------------------------------------------------------------------
+  /** The engine the settings name, unless it is a remote one that is currently down (then the local fallback). */
   private engineFor(s: Settings): TtsEngine {
-    if (s.voice.engine === 'system') return this.system
-    if (s.voice.engine === 'kokoro') return this.kokoro ?? this.system
-    return this.edgeHealth.down ? this.fallbackEngine() : this.edge
+    const chosen = this.chosenEngine(s)
+    if (chosen === this.system || chosen === this.kokoro) return chosen
+    return this.health(chosen.name).down ? this.fallbackEngine() : chosen
+  }
+
+  private chosenEngine(s: Settings): TtsEngine {
+    const id = s.voice.engine
+    if (id === 'system') return this.system
+    if (id === 'kokoro') return this.kokoro ?? this.system
+    if (isCloudTts(id)) return this.deps.cloudTts?.[id] ?? this.edge
+    return this.edge
+  }
+
+  private health(name: TtsEngineId): EdgeHealth {
+    let h = this.ttsHealth.get(name)
+    if (!h) this.ttsHealth.set(name, (h = new EdgeHealth()))
+    return h
   }
 
   private fallbackEngine(): TtsEngine {
     return this.kokoro ?? this.system
   }
 
-  private edgeDegraded(reason: string): void {
-    const wasDown = this.edgeHealth.down
-    if (wasDown) return // a turn that started on Edge just before a probe marked it down again
-    const retryInMs = this.edgeHealth.fail(reason)
-    this.tr('tts.edge_down', { retryInMs, reason: reason.slice(0, 120), fallback: this.fallbackEngine().name })
+  /** The delivery-cue guidance, when expressive mode is on and the current voice understands cues. */
+  private expressiveBlock(s: Settings): string | undefined {
+    if (!s.voice.expressive) return undefined
+    const engine = this.engineFor(s)
+    if (!isCloudTts(engine.name) || !engine.acceptsTags?.(requestFields(s.voice, engine.name))) return undefined
+    return expressiveGuide(engine.name)
+  }
+
+  private engineDegraded(name: TtsEngineId, reason: string): void {
+    if (name === 'system' || name === 'kokoro') return
+    const health = this.health(name)
+    if (health.down) return // a turn that started on it just before a probe marked it down again
+    const retryInMs = health.fail(reason)
+    this.tr('tts.engine_down', { engine: name, retryInMs, reason: reason.slice(0, 120), fallback: this.fallbackEngine().name })
     if (this.kokoro) void this.deps.kokoro?.start()
-    const why = /\b429\b/.test(reason) ? 'Edge TTS is rate-limiting us' : 'Edge TTS is unreachable'
+    const label = TTS_ENGINE_LABELS[name]
+    const why = /\b429\b/.test(reason) ? `${label} is rate-limiting us` : name === 'edge' ? 'Edge TTS is unreachable' : `${label} failed (${reason.slice(0, 80)})`
     this.toast('warn', this.kokoro
       ? `${why}; using the local Kokoro voice until it recovers (the Windows voice covers while Kokoro loads).`
       : `${why}; using the system voice until it recovers.`)
   }
 
-  /** Between turns: check quietly whether Edge works again, and switch back for the NEXT reply if so. */
-  private probeEdge(s: Settings): void {
-    if (s.voice.engine !== 'edge' || !this.edgeHealth.probeDue()) return
+  /** Between turns: check quietly whether the chosen remote voice works again, and switch back for the NEXT reply if so. */
+  private probeEngine(s: Settings): void {
+    const chosen = this.chosenEngine(s)
+    if (chosen === this.system || chosen === this.kokoro) return
+    const health = this.health(chosen.name)
+    if (!health.probeDue()) return
     const check = async () => {
-      const buf = await this.edge.synth({ text: 'OK.', voice: s.voice.voice, rate: s.voice.rate, pitch: s.voice.pitch }, AbortSignal.timeout(10_000))
+      const buf = await chosen.synth({ text: 'OK.', ...requestFields(s.voice, chosen.name), rate: s.voice.rate, pitch: s.voice.pitch }, AbortSignal.timeout(10_000))
       if (!buf?.length) throw new Error('empty audio')
     }
-    void this.edgeHealth.probe(check).then((r) => {
-      this.tr('tts.edge_probe', { ok: r.ok, reason: r.reason?.slice(0, 120), retryInMs: r.waitMs })
-      if (r.ok) this.toast('info', 'Edge voice is back.')
+    void health.probe(check).then((r) => {
+      this.tr('tts.engine_probe', { engine: chosen.name, ok: r.ok, reason: r.reason?.slice(0, 120), retryInMs: r.waitMs })
+      if (r.ok) this.toast('info', `${TTS_ENGINE_LABELS[chosen.name]} voice is back.`)
     })
   }
 

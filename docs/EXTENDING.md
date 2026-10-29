@@ -56,11 +56,21 @@ prefix; each server has its own log in Settings.
 
 ## Add a voice (TTS engine)
 
-1. Implement `TtsEngine` from `src/core/speech/tts.ts`: `synth(text, signal)` yields MP3 chunks.
-2. Add the engine id to `VoiceSettings.engine` in `src/shared/types.ts` and the picker in
-   `SettingsView.tsx` (`VoiceOutput`).
-3. `Agent.engineFor()` in `src/core/agent.ts` chooses the engine; the Kokoro one shows how a local process
-   is started on demand (`src/main/services/kokoro.ts`) and how `EdgeHealth` decides when to fall back.
+Every engine turns one sentence into an MP3 buffer; the `Speaker` runs them concurrently and plays in order,
+so a new engine inherits streaming, barge-in, retries and the Kokoro fallback for free.
+
+1. `src/shared/types.ts`: the id in `CloudTtsProvider` (hosted) or `TtsEngineId` (local).
+2. `src/shared/tts.ts`: a `TTS_PROVIDERS` entry: label, `.env` variable names, default voice and model, the
+   known models (mark those that understand inline cues with `tags: true`), the built-in voices, and the cue
+   syntax, if any. The Settings picker, the key rows and the prompt guide all read this.
+3. The engine in `src/core/speech/`: extend `HttpTtsEngine` in `cloud.ts` (`request()` builds the fetch,
+   `list()` fetches voices and models; `body()` only when the response is not raw audio, see Inworld's
+   NDJSON) or follow `qwen.ts` for a WebSocket protocol. Inject `fetch`/`WebSocket` so tests can fake them.
+4. `src/main/index.ts`: construct it in `cloudTts` with `cloudDeps(id)` (keys, the proxied fetch, timeout).
+5. Tests next to it: a scripted `fetch` or socket, one failure case, the catalog fallback.
+
+A local engine (like Kokoro) is a `TtsEngine` owned by the agent plus a main-process service that starts the
+process on demand; `Agent.engineFor()` picks it and `EdgeHealth` (one per remote engine) decides when to fall back.
 
 ## Add a prompt style or a skill
 
