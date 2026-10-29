@@ -18,7 +18,7 @@ importers:
         specifier: ^4.0.44
         version: 4.0.44(zod@4.6.5)
       '@ai-sdk/openai':
-        specifier: ^4.0.72
+        specifier: 4.0.72
         version: 4.0.72(zod@4.6.5)
       '@ai-sdk/xai':
         specifier: ^5.0.2
