@@ -187,6 +187,36 @@ describe('TurnRunner', () => {
     expect(r.error).toBe("Claude Haiku 4.5 failed (400: bad request); GPT-OSS 20B can't take a request this big")
   })
 
+  it('remembers a rejected key: other models on it are skipped, and later turns go straight to a working provider', async () => {
+    const forbidden = Object.assign(new Error('invalid x-api-key'), { statusCode: 401 })
+    const rejected = new Set<string>()
+    const models: Record<string, MockLanguageModelV4> = {
+      'anthropic:claude-haiku-5-5': mockModel([forbidden]),
+      'anthropic:claude-haiku-4-5': mockModel([forbidden]),
+      'groq:openai/gpt-oss-20b': mockModel([textStream(['Fallback.'])])
+    }
+    const factory = {
+      create: (m: ModelInfo) => ({ model: models[m.id]!, key: 'k' }),
+      keyRejected: (m: ModelInfo) => rejected.has(m.provider),
+      rejectKey: (m: ModelInfo) => rejected.add(m.provider),
+      groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }
+    } as unknown as ModelFactory
+    const over = { factory, model: info('anthropic:claude-haiku-5-5'), fallbacks: [info('anthropic:claude-haiku-4-5'), info('groq:openai/gpt-oss-20b')] }
+
+    const first = harness(models, over)
+    expect((await first.run()).text).toBe('Fallback.')
+    expect(models['anthropic:claude-haiku-5-5']!.doStreamCalls).toHaveLength(1)
+    expect(models['anthropic:claude-haiku-4-5']!.doStreamCalls).toHaveLength(0) // same key: not tried
+    expect(first.deps.onNotice).toHaveBeenCalledTimes(1)
+    expect(first.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 5.5 rejected the API key (replace the Anthropic key in Settings or .env), trying GPT-OSS 20B.')
+
+    const second = harness(models, over)
+    expect((await second.run()).text).toBe('Fallback.')
+    expect(models['anthropic:claude-haiku-5-5']!.doStreamCalls).toHaveLength(1) // no doomed round trip
+    expect(second.deps.onNotice).not.toHaveBeenCalled() // told once is enough
+    expect(second.deps.trace).toHaveBeenCalledWith('turn.model_skipped', { model: 'anthropic:claude-haiku-5-5', reason: 'key_rejected' })
+  })
+
   it('skips straight to the fallback model on an invalid API key, without a wasted same-model retry', async () => {
     const forbidden = Object.assign(new Error('invalid x-api-key'), { statusCode: 401 })
     const primary = mockModel([forbidden, textStream(['should not be reached'])])
@@ -195,7 +225,7 @@ describe('TurnRunner', () => {
     expect(r.text).toBe('Fallback.')
     expect(r.modelUsed).toBe('groq:openai/gpt-oss-20b')
     expect(primary.doStreamCalls).toHaveLength(1)
-    expect(h.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 rejected the API key, trying GPT-OSS 20B.')
+    expect(h.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 rejected the API key (replace the Anthropic key in Settings or .env), trying GPT-OSS 20B.')
   })
 
   it('rotates past a dead key in the Groq pool instead of failing the turn', async () => {

@@ -76,8 +76,11 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', done, { once: true })
   })
 
-/** Why a model in the chain didn't answer, in words fit for a toast and the "I couldn't get a reply" line. */
-type Miss = { model: ModelInfo; why: string }
+/**
+ * Why a model in the chain didn't answer, in words fit for a toast and the "I couldn't get a reply" line.
+ * `quiet` misses (a key already known to be refused) are not announced again: the user was told the first time.
+ */
+type Miss = { model: ModelInfo; why: string; quiet?: boolean }
 
 type ProviderOptions = NonNullable<Parameters<typeof streamText>[0]['providerOptions']>
 
@@ -87,7 +90,7 @@ const seconds = (ms: number): string => `${Math.max(1, Math.round(ms / 1000))}s`
 
 function missReason(e: unknown, info: ModelInfo): string {
   if (e instanceof MissingKeyError) return `has no API key (add one for ${info.providerLabel})`
-  if (isAuthError(e)) return `rejected the API key`
+  if (isAuthError(e)) return `rejected the API key (replace the ${info.providerLabel} key in Settings or .env)`
   if (isTooLarge(e)) return `can't take a request this big`
   if (isRateLimit(e)) {
     const wait = retryAfterMs(e)
@@ -122,28 +125,41 @@ export class TurnRunner {
     const pool = this.deps.factory.groqPool
     const estimate = estimateTokens(this.requestChars(), Object.keys(this.deps.tools).length)
     const misses: Miss[] = []
+    // the latest miss the user hasn't been told about; announced as "X …, trying Y." when Y is actually tried
+    let unannounced: Miss | null = null
+    const miss = (m: Miss): void => {
+      misses.push(m)
+      if (!m.quiet) unannounced = m
+    }
     let lastError: unknown
 
     for (let k = 0; k < chain.length; k++) {
       const info = chain[k]!
       if (signal.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
 
+      if (info.provider !== 'groq' && this.deps.factory.keyRejected?.(info)) {
+        miss({ model: info, why: `has a rejected API key (replace the ${info.providerLabel} key in Settings or .env)`, quiet: true })
+        this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'key_rejected' })
+        continue
+      }
+
       const ceiling = capacity?.ceiling(info.id)
       if (ceiling && estimate > ceiling) {
-        misses.push({ model: info, why: `can't take a request this big (about ${estimate} tokens, its limit is ${ceiling})` })
+        miss({ model: info, why: `can't take a request this big (about ${estimate} tokens, its limit is ${ceiling})` })
         this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'too_large', estimate, ceiling })
         continue
       }
       const busyMs = info.provider === 'groq' ? pool.nextFreeInMs() : (capacity?.waitMs(info.id) ?? 0)
       if (busyMs > MAX_RATE_WAIT_MS) {
-        misses.push({ model: info, why: `is rate-limited for another ${seconds(busyMs)}` })
+        miss({ model: info, why: `is rate-limited for another ${seconds(busyMs)}` })
         this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'rate_limited', waitMs: busyMs })
         continue
       }
       if (busyMs > 0) await sleep(busyMs, signal)
-      if (k > 0 && misses.length) {
-        const prev = misses[misses.length - 1]!
+      if (unannounced) {
+        const prev: Miss = unannounced
         this.deps.onNotice(`${prev.model.label} ${prev.why}, trying ${info.label}.`)
+        unannounced = null
       }
 
       let retried = false
@@ -181,7 +197,8 @@ export class TurnRunner {
             if (this.deps.brain.retryBackoffMs > 0) await sleep(this.deps.brain.retryBackoffMs, signal)
             continue
           }
-          misses.push({ model: info, why: missReason(e, info) })
+          if (isAuthError(e) && info.provider !== 'groq') this.deps.factory.rejectKey?.(info)
+          miss({ model: info, why: missReason(e, info) })
           break
         }
       }

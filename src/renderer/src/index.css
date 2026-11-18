@@ -273,6 +273,12 @@ input[type='range'] {
 .va-tree-row:hover {
   background: var(--va-wash);
 }
+.va-menu-item:hover,
+.va-menu-item:focus-visible {
+  background: var(--va-wash) !important;
+  color: var(--va-text) !important;
+  outline: none;
+}
 
 .va-tool-card {
   transition: border-color 0.15s ease;

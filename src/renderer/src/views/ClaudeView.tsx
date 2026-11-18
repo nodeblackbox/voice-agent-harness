@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, Ban, Check, ClipboardList, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, ListChecks, Octagon, Pencil, Play, Plus, RotateCcw, Send,
   ShieldAlert, Square, Trash2, Undo2, Wrench, X, Zap, type LucideIcon
@@ -13,6 +13,7 @@ import { AccountBadge, costNote, useClaudeAccount } from './claude/Account'
 import { Activity as ActivityFeed } from './claude/Activity'
 import { Browse } from './claude/Browse'
 import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
+import { FileMenuProvider } from './claude/FileMenu'
 import { Files, RestartNotice, useWorkspaceFiles } from './claude/Files'
 import { Inspector } from './claude/Inspector'
 import { Markdown } from './claude/Markdown'
@@ -287,9 +288,21 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
   )
 }
 
-function Composer({ session }: { session: CcSession }) {
+function Composer({ session, insert }: { session: CcSession; insert?: { text: string; n: number } | null }) {
   const check = useCheck()
   const [text, setText] = useState('')
+  const box = useRef<HTMLTextAreaElement>(null)
+  // "Mention in message" from a file's right-click menu: add the path to the draft and put the cursor after it
+  useEffect(() => {
+    if (!insert) return
+    setText((t) => (t && !/\s$/.test(t) ? `${t} ` : t) + insert.text + ' ')
+    requestAnimationFrame(() => {
+      const el = box.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }, [insert])
   const busy = isBusy(session)
   const send = (now: boolean) => {
     const t = text.trim()
@@ -313,6 +326,8 @@ function Composer({ session }: { session: CcSession }) {
       )}
       <form className="flex gap-2 items-end rounded-xl p-2" style={{ background: T.surface, border: `1px solid ${busy ? alpha(T.claude, 35) : T.border}` }} onSubmit={(e) => { e.preventDefault(); send(false) }}>
         <textarea
+          ref={box}
+          aria-label="Message to this session"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false) } }}
@@ -343,6 +358,9 @@ function Detail({ session }: { session: CcSession }) {
   const pulse = useMemo(() => events.filter((e) => e.kind === 'tool_result' || e.kind === 'result').length, [events])
   const { files, refresh, unavailable } = useWorkspaceFiles(session.id, pulse)
   const openFile = (rel: string) => { setFile(rel); setTab('files') }
+  const [insert, setInsert] = useState<{ text: string; n: number } | null>(null)
+  const mention = useCallback((rel: string) => setInsert((p) => ({ text: `\`${rel}\``, n: (p?.n ?? 0) + 1 })), [])
+  const preview = useCallback((rel: string) => { setPage(rel); setTab('preview') }, [])
   const fileCount = (files ?? []).filter((f) => !f.dir).length
   const hasPage = (files ?? []).some((f) => !f.dir && isHtml(f.path))
   const tabs: Array<{ id: Tab; label: string; icon: LucideIcon; badge?: string }> = [
@@ -351,6 +369,7 @@ function Detail({ session }: { session: CcSession }) {
     { id: 'preview', label: 'Preview', icon: Eye, badge: hasPage ? 'live' : undefined }
   ]
   return (
+    <FileMenuProvider id={session.id} workspace={session.workspace} onPreview={preview} onMention={mention}>
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       <Header session={session} touched={touched.length} toolCalls={toolCalls} />
       {session.pending && <div className="px-5 pt-3"><PendingCard session={session} pending={session.pending} /></div>}
@@ -390,13 +409,14 @@ function Detail({ session }: { session: CcSession }) {
             touched={touched}
             selected={file}
             onSelect={setFile}
-            onPreview={(rel) => { setPage(rel); setTab('preview') }}
+            onPreview={preview}
           />
         )}
         {tab === 'preview' && (unavailable ? <RestartNotice what="the live preview" /> : <Preview id={session.id} files={files} page={page} onPage={setPage} pulse={pulse} />)}
       </div>
-      <Composer session={session} />
+      <Composer session={session} insert={insert} />
     </div>
+    </FileMenuProvider>
   )
 }
 

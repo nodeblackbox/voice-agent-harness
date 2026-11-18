@@ -10,6 +10,7 @@ import { Btn } from '../../components/primitives'
 import { Markdown } from './Markdown'
 import { ago, buildTree, ext, fmtBytes, isAudio, isHtml, isImage, isMedia, isPdf, isVideo, type Touched, type TreeNode } from './feed'
 import { AUDIO_TINT, Gallery, MediaView, VIDEO_TINT } from './Media'
+import { useFileMenu } from './FileMenu'
 
 const CODE_EXT = new Set(['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'css', 'scss', 'html', 'htm', 'py', 'rs', 'go', 'java', 'sh', 'ps1', 'yml', 'yaml', 'toml', 'xml', 'sql', 'c', 'cpp', 'h'])
 const iconFor = (p: string) =>
@@ -75,11 +76,13 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
   const changedInside = node.dir && [...touched.keys()].some((p) => p.startsWith(node.path + '/'))
   const fresh = !node.dir && now - node.mtime < FRESH_MS
   const active = selected === node.path
+  const menu = useFileMenu()
   return (
     <div>
       <button
         type="button"
         onClick={() => (node.dir ? toggle(node.path) : select(node.path))}
+        onContextMenu={(e) => menu(e, node.path, node.dir)}
         className="va-tree-row group w-full flex items-center gap-1.5 text-left rounded-md"
         title={node.dir ? node.path : `${node.path} · ${fmtBytes(node.size)} · changed ${ago(node.mtime, now)}`}
         style={{
@@ -139,10 +142,11 @@ function Viewer({ id, rel, mtime, size, onPreview }: { id: string; rel: string; 
     if (!r.ok) pushToast('error', r.error)
   }
   const md = ext(rel) === 'md'
+  const menu = useFileMenu()
   return (
     <div className="flex-1 min-w-0 flex flex-col">
       <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: `1px solid ${T.border}` }}>
-        <span className="text-xs truncate flex-1" style={{ fontFamily: T.mono, color: T.text2 }}>
+        <span className="text-xs truncate flex-1" style={{ fontFamily: T.mono, color: T.text2 }} onContextMenu={(e) => menu(e, rel)} title="Right-click to copy the path">
           {rel.split('/').map((p, i, a) => (
             <span key={i}>
               {i > 0 && <span style={{ color: T.text3 }}> / </span>}
@@ -201,6 +205,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
   onPreview: (rel: string) => void
 }) {
   const pushToast = useStore((s) => s.pushToast)
+  const menu = useFileMenu()
   const [open, setOpen] = useState<Set<string> | null>(null)
   const [filter, setFilter] = useState('')
   const [gallery, setGallery] = useState(false)
@@ -266,7 +271,7 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
               <FolderOpen size={16} style={{ color: T.steel }} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate" style={{ color: T.text }} title={workspace}>{folderName}</div>
+              <div className="text-sm font-medium truncate" style={{ color: T.text }} title={workspace} onContextMenu={(e) => menu(e, '', true)}>{folderName}</div>
               <div className="text-xs truncate" style={{ color: T.text3 }}>
                 {files === null ? 'Reading…' : `${fileCount} file${fileCount === 1 ? '' : 's'}${folderCount ? ` · ${folderCount} folder${folderCount === 1 ? '' : 's'}` : ''} · ${fmtBytes(total)}`}
               </div>

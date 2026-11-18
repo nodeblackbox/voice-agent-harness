@@ -233,6 +233,43 @@ describe('ClaudeView', () => {
     expect(claude.open).toHaveBeenCalledWith('s1', 'index.html', 'code')
   })
 
+  it('right-clicking a file opens a menu that copies its path and mentions it in the message box', async () => {
+    claude.files.mockResolvedValue([
+      { path: 'src', dir: true, size: 0, mtime: 1 },
+      { path: 'src/app.js', dir: false, size: 20, mtime: 1 }
+    ])
+    claude.read.mockResolvedValue({ kind: 'text', text: 'x', size: 1, truncated: false })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(button('Files'))
+    const rightClick = async (el: Element | undefined) => {
+      expect(el, 'element to right-click').toBeTruthy()
+      await act(async () => { el!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 })) })
+    }
+
+    await rightClick(button('app.js'))
+    const full = String.raw`D:\ws\landing-page\src\app.js`
+    expect(host.querySelector('[role="menu"]')?.textContent).toContain(full)
+    await click(button('Copy path'))
+    expect(writeText).toHaveBeenCalledWith(full)
+    expect(host.querySelector('[role="menu"]')).toBeNull()
+
+    await rightClick(button('app.js'))
+    await click(button('Copy relative path'))
+    expect(writeText).toHaveBeenLastCalledWith('src/app.js')
+
+    await rightClick(button('app.js'))
+    await click(button('Mention in message'))
+    expect((host.querySelector('textarea[aria-label="Message to this session"]') as HTMLTextAreaElement).value).toBe('`src/app.js` ')
+
+    await rightClick(button('src'))
+    expect(button('Open folder')).toBeTruthy()
+    await click(button('Show in File Explorer'))
+    expect(claude.open).toHaveBeenCalledWith('s1', 'src', 'reveal')
+  })
+
   it('the Preview tab frames the page from the workspace in a sandbox', async () => {
     claude.files.mockResolvedValue([{ path: 'index.html', dir: false, size: 50, mtime: 1 }])
     useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
