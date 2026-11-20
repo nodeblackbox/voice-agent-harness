@@ -28,6 +28,18 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
   )
 }
 
+/** Kokoro v1.0 English voices: a/b = American/British, f/m = female/male. */
+const KOKORO_VOICES = [
+  'af_heart', 'af_bella', 'af_nicole', 'af_sarah', 'af_sky', 'af_nova', 'af_river', 'af_jessica', 'af_kore', 'af_aoede', 'af_alloy',
+  'am_michael', 'am_fenrir', 'am_puck', 'am_adam', 'am_echo', 'am_eric', 'am_liam', 'am_onyx',
+  'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily', 'bm_george', 'bm_fable', 'bm_daniel', 'bm_lewis'
+]
+const kokoroLabel = (id: string): string => {
+  const [tag, name] = id.split('_')
+  const who = { af: 'US female', am: 'US male', bf: 'UK female', bm: 'UK male' }[tag ?? ''] ?? tag
+  return name ? `${name[0]!.toUpperCase()}${name.slice(1)} · ${who}` : id
+}
+
 const SHOWN = 6
 
 const ago = (t: number, now: number): string => {
@@ -151,6 +163,8 @@ export function VoiceOutput() {
   const voiceOptions = cloudVoices.map((x) => ({ id: x.shortName, label: x.name === x.shortName ? x.name : `${x.name} · ${x.gender || x.locale}` }))
   if (choice && !cloudVoices.some((x) => x.shortName === choice.voice)) voiceOptions.unshift({ id: choice.voice, label: `custom · ${choice.voice.slice(0, 24)}` })
   const takesTags = cloud && choice ? modelTakesTags(cloud, choice.model) : false
+  // the account's own list loaded and the saved voice id isn't in it (a voice from another account)
+  const voiceMissing = !!(cloud && choice?.voice && catalog?.voices?.length && !catalog.error && !catalog.voices.some((x) => x.shortName === choice.voice))
   const engineOptions = [
     { id: 'edge', label: TTS_ENGINE_LABELS.edge },
     { id: 'kokoro', label: TTS_ENGINE_LABELS.kokoro },
@@ -205,7 +219,18 @@ export function VoiceOutput() {
               <Row label="Model" sub={catalog?.error ? `Couldn't list from ${info.label}: ${catalog.error}` : 'The provider’s models that can speak.'}>
                 <Select value={choice.model} width={230} onChange={(model) => setCloud({ model })} options={modelOptions} />
               </Row>
-              <Row label="Voice" sub={catalog && !catalog.error ? `${cloudVoices.length} listed; your own voices first.` : info.voiceHint}>
+              <Row
+                label="Voice"
+                sub={
+                  voiceMissing ? (
+                    <span style={{ color: T.red }}>This voice isn't on the account this {info.label} key belongs to, so every sentence would fail. Pick one below, or put the owning account's key in Settings &gt; Providers or .env.</span>
+                  ) : catalog && !catalog.error ? (
+                    `${cloudVoices.length} listed; your own voices first.`
+                  ) : (
+                    info.voiceHint
+                  )
+                }
+              >
                 <span className="inline-flex items-center gap-2">
                   <span
                     className="inline-flex items-center gap-1 text-xs"
@@ -264,13 +289,25 @@ export function VoiceOutput() {
             </Row>
           )}
           {engine === 'kokoro' && (
-            <Row label="Kokoro voice" sub="af_ = American female, am_ = male, bf_/bm_ = British.">
-              <Select
-                value={v.kokoroVoice}
-                width={130}
-                onChange={(kokoroVoice) => void updateSettings({ voice: { ...v, kokoroVoice } })}
-                options={['af_heart', 'af_bella', 'af_nicole', 'am_michael', 'am_fenrir', 'bf_emma', 'bm_george'].map((id) => ({ id, label: id }))}
-              />
+            <Row label="Kokoro voice" sub="Changes take effect from the next sentence. Preview plays it once Kokoro is loaded.">
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1 text-xs"
+                  style={{ color: previewing === v.kokoroVoice ? T.cyan : T.text3, cursor: kokoroState === 'ready' ? 'pointer' : 'default', opacity: kokoroState === 'ready' ? 1 : 0.5 }}
+                  onClick={() => kokoroState === 'ready' && void preview(v.kokoroVoice, 'kokoro')}
+                  role="button"
+                  aria-label="Preview Kokoro voice"
+                  title={kokoroState === 'ready' ? 'Hear this voice' : 'Available once Kokoro is loaded'}
+                >
+                  <Play size={11} /> preview
+                </span>
+                <Select
+                  value={v.kokoroVoice}
+                  width={170}
+                  onChange={(kokoroVoice) => void updateSettings({ voice: { ...v, kokoroVoice } })}
+                  options={(KOKORO_VOICES.includes(v.kokoroVoice) ? KOKORO_VOICES : [v.kokoroVoice, ...KOKORO_VOICES]).map((id) => ({ id, label: kokoroLabel(id) }))}
+                />
+              </span>
             </Row>
           )}
           <Row label="Rate" sub={`${v.rate > 0 ? '+' : ''}${Math.round(v.rate * 100)}%`}>

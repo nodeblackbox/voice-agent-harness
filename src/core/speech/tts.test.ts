@@ -39,6 +39,14 @@ describe('KokoroTtsEngine', () => {
     expect(b.synth).toHaveBeenCalledWith('Hello.', 'bf_emma', 1, expect.anything())
   })
 
+  it('speaks a Kokoro voice named in the request (a preview), but never an Edge name', async () => {
+    const b = backend()
+    await new KokoroTtsEngine(b, () => 'af_heart').synth({ ...req, voice: 'bf_isabella' }, new AbortController().signal)
+    expect(b.synth).toHaveBeenLastCalledWith('Hello.', 'bf_isabella', 1, expect.anything())
+    await new KokoroTtsEngine(b, () => 'af_heart').synth(req, new AbortController().signal)
+    expect(b.synth).toHaveBeenLastCalledWith('Hello.', 'af_heart', 1, expect.anything())
+  })
+
   it('falls through to the Windows voice instead of throwing when Kokoro keeps erroring', async () => {
     const b = backend({ synth: vi.fn(async () => Promise.reject(new Error('boom'))) })
     expect(await new KokoroTtsEngine(b, () => 'af_heart').synth(req, new AbortController().signal)).toBeNull()

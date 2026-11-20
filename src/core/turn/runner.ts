@@ -298,6 +298,8 @@ export class TurnRunner {
     let firstSentence = false
     let toolsInFlight = 0
     let toolCalls = 0
+    // text before and after a tool call arrive as separate steps: "…as a priority?" + "Echo issue saved" needs a space
+    let afterTool = false
     let lastFinish: string | undefined
     let noteBuf = ''
     const textBefore = this.text
@@ -351,6 +353,8 @@ export class TurnRunner {
                 break
               }
             }
+            if (afterTool && this.text && !/\s$/.test(this.text) && !/^\s/.test(delta)) delta = ` ${delta}`
+            afterTool = false
             this.text += delta
             this.deps.onDelta(delta)
             for (const sentence of chunker.feed(filter.feed(delta))) {
@@ -385,6 +389,7 @@ export class TurnRunner {
             break
           }
           case 'tool-result': {
+            afterTool = true
             toolsInFlight = Math.max(0, toolsInFlight - 1)
             this.deps.onToolEnd(part.toolCallId, part.toolName, true, part.output)
             if (toolsInFlight === 0) {
@@ -395,6 +400,7 @@ export class TurnRunner {
             break
           }
           case 'tool-error': {
+            afterTool = true
             toolsInFlight = Math.max(0, toolsInFlight - 1)
             this.deps.onToolEnd(part.toolCallId, part.toolName, false, undefined, describe(part.error))
             if (toolsInFlight === 0) {

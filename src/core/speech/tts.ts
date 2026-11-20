@@ -90,7 +90,9 @@ export class KokoroTtsEngine implements TtsEngine {
     // one retry: a single hiccup would otherwise put a sentence in the Windows voice mid-reply
     for (let attempt = 1; ; attempt++) {
       try {
-        const buf = await this.backend.synth(req.text, this.voice(), kokoroSpeed(req.rate), signal)
+        // the request's voice when it is a Kokoro one (a preview); otherwise (an Edge name, when Kokoro covers for Edge) the setting
+        const voice = /^[a-z][fm]_[a-z]+$/.test(req.voice) ? req.voice : this.voice()
+        const buf = await this.backend.synth(req.text, voice, kokoroSpeed(req.rate), signal)
         req.onFirstByte?.(performance.now() - t0)
         return buf
       } catch (e) {

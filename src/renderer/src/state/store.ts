@@ -28,6 +28,7 @@ import type { ChunkText } from '../lib/spoken'
 import { listDevices, pickDefaults } from '../audio/devices'
 import { rlog } from '../lib/rlog'
 import { applyTheme } from '../lib/theme-mode'
+import { single } from '../lib/single'
 
 export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
 
@@ -171,7 +172,7 @@ export const useStore = create<Store>((set, get) => ({
       set({ chunkTexts: all })
     })
 
-    window.api.onEvent((e: AgentEvent) => {
+    single('agent-events', () => window.api.onEvent((e: AgentEvent) => {
       switch (e.type) {
         case 'state':
           set({ agentState: e.state, partial: e.state === 'user_speaking' ? get().partial : '' })
@@ -265,7 +266,7 @@ export const useStore = create<Store>((set, get) => ({
           void get().reloadContext()
           break
       }
-    })
+    }))
 
     const [settings, models, styles, projects, sessions, services, keys, history, context, skills] = await Promise.all([
       window.api.settings.get(),

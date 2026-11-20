@@ -1177,7 +1177,10 @@ export class Agent {
     if (fields.model) line += ` (${fields.model})`
     if (engine !== chosen) line += chosen === this.kokoro ? `, covering while ${TTS_ENGINE_LABELS.kokoro} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
     const cues = s.voice.expressive && isCloudTts(engine.name) && engine.acceptsTags?.(fields)
-    line += cues ? '; delivery cues are on' : '; it reads plain text, no cue tags'
+    line += cues
+      ? '; delivery cues are on'
+      : // without cues the voice reads every character: "*sigh*" or "heh heh" come out as words
+        "; it reads plain text, no cue tags. This voice can't laugh, sigh, breathe or whisper, so never write sounds or actions (*sigh*, heh heh, *giggles*): they would be read out as words. If asked for one, say this voice can't, and that Inworld, Fish Audio or ElevenLabs v3/v4 can once Expressive cues is on in Settings > Voice output"
     return line
   }
 
@@ -1197,7 +1200,7 @@ export class Agent {
     this.tr('tts.engine_down', { engine: name, retryInMs, reason: reason.slice(0, 120), fallback: this.fallbackEngine().name })
     if (this.kokoro) void this.deps.kokoro?.start()
     const label = TTS_ENGINE_LABELS[name]
-    const why = /\b429\b/.test(reason) ? `${label} is rate-limiting us` : name === 'edge' ? 'Edge TTS is unreachable' : `${label} failed (${reason.slice(0, 80)})`
+    const why = /\b429\b/.test(reason) ? `${label} is rate-limiting us` : name === 'edge' ? 'Edge TTS is unreachable' : `${label} failed (${reason.slice(0, 220)})`
     this.toast('warn', this.kokoro
       ? `${why}; using the local Kokoro voice until it recovers (the Windows voice covers while Kokoro loads).`
       : `${why}; using the system voice until it recovers.`)

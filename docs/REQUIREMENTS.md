@@ -22,7 +22,14 @@ this is the "why" and the bar each part has to meet.
 - **Kokoro (local) is loaded on demand**: picking it starts loading straight away (30-60 s), with a
   loading indicator and a Load/Retry button; replies keep using Edge until it is ready and then switch by
   themselves, with a toast. It must never look selected while something else silently speaks.
-- A failed engine says why (no key, deleted voice, rate limit) instead of degrading without a word.
+- A failed engine says why (no key, deleted voice, rate limit) instead of degrading without a word. A
+  saved hosted voice that isn't on the key's account (cloned voices belong to one account) is flagged in
+  Settings before it is used.
+- **Every sentence plays once.** A doubled player (heard as an echo) must not happen, hot reload included.
+- Changing the Kokoro voice is audible from the next sentence, and every voice can be previewed.
+- **Expressive sounds** (laughs, sighs, breaths, whispers) are wanted. Only the hosted voices that take
+  cues can make them (Inworld, Fish Audio, ElevenLabs v3/v4, with Expressive cues on); on Edge and Kokoro
+  the agent says it can't rather than writing "*sigh*" for the voice to read out.
 
 ## Speech recognition (Parakeet)
 

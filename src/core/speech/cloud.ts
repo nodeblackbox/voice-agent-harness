@@ -54,7 +54,10 @@ async function failure(label: string, res: Response): Promise<Error> {
   } catch {
     // not JSON
   }
-  return new Error(`${label} ${res.status}: ${(reason || res.statusText).slice(0, 160)}`)
+  // a voice id from another account (a cloned voice lives only on the account that made it): say what to do
+  if (res.status === 404 && /voice.*not (be )?found|voice_not_found/i.test(reason))
+    reason = `the voice isn't on the account this API key belongs to; pick one of its voices in Settings, or use the key of the account that owns it (${reason.slice(0, 80)})`
+  return new Error(`${label} ${res.status}: ${(reason || res.statusText).slice(0, 260)}`)
 }
 
 abstract class HttpTtsEngine implements TtsEngine {
