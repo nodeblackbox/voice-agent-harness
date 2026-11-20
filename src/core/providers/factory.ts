@@ -45,12 +45,24 @@ export class ModelFactory {
     if (key !== undefined) this.rejected.add(`${info.provider}\0${key}`)
   }
 
+  /** Anthropic answered "workspace not found": the workspace header goes, for the rest of this run. */
+  private workspaceDropped = false
+
+  /** Stop sending the Anthropic workspace header. True when there was one to drop (so a retry is worth it). */
+  dropWorkspace(info: ModelInfo): boolean {
+    if (info.provider !== 'anthropic' || this.workspaceDropped) return false
+    const headers = this.keys.headersFor?.('anthropic')
+    if (!headers || !Object.keys(headers).length) return false
+    this.workspaceDropped = true
+    return true
+  }
+
   create(info: ModelInfo): { model: LanguageModel; key: string } {
     const key = info.provider === 'groq' ? this.groqPool.pick() : this.keys.keysFor(info.provider)[0]
     if (!key) throw new MissingKeyError(info.provider)
     switch (info.provider) {
       case 'anthropic':
-        return { model: createAnthropic({ apiKey: key, headers: this.keys.headersFor?.('anthropic') })(info.model), key }
+        return { model: createAnthropic({ apiKey: key, headers: this.workspaceDropped ? undefined : this.keys.headersFor?.('anthropic') })(info.model), key }
       case 'openai':
         return { model: createOpenAI({ apiKey: key })(info.model), key }
       case 'groq':

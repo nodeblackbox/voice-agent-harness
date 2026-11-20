@@ -57,6 +57,18 @@ const isAuthError = (e: unknown): boolean => {
   const msg = String((e as Error)?.message ?? e).toLowerCase()
   return /invalid x-api-key|invalid api key|authentication_error|unauthorized/.test(msg)
 }
+/** The Anthropic workspace header names a workspace this key can't see: drop the header, the key itself is fine. */
+export const isWorkspaceNotFound = (e: unknown): boolean => status(e) === 404 && /workspace .* not found/i.test(String((e as Error)?.message ?? e))
+/** OpenAI reasoning models (GPT-5 family, o-series) reject or ignore temperature. */
+const openaiReasoning = (info: ModelInfo): boolean => info.provider === 'openai' && (!!info.reasoning || /^(gpt-5|o\d)/.test(info.model))
+
+/** The model finished without a word (and without calling a tool): treated like a failure so the next model answers. */
+export class EmptyReplyError extends Error {
+  constructor(readonly outputTokens: number) {
+    super(`empty reply${outputTokens ? ` (${outputTokens} output tokens, all spent thinking)` : ''}`)
+  }
+}
+
 const describe = (e: unknown): string => {
   if (e instanceof MissingKeyError) return e.message
   const s = status(e)
@@ -91,6 +103,7 @@ const seconds = (ms: number): string => `${Math.max(1, Math.round(ms / 1000))}s`
 function missReason(e: unknown, info: ModelInfo): string {
   if (e instanceof MissingKeyError) return `has no API key (add one for ${info.providerLabel})`
   if (isAuthError(e)) return `rejected the API key (replace the ${info.providerLabel} key in Settings or .env)`
+  if (e instanceof EmptyReplyError) return e.outputTokens ? `answered with nothing (it spent ${e.outputTokens} tokens thinking)` : 'answered with nothing'
   if (isTooLarge(e)) return `can't take a request this big`
   if (isRateLimit(e)) {
     const wait = retryAfterMs(e)
@@ -181,6 +194,13 @@ export class TurnRunner {
           // words already spoken can't be taken back: never restart the answer on another model
           if (this.text.length > 0) return { text: this.text, aborted: false, error: describe(e), modelUsed: info.id }
 
+          // a stale ANTHROPIC_WORKSPACE_ID: the key works without it, so retry this model once without the header
+          if (isWorkspaceNotFound(e) && this.deps.factory.dropWorkspace?.(info) && !retried) {
+            retried = true
+            this.deps.onNotice(`${info.providerLabel} doesn't know the workspace in ANTHROPIC_WORKSPACE_ID; sending without it (remove it from .env).`)
+            this.deps.trace?.('turn.workspace_dropped', { model: info.id })
+            continue
+          }
           const keys = info.provider === 'groq' ? pool.size() : 1
           if (info.provider === 'groq' && (isAuthError(e) || isRateLimit(e)) && rotations + 1 < keys && pool.hasUsable()) {
             rotations++ // the pool benched that key; the next one may be another account with its own limit
@@ -224,6 +244,8 @@ export class TurnRunner {
   private providerOptions(info: ModelInfo): ProviderOptions | undefined {
     const groqEffort = this.deps.brain.groqReasoningEffort
     if (info.provider === 'groq' && info.reasoning && groqEffort !== 'default') return { groq: { reasoningEffort: groqEffort } }
+    const openaiEffort = this.deps.brain.openaiReasoningEffort
+    if (info.provider === 'openai' && info.reasoning && openaiEffort && openaiEffort !== 'default') return { openai: { reasoningEffort: openaiEffort } }
     const claudeEffort = this.deps.brain.claudeEffort
     if (info.provider === 'anthropic' && info.effort && claudeEffort !== 'default') return { anthropic: { effort: claudeEffort } }
     return undefined
@@ -275,6 +297,7 @@ export class TurnRunner {
     let firstToken = false
     let firstSentence = false
     let toolsInFlight = 0
+    let toolCalls = 0
     let lastFinish: string | undefined
     let noteBuf = ''
     const textBefore = this.text
@@ -290,7 +313,7 @@ export class TurnRunner {
         stopWhen: stepCountIs(this.deps.maxSteps),
         abortSignal: signal,
         maxRetries: 0,
-        temperature: this.deps.brain.temperature,
+        temperature: openaiReasoning(info) ? undefined : this.deps.brain.temperature,
         maxOutputTokens: this.deps.brain.maxTokens,
         providerOptions: this.providerOptions(info)
       })
@@ -343,6 +366,7 @@ export class TurnRunner {
           }
           case 'tool-call': {
             toolsInFlight++
+            toolCalls++
             this.deps.onToolStart(part.toolCallId, part.toolName, part.input)
             if (this.deps.fillerEnabled) {
               const now = performance.now()
@@ -408,6 +432,9 @@ export class TurnRunner {
         noteBuf = ''
       }
       for (const s of chunker.flush()) this.deps.speaker.say(s)
+      // nothing said and nothing done: a silent reply is a failure, not an answer (the next model gets the turn).
+      // After a tool call it stays this model's turn: retrying elsewhere would run the tool twice.
+      if (!this.text.trim() && toolCalls === 0 && !outer.aborted) throw new EmptyReplyError(this.metrics.outputTokens ?? 0)
       let hitStepLimit = false
       if (lastFinish === 'tool-calls' && (this.metrics.steps ?? 0) >= this.deps.maxSteps) {
         // the model still wanted tools when the round cap hit: say so only if it said nothing else

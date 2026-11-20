@@ -112,6 +112,7 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `temperature` | 0.6 | 0.6 | Sampling temperature. |
 | `maxTokens` | 1000 | 300 | Output cap per call. The old agent was voice-only and short; comprehensive styles need headroom. |
 | `claudeEffort` | low | — | How hard Sonnet 5+, Opus 5+ and Haiku 5.5 think before answering (`output_config.effort`). They think on every turn by default, silently; with a 13k-token voice prompt that pushed the first word past the 8 s first-token timeout. Haiku 4.5 takes no effort and is left alone. |
+| `openaiReasoningEffort` | minimal | — | Thinking budget for OpenAI reasoning models (GPT-5, GPT-5 mini). Unbounded, they used the whole token cap thinking and answered with nothing after 10-16 s. |
 | `groqReasoningEffort` | low | low | Reasoning budget for Groq reasoning models. Voice cannot wait for long thinking. |
 | `continuationWindowMs` | 2500 | — | A transcript that looks unfinished (ends on a filler word, fewer than `mergeMinWords`, a timeout on a low score, or dangling punctuation) is still answered, but if you start speaking again within this long the reply is cancelled silently and the two pieces become one turn ("and then I'll." + "finish it off."). In the stress test 36 turns were followed by a continuation within 4 s. 0 disables. Trace: `turn.mergeable`, `turn.continuation`, `turn.merged`. |
 | `mergeMinWords` | 4 | — | Transcripts shorter than this always count as unfinished ("Yeah, so basically"). |

@@ -217,6 +217,43 @@ describe('TurnRunner', () => {
     expect(second.deps.trace).toHaveBeenCalledWith('turn.model_skipped', { model: 'anthropic:claude-haiku-5-5', reason: 'key_rejected' })
   })
 
+  it('an empty reply is a failure: the next model answers, and the user hears why', async () => {
+    const thinker = mockModel([[{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage: usage(2600, 960) }]])
+    const h = harness({ 'openai:gpt-5-mini': thinker, 'groq:openai/gpt-oss-20b': mockModel([textStream(['Here.'])]) }, { model: info('openai:gpt-5-mini') })
+    const r = await h.run()
+    expect(r.text).toBe('Here.')
+    expect(r.modelUsed).toBe('groq:openai/gpt-oss-20b')
+    expect(h.deps.onNotice).toHaveBeenCalledWith('GPT-5 mini answered with nothing (it spent 960 tokens thinking), trying GPT-OSS 20B.')
+  })
+
+  it('OpenAI reasoning models get minimal effort and no temperature', async () => {
+    const m = mockModel([textStream(['Quick.'])])
+    await harness({ 'openai:gpt-5-mini': m }, { model: info('openai:gpt-5-mini'), fallbacks: [] }).run()
+    const call = m.doStreamCalls[0]!
+    expect(call.temperature).toBeUndefined()
+    expect(call.providerOptions).toEqual({ openai: { reasoningEffort: 'minimal' } })
+    const plain = mockModel([textStream(['Quick.'])])
+    await harness({ 'openai:gpt-4.1-mini': plain }, { model: info('openai:gpt-4.1-mini'), fallbacks: [] }).run()
+    expect(plain.doStreamCalls[0]!.temperature).toBe(DEFAULT_TUNING.brain.temperature)
+  })
+
+  it('a stale Anthropic workspace: the header is dropped and the same model retried once', async () => {
+    const notFound = Object.assign(new Error('Workspace 5e1a0934 not found'), { statusCode: 404 })
+    const claude = mockModel([notFound, textStream(['Back.'])])
+    const dropWorkspace = vi.fn(() => true)
+    const factory = {
+      create: () => ({ model: claude, key: 'k' }),
+      dropWorkspace,
+      groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }
+    } as unknown as ModelFactory
+    const h = harness({ 'anthropic:claude-haiku-4-5': claude }, { factory })
+    const r = await h.run()
+    expect(r.text).toBe('Back.')
+    expect(r.modelUsed).toBe('anthropic:claude-haiku-4-5')
+    expect(claude.doStreamCalls).toHaveLength(2)
+    expect(h.deps.onNotice).toHaveBeenCalledWith("Anthropic doesn't know the workspace in ANTHROPIC_WORKSPACE_ID; sending without it (remove it from .env).")
+  })
+
   it('skips straight to the fallback model on an invalid API key, without a wasted same-model retry', async () => {
     const forbidden = Object.assign(new Error('invalid x-api-key'), { statusCode: 401 })
     const primary = mockModel([forbidden, textStream(['should not be reached'])])

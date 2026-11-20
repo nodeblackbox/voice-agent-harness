@@ -53,6 +53,15 @@ describe('models registry', () => {
 })
 
 describe('ModelFactory', () => {
+  it('drops the Anthropic workspace header once, and only when there is one', () => {
+    const withWs = new ModelFactory({ keysFor: () => ['k'], headersFor: () => ({ 'anthropic-workspace-id': 'w' }) })
+    const claude = findModel('anthropic:claude-haiku-4-5')!
+    expect(withWs.dropWorkspace(findModel('openai:gpt-4.1-mini')!)).toBe(false)
+    expect(withWs.dropWorkspace(claude)).toBe(true)
+    expect(withWs.dropWorkspace(claude)).toBe(false)
+    expect(new ModelFactory({ keysFor: () => ['k'], headersFor: () => undefined }).dropWorkspace(claude)).toBe(false)
+  })
+
   it('remembers a rejected key per provider until the key is replaced', () => {
     let keys = ['old']
     const f = new ModelFactory({ keysFor: () => keys })
