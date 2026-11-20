@@ -553,6 +553,16 @@ function ClaudeSettingsCard({ s }: { s: ClaudeSettings }) {
         <SectionTitle>Default mode for new sessions (switch any session from its header)</SectionTitle>
         <ModeChooser value={s.defaultMode ?? 'auto'} onChange={(v) => set({ defaultMode: v })} label="Default mode" />
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm" style={{ color: T.text }}>Open sessions at once</div>
+          <div className="text-xs" style={{ color: T.text3 }}>Counts the ones that are idle, working or waiting on you; stopped ones stay in the list and don't count. Each open session is a running Claude Code process.</div>
+        </div>
+        <span className="inline-flex items-center gap-2 shrink-0">
+          <input type="range" aria-label="Open sessions at once" min={1} max={24} step={1} value={s.maxSessions} onChange={(e) => set({ maxSessions: Number(e.target.value) })} style={{ width: 140 }} />
+          <span className="text-sm" style={{ color: T.text, fontFamily: T.mono, width: 22, textAlign: 'right' }}>{s.maxSessions}</span>
+        </span>
+      </div>
     </Card>
   )
 }

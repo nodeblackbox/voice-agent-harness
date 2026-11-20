@@ -1,0 +1,57 @@
+import { describe as suite, expect, it } from 'vitest'
+import { describe, rowText, type ConsoleEntry } from './console'
+
+let id = 0
+const ev = (name: string, data: Record<string, unknown> = {}): ConsoleEntry => ({ id: ++id, t: Date.UTC(2026, 10, 20, 7, 40, 30, 116), kind: 'trace', level: 'info', name, msg: '', data })
+const line = (scope: string, msg: string, level: ConsoleEntry['level'] = 'info'): ConsoleEntry => ({ id: ++id, t: 0, kind: 'log', level, name: scope, msg })
+
+suite('console rows', () => {
+  it('says what was heard, and flags an empty transcript', () => {
+    expect(describe(ev('ear.final', { text: 'Test again.', asrMs: 97 }))).toMatchObject({ cat: 'you', title: 'Heard: “Test again.”', detail: 'transcribed in 97 ms', tone: 'accent' })
+    expect(describe(ev('ear.final', { text: '', asrMs: 137 }))).toMatchObject({ title: 'Heard nothing (empty transcript)', tone: 'warn' })
+  })
+
+  it('a turn start opens a new group with the model that will answer', () => {
+    const r = describe(ev('turn.start', { via: 'voice', text: 'Yo, what is up?', model: 'openai:gpt-4.1-mini', mode: 'agent' }))
+    expect(r).toMatchObject({ cat: 'turn', title: 'You said: “Yo, what is up?”', detail: 'gpt-4.1-mini · agent', turnStart: true })
+  })
+
+  it('explains a cut-off reply: why, what was said and what never was', () => {
+    const r = describe(ev('turn.cancel', { reason: 'barge-in', spokenText: 'Hey hey!', unspokenText: 'What is on your mind?' }))
+    expect(r.title).toBe('Reply cut off: you spoke over it')
+    expect(r.detail).toBe('said “Hey hey!” · never said “What is on your mind?”')
+    expect(r.tone).toBe('warn')
+  })
+
+  it('voice rows carry the engine and timings; a failed engine is a problem', () => {
+    expect(describe(ev('tts.sentence', { seq: 1, kind: 'speech', chars: 58, ms: 185, firstByteMs: 185, attempts: 1, outcome: 'ok', engine: 'kokoro' }))).toMatchObject({ cat: 'voice', title: 'Voiced sentence 2', detail: 'kokoro · 58 chars · first audio 185 ms · total 185 ms' })
+    expect(describe(ev('tts.sentence', { seq: 0, outcome: 'fallback', engine: 'kokoro', chars: 8, ms: 770, firstByteMs: 227 })).tone).toBe('warn')
+    expect(describe(ev('tts.engine_down', { engine: 'elevenlabs', reason: 'ElevenLabs 404', fallback: 'kokoro', retryInMs: 60000 }))).toMatchObject({ tone: 'bad', title: 'elevenlabs voice is down: ElevenLabs 404', detail: 'using kokoro · retry in 60 s' })
+  })
+
+  it('model failures and fallbacks are problems', () => {
+    expect(describe(ev('turn.attempt_failed', { model: 'anthropic:claude-haiku-5-5', error: '404: Workspace not found' }))).toMatchObject({ tone: 'bad', title: 'claude-haiku-5-5 failed: 404: Workspace not found' })
+    expect(describe(ev('turn.attempt', { reason: 'fallback', model: 'openai:gpt-5-mini' })).tone).toBe('warn')
+  })
+
+  it('chatty events are marked noisy so they hide by default', () => {
+    expect(describe(ev('ear.partial', { text: 'you are' })).noisy).toBe(true)
+    expect(describe(ev('state', { from: 'idle', to: 'listening', event: 'mic_on' })).noisy).toBe(true)
+    expect(describe(ev('turn.end', { interrupted: false, totalMs: 11345, chars: 73, chunks: 2, metrics: { model: 'openai:gpt-4.1-mini', inputTokens: 2760, outputTokens: 18 } }))).toMatchObject({ noisy: false, tone: 'good', detail: '11 s · 73 characters · 2 sentences · gpt-4.1-mini · 2760 in / 18 out tokens' })
+  })
+
+  it('log lines keep their scope and level; categories follow the scope', () => {
+    expect(describe(line('kokoro', 'ready on 57199'))).toMatchObject({ cat: 'voice', title: 'ready on 57199', detail: 'kokoro', tone: 'plain' })
+    expect(describe(line('sidecar', 'exited code=1', 'error'))).toMatchObject({ cat: 'system', tone: 'bad' })
+    expect(describe(line('renderer:capture', 'mic open'))).toMatchObject({ cat: 'you' })
+  })
+
+  it('an unknown event still reads: its name and simple fields', () => {
+    expect(describe(ev('future.thing', { a: 1, nested: { x: 1 }, b: 'two' }))).toMatchObject({ cat: 'system', title: 'future.thing', detail: 'a=1  b=two' })
+  })
+
+  it('rowText is what search and copy use', () => {
+    const e = ev('playback.drained', { chunks: 2 })
+    expect(rowText(e)).toMatch(/^\d\d:\d\d:\d\d\.\d{3} playback\.drained All audio played \(2 sentences\)$/)
+  })
+})

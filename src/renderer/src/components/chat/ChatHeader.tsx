@@ -1,4 +1,4 @@
-import { Folder, Headphones, PanelLeft, PanelRight, Volume2, VolumeX } from 'lucide-react'
+import { Folder, Headphones, PanelLeft, PanelRight, SquareTerminal, Volume2, VolumeX } from 'lucide-react'
 import type { VoiceSettings } from '@shared/types'
 import { TTS_ENGINE_LABELS, isCloudTts, requestFields } from '@shared/tts'
 import { T } from '../../theme'
@@ -31,6 +31,8 @@ export function ChatHeader() {
   const rightOpen = useStore((s) => s.rightOpen)
   const setLeftOpen = useStore((s) => s.setLeftOpen)
   const setRightOpen = useStore((s) => s.setRightOpen)
+  const rightTab = useStore((s) => s.rightTab)
+  const setRightTab = useStore((s) => s.setRightTab)
   const muted = useStore((s) => s.muted)
   const setMuted = useStore((s) => s.setMuted)
   const agentState = useStore((s) => s.agentState)
@@ -81,7 +83,32 @@ export function ChatHeader() {
           </span>
         )}
         <IconBtn icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute her voice' : 'Mute her voice'} onClick={() => setMuted(!muted)} size={15} color={muted ? T.amber : undefined} />
-        <IconBtn icon={PanelRight} label="Quick panel" active={rightOpen} onClick={() => setRightOpen(!rightOpen)} size={15} />
+        <IconBtn
+          icon={SquareTerminal}
+          label="Live console beside the chat"
+          active={rightOpen && rightTab === 'console'}
+          onClick={() => {
+            if (rightOpen && rightTab === 'console') setRightOpen(false)
+            else {
+              setRightTab('console')
+              setRightOpen(true)
+            }
+          }}
+          size={15}
+        />
+        <IconBtn
+          icon={PanelRight}
+          label="At a glance"
+          active={rightOpen && rightTab === 'glance'}
+          onClick={() => {
+            if (rightOpen && rightTab === 'glance') setRightOpen(false)
+            else {
+              setRightTab('glance')
+              setRightOpen(true)
+            }
+          }}
+          size={15}
+        />
       </div>
     </header>
   )

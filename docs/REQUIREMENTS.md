@@ -62,8 +62,18 @@ this is the "why" and the bar each part has to meet.
 ## Seeing what happens
 
 - The owner wants to watch live what the app is doing (what was heard, which model and voice answered,
-  what was cut off and why) in a log view of its own. Each run's trace
-  (`%APPDATA%/Voice Agent/logs/sessions/<id>.jsonl`) is the record; `docs/DEBUGGING.md` lists the events.
+  what was cut off and why). The **Console** does this: its own button on the left rail for the full
+  window, and a Console tab in the chat's right-hand panel so it can be watched while talking. Rows are in
+  plain words, coloured by part of the app (you, brain, voice, playback, Claude Code, system), with
+  filters, search, pause, a problems-only switch, and the raw event on click.
+- Every new traced event gets a readable row in `src/shared/console.ts` (`describe`).
+- Each run's trace (`%APPDATA%/Voice Agent/logs/sessions/<id>.jsonl`) is the record; `docs/DEBUGGING.md`
+  lists the events.
+
+## Claude Code sessions
+
+- More than a handful at once: the limit is on sessions that are open (idle, working, waiting), not on
+  the length of the list, and it is a setting (Claude Code view, 1-24, default 8).
 
 ## Working style
 

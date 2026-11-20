@@ -5,6 +5,16 @@ what is in them, and how to read the three common complaints. It is written so a
 session (or a person) can debug from the files alone: paste the output of **Diagnostics → Copy
 diagnostics** and this page is the decoder.
 
+## Watching it live
+
+The **Console** (terminal icon on the left rail, or the Console tab of the chat's right-hand panel) shows
+every `app.log` line and trace event as it happens, one readable row each: "Heard: …", "Trying
+gpt-4.1-mini", "Voiced sentence 2 · kokoro · first audio 185 ms", "Reply cut off: you spoke over it".
+Filter by part of the app, search, pause to read, switch on Problems for warnings and failures only, and
+click a row for the raw event. Verbose adds the chatty ones (partial transcripts, state changes). It holds
+this run's last few thousand events; the files below keep everything. The wording of each row is
+`describe()` in `src/shared/console.ts`: add a case there when you add a trace event.
+
 ## Files
 
 All under `%APPDATA%/Voice Agent/logs/` (Diagnostics view → *Open logs folder*):

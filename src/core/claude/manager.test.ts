@@ -94,6 +94,25 @@ describe('lifecycle', () => {
   })
 })
 
+describe('session limit', () => {
+  it('counts open sessions only: a stopped one frees its place', async () => {
+    const { m } = setup({ maxSessions: 2 })
+    const a = (m.start('One') as any).session.id
+    m.start('Two')
+    expect(m.start('Three')).toMatchObject({ ok: false, error: expect.stringContaining('limit of 2 open sessions') })
+    await m.stop(a)
+    expect(m.list().find((s) => s.id === a)?.status).toBe('stopped')
+    expect(m.start('Three')).toMatchObject({ ok: true })
+    expect(m.list()).toHaveLength(3)
+  })
+
+  it('allows 8 by default', () => {
+    const { m } = setup()
+    for (let i = 0; i < 8; i++) expect(m.start(`S${i}`)).toMatchObject({ ok: true })
+    expect(m.start('Ninth')).toMatchObject({ ok: false })
+  })
+})
+
 describe('queue (stacked prompts)', () => {
   it('queues while busy and drains in order after each result', async () => {
     const { m, runs } = setup()

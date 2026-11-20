@@ -16,7 +16,7 @@ import type { SearxngService } from '../services/searxng'
 import type { McpService } from '../services/mcp'
 import type { ClaudeService } from '../services/claude'
 import { CC_MODES, type CcAnswer, type CcMode } from '@shared/claude'
-import { log, logAt } from '../services/log'
+import { consoleHistory, log, logAt } from '../services/log'
 import { diagnosticsReport, lastTurn, listLogs, openLogsFolder, readTrace, sessionAnalysis, suggestTuning, tailLog } from '../services/diagnostics'
 
 const LEVELS = new Set<LogLevel>(['debug', 'info', 'warn', 'error'])
@@ -209,6 +209,7 @@ export function registerIpc(d: IpcDeps): void {
   })
   h(IPC.sidecarRestart, () => d.sidecar.restart())
   h(IPC.contextSnapshot, () => d.agent.snapshot())
+  h(IPC.consoleHistory, () => consoleHistory())
   h(IPC.logsList, () => listLogs())
   h(IPC.logsTail, (_e, name: string, lines?: number) => tailLog(String(name), lines))
   h(IPC.logsOpenFolder, () => openLogsFolder())

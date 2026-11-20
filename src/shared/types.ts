@@ -447,7 +447,10 @@ export interface ClaudeSettings {
   workspaceRoot: string
   /** Model for sessions; empty = the Claude Code default. */
   model: string
+  /** Sessions open at once (idle, working or waiting); stopped ones don't count. 1-24. */
   maxSessions: number
+  /** Written once the limit has a setting: a stored 4 without it is the old fixed limit, not a choice. */
+  limitChosen?: boolean
   /** How much a new session may do on its own (each session can be switched later). */
   defaultMode: CcMode
 }

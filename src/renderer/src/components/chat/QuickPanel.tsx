@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { Gauge, Maximize2, SquareTerminal, X } from 'lucide-react'
 import type { ServiceName, SessionSummary } from '@shared/types'
 import { T, serviceColor, serviceLabel } from '../../theme'
-import { selectActiveStyle, useStore } from '../../state/store'
+import { selectActiveStyle, useStore, type RightTab } from '../../state/store'
+import { ConsoleFeed } from '../console/ConsoleFeed'
 import { Dot, IconBtn, SectionTitle } from '../primitives'
 
 const SERVICE_LABELS: Record<ServiceName, string> = {
@@ -16,11 +17,10 @@ const SERVICE_LABELS: Record<ServiceName, string> = {
 
 const ORDER: ServiceName[] = ['sidecar', 'tts', 'llm', 'searxng', 'mcp']
 
-export function QuickPanel() {
+function Glance() {
   const services = useStore((s) => s.services)
   const context = useStore((s) => s.context)
   const style = useStore(selectActiveStyle)
-  const setRightOpen = useStore((s) => s.setRightOpen)
   const setView = useStore((s) => s.setView)
   const reloadContext = useStore((s) => s.reloadContext)
   const lastMetrics = useStore((s) => s.lastMetrics)
@@ -41,13 +41,7 @@ export function QuickPanel() {
   const felt = summary?.latency.speechEndToAudioMs
 
   return (
-    <aside className="flex flex-col p-4 gap-5" style={{ width: 260, background: T.rail, borderLeft: `1px solid ${T.border}` }}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium" style={{ color: T.text2 }}>
-          At a glance
-        </span>
-        <IconBtn icon={X} label="Close" size={13} w={22} onClick={() => setRightOpen(false)} />
-      </div>
+    <div className="va-scroll flex flex-col p-4 gap-5 flex-1 overflow-y-auto">
       <div className="flex flex-col gap-2">
         <SectionTitle>Services</SectionTitle>
         {ORDER.map((name) => {
@@ -160,6 +154,47 @@ export function QuickPanel() {
           </span>
         </div>
       )}
+    </div>
+  )
+}
+
+const TABS: Array<{ id: RightTab; label: string; icon: typeof Gauge }> = [
+  { id: 'glance', label: 'At a glance', icon: Gauge },
+  { id: 'console', label: 'Console', icon: SquareTerminal }
+]
+
+/** The chat's right-hand panel: services and numbers at a glance, or the live console beside the conversation. */
+export function QuickPanel() {
+  const tab = useStore((s) => s.rightTab)
+  const setTab = useStore((s) => s.setRightTab)
+  const setRightOpen = useStore((s) => s.setRightOpen)
+  const setView = useStore((s) => s.setView)
+  return (
+    <aside className="flex flex-col min-h-0" style={{ width: tab === 'console' ? 'clamp(340px, 36vw, 520px)' : 260, background: T.rail, borderLeft: `1px solid ${T.border}` }}>
+      <div className="flex items-center gap-1" style={{ height: 44, padding: '0 8px 0 10px', borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div role="tablist" aria-label="Side panel" className="flex items-center gap-1 flex-1 min-w-0">
+          {TABS.map((t) => {
+            const on = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setTab(t.id)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium"
+                style={{ height: 28, padding: '0 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: on ? T.raised : 'transparent', color: on ? T.text : T.text3 }}
+              >
+                <t.icon size={13} />
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+        {tab === 'console' && <IconBtn icon={Maximize2} label="Open the full console" size={13} w={24} onClick={() => setView('console')} />}
+        <IconBtn icon={X} label="Close" size={13} w={24} onClick={() => setRightOpen(false)} />
+      </div>
+      {tab === 'console' ? <ConsoleFeed compact /> : <Glance />}
     </aside>
   )
 }

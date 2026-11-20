@@ -125,6 +125,14 @@ const api: VoiceAgentApi = {
     lastTurn: () => invoke(IPC.traceLastTurn),
     summary: () => invoke(IPC.sessionSummary)
   },
+  console: {
+    history: () => invoke(IPC.consoleHistory),
+    onEntries: (handler) => {
+      const listener = (_e: Electron.IpcRendererEvent, entries: Parameters<typeof handler>[0]) => handler(entries)
+      ipcRenderer.on(IPC.consoleEntries, listener)
+      return () => ipcRenderer.removeListener(IPC.consoleEntries, listener)
+    }
+  },
   onEvent: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, event: Parameters<typeof handler>[0]) => handler(event)
     ipcRenderer.on(IPC.event, listener)

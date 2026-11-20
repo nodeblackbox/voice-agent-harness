@@ -29,7 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },
   // workspaceRoot '' = filled at construction from SettingsOptions.defaultWorkspaceRoot (the main process passes a Documents folder)
-  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 4, defaultMode: 'auto' }
+  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 8, defaultMode: 'auto', limitChosen: true }
 }
 
 export interface SettingsOptions {
@@ -116,6 +116,10 @@ export class SettingsService implements KeySource {
     const cc = this.settings.claude as ClaudeSettings & { approveShell?: boolean }
     if (!CC_MODES.includes(cc.defaultMode)) cc.defaultMode = 'auto'
     delete cc.approveShell
+    // 4 was the fixed limit before there was a setting for it, so a stored 4 was never chosen
+    if (!cc.limitChosen && cc.maxSessions === 4) cc.maxSessions = DEFAULT_SETTINGS.claude.maxSessions
+    cc.maxSessions = Math.min(24, Math.max(1, Math.round(Number(cc.maxSessions) || DEFAULT_SETTINGS.claude.maxSessions)))
+    cc.limitChosen = true
     // the old default backup (GPT-OSS 20B on Groq's free tier, 8k tokens a minute) can't take a voice turn, which runs
     // 10k+ tokens once Claude sessions are on; a stored old default was never chosen, so it moves to Claude Haiku 5.5
     if (OLD_FALLBACK_MODEL_IDS.includes(this.settings.fallbackModelId)) this.settings.fallbackModelId = DEFAULT_FALLBACK_MODEL_ID

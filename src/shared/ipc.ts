@@ -16,6 +16,8 @@ export const IPC = {
   speakStop: 'speak:stop',
   ttsPreview: 'tts:preview',
   ttsCatalog: 'tts:catalog',
+  consoleHistory: 'console:history',
+  consoleEntries: 'console:entries',
   ttsRoute: 'tts:route',
   ttsRouteTest: 'tts:route-test',
   kokoroStart: 'tts:kokoro-start',

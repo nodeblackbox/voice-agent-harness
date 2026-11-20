@@ -21,6 +21,9 @@ import type {
   CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
 
+/** Open Claude Code sessions allowed at once when Settings doesn't say (each is a running process). */
+export const DEFAULT_MAX_SESSIONS = 8
+
 export interface ManagerDeps {
   sdk: CcSdk
   /** The machine's saved Claude Code sessions (CLI, IDE, other apps), for browsing and attaching. */
@@ -123,9 +126,19 @@ export class ClaudeSessionManager {
    * of an existing project folder elsewhere, which makes it an "external" session like an attached one
    * (fenced to that folder; its mode decides what asks).
    */
+  /**
+   * The limit is on sessions that are open (idle, working or waiting on the user). Stopped and failed ones
+   * stay in the list to be resumed or removed and don't count, or a few old sessions would block every new one.
+   */
+  private atLimit(): string | null {
+    const max = this.cfg.maxSessions ?? DEFAULT_MAX_SESSIONS
+    const open = [...this.rts.values()].filter((r) => r.s.status !== 'stopped' && r.s.status !== 'error').length
+    return open >= max ? `Already at the limit of ${max} open sessions. Stop one, or raise "Open sessions at once" in the Claude Code settings.` : null
+  }
+
   start(name: string, firstPrompt?: string, opts: { folder?: string; mode?: CcMode } = {}): CcResult<{ session: CcSession }> {
-    const max = this.cfg.maxSessions ?? 4
-    if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
+    const full = this.atLimit()
+    if (full) return { ok: false, error: full }
     const root = path.resolve(this.cfg.workspaceRoot)
     let workspace: string
     let external = false
@@ -298,8 +311,8 @@ export class ClaudeSessionManager {
    * original transcript is left as it was.
    */
   async attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>> {
-    const max = this.cfg.maxSessions ?? 4
-    if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
+    const full = this.atLimit()
+    if (full) return { ok: false, error: full }
     if (!x.cwd || !fs.existsSync(x.cwd)) return { ok: false, error: 'Its project folder no longer exists.' }
     const dup = [...this.rts.values()].find((r) => r.s.sdkSessionId === x.sessionId)
     if (dup) return { ok: true, session: this.snap(dup) }

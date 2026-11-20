@@ -14,7 +14,8 @@ import { QwenEngine } from '@core/speech/qwen'
 import { MemoryStore } from '@core/memory/store'
 import { findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
-import { initLog, log, logAt, logError, trace, tracePath, type LogLevel } from './services/log'
+import { initLog, log, logAt, logError, onConsole, trace, tracePath, type LogLevel } from './services/log'
+import type { ConsoleEntry } from '@shared/console'
 import { SettingsService } from './services/settings'
 import { SidecarService } from './services/sidecar'
 import { SearxngService } from './services/searxng'
@@ -147,6 +148,18 @@ app.whenReady().then(async () => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
   }
   const emitRef = { current: (event: AgentEvent): void => send(IPC.event, event) }
+  // the live console: entries go to the window in batches, so a burst of events is one IPC message
+  let consoleBatch: ConsoleEntry[] = []
+  let consoleTimer: NodeJS.Timeout | null = null
+  onConsole((e) => {
+    consoleBatch.push(e)
+    consoleTimer ??= setTimeout(() => {
+      consoleTimer = null
+      const batch = consoleBatch
+      consoleBatch = []
+      send(IPC.consoleEntries, batch)
+    }, 120)
+  })
   // opt-in voice-clone dataset capture (RECORD_TRAINING_DATA=1); null when off
   const training = setupTraining({
     env: (name) => settings.envVar(name),

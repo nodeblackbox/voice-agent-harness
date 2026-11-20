@@ -1,3 +1,4 @@
+import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
@@ -177,6 +178,11 @@ export interface VoiceAgentApi {
     trace(sessionId?: string | null, limit?: number): Promise<TraceEvent[]>
     lastTurn(): Promise<TraceEvent[]>
     summary(): Promise<SessionSummary>
+  }
+  /** The live console: this run's log lines and trace events so far, then batches as they happen. */
+  console: {
+    history(): Promise<ConsoleEntry[]>
+    onEntries(handler: (entries: ConsoleEntry[]) => void): () => void
   }
   onEvent(handler: (event: AgentEvent) => void): () => void
   onAudioChunk(handler: (chunk: AudioChunk) => void): () => void

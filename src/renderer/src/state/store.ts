@@ -29,12 +29,23 @@ import { listDevices, pickDefaults } from '../audio/devices'
 import { rlog } from '../lib/rlog'
 import { applyTheme } from '../lib/theme-mode'
 import { single } from '../lib/single'
+import { startConsole } from './console'
 
-export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
+export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'console' | 'diagnostics' | 'settings'
+/** What the chat's right-hand panel shows. */
+export type RightTab = 'glance' | 'console'
 
 const MUTED_KEY = 'va.muted'
 const LEFT_KEY = 'va.leftOpen'
 const RIGHT_KEY = 'va.rightOpen'
+const RIGHT_TAB_KEY = 'va.rightTab'
+const readRightTab = (): RightTab => {
+  try {
+    return localStorage.getItem(RIGHT_TAB_KEY) === 'console' ? 'console' : 'glance'
+  } catch {
+    return 'glance'
+  }
+}
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -58,6 +69,7 @@ interface Store {
   view: View
   leftOpen: boolean
   rightOpen: boolean
+  rightTab: RightTab
   settings: Settings | null
   models: ModelInfo[]
   styles: PromptStyle[]
@@ -99,6 +111,7 @@ interface Store {
   setView(v: View): void
   setLeftOpen(v: boolean): void
   setRightOpen(v: boolean): void
+  setRightTab(t: RightTab): void
   updateSettings(patch: Partial<Settings>): Promise<void>
   reloadStyles(): Promise<void>
   reloadSkills(): Promise<void>
@@ -126,6 +139,7 @@ export const useStore = create<Store>((set, get) => ({
   view: 'chat',
   leftOpen: readBool(LEFT_KEY, true),
   rightOpen: readBool(RIGHT_KEY, false),
+  rightTab: readRightTab(),
   settings: null,
   models: [],
   styles: [],
@@ -161,6 +175,7 @@ export const useStore = create<Store>((set, get) => ({
     if (initialised) return
     initialised = true
     playback.subscribe()
+    startConsole()
     playback.setMuted(get().muted)
     playback.onSpeaking((s) => set({ speaking: s }))
     playback.onChunk((turnId, chunk) => {
@@ -316,6 +331,14 @@ export const useStore = create<Store>((set, get) => ({
   setLeftOpen: (v) => {
     writeBool(LEFT_KEY, v)
     set({ leftOpen: v })
+  },
+  setRightTab: (t) => {
+    try {
+      localStorage.setItem(RIGHT_TAB_KEY, t)
+    } catch {
+      // a preference; fine to lose
+    }
+    set({ rightTab: t })
   },
   setRightOpen: (v) => {
     writeBool(RIGHT_KEY, v)

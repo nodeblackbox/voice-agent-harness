@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Activity, AlignLeft, Bot, Brain, FolderKanban, MessageSquare, Settings, Zap } from 'lucide-react'
+import { Activity, AlignLeft, Bot, Brain, FolderKanban, MessageSquare, Settings, SquareTerminal, Zap } from 'lucide-react'
 import { T } from './theme'
 import { useStore, type View } from './state/store'
 import { IconBtn } from './components/primitives'
@@ -12,6 +12,7 @@ import { MemoryView } from './views/MemoryView'
 import { ProjectsView } from './views/ProjectsView'
 import { SettingsView } from './views/SettingsView'
 import { DiagnosticsView } from './views/DiagnosticsView'
+import { ConsoleView } from './views/ConsoleView'
 import { toggleListening } from './audio/voice'
 
 const NAV: Array<{ id: View; icon: typeof MessageSquare; label: string }> = [
@@ -21,6 +22,7 @@ const NAV: Array<{ id: View; icon: typeof MessageSquare; label: string }> = [
   { id: 'skills', icon: Zap, label: 'Skills' },
   { id: 'memory', icon: Brain, label: 'Memory' },
   { id: 'projects', icon: FolderKanban, label: 'Projects' },
+  { id: 'console', icon: SquareTerminal, label: 'Console (live log)' },
   { id: 'diagnostics', icon: Activity, label: 'Diagnostics' }
 ]
 
@@ -79,6 +81,7 @@ export default function App() {
           {view === 'skills' && <SkillsView />}
           {view === 'memory' && <MemoryView />}
           {view === 'projects' && <ProjectsView />}
+          {view === 'console' && <ConsoleView />}
           {view === 'diagnostics' && <DiagnosticsView />}
           {view === 'settings' && <SettingsView />}
         </>
