@@ -10,6 +10,7 @@ import type {
   LogLevel,
   McpServerConfig,
   McpServerStatus,
+  EdgeRouteState,
   MemoryEntry,
   MemoryHistoryEntry,
   MemoryScope,
@@ -64,6 +65,12 @@ export interface VoiceAgentApi {
     stop(): Promise<void>
     preview(voice: string, engine?: TtsEngineId): Promise<void>
     catalog(provider: CloudTtsProvider): Promise<TtsCatalog>
+    /** The automatic Edge route: what it uses now, and the ranking behind it. */
+    route(): Promise<EdgeRouteState>
+    /** Test every route again now (the Settings "Test all" button). */
+    testRoutes(): Promise<EdgeRouteState>
+    /** Load Kokoro now (skips the back-off after a failed load); true once it is ready. */
+    startKokoro(): Promise<boolean>
     voices(): Promise<VoiceInfo[]>
   }
   playback: {

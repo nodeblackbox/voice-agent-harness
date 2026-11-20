@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, Headphones, Play, type LucideIcon } from 'lucide-react'
-import type { CloudTtsProvider, CloudVoiceChoice, TtsCatalog, TtsEngineId, VoiceInfo } from '@shared/types'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Check, Gauge, Headphones, Play, type LucideIcon } from 'lucide-react'
+import type { CloudTtsProvider, CloudVoiceChoice, ProxyRank, TtsCatalog, TtsEngineId, VoiceInfo } from '@shared/types'
 import { CLOUD_TTS_PROVIDERS, TTS_ENGINE_LABELS, TTS_PROVIDERS, cloudChoice, isCloudTts, modelTakesTags } from '@shared/tts'
 import { T, serviceColor, serviceLabel } from '../../theme'
 import { keyedProviders, useStore } from '../../state/store'
-import { Card, Dot, Row, Select, TextInput, Toggle } from '../../components/primitives'
+import { Btn, Card, Dot, Row, Select, TextInput, Toggle } from '../../components/primitives'
 
 const ENGINE_SUB: Record<TtsEngineId, string> = {
   edge: 'Free Microsoft voice, streamed sentence by sentence. If it is unreachable or rate-limited the local Kokoro voice takes over until it recovers.',
@@ -28,6 +28,48 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
   )
 }
 
+const SHOWN = 6
+
+const ago = (t: number, now: number): string => {
+  if (!t) return 'never'
+  const m = Math.round((now - t) / 60_000)
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`
+}
+
+/** The ranking behind the automatic Edge route: fastest first, direct always shown, the route in use highlighted. */
+export function RouteTable({ rows, current, onUse }: { rows: ProxyRank[]; current: string; onUse?: (url: string) => void }) {
+  const top = rows.slice(0, SHOWN)
+  const direct = rows.find((r) => !r.url)
+  if (direct && !top.includes(direct)) top.push(direct)
+  const dead = rows.filter((r) => r.firstMs === null).length
+  return (
+    <div className="pb-3 flex flex-col gap-1" data-testid="route-table">
+      {top.map((r) => {
+        const inUse = r.url === current
+        return (
+          <div key={r.url || 'direct'} className="flex items-center gap-3 text-xs" style={{ fontFamily: T.mono, color: inUse ? T.cyan : T.text }}>
+            <span style={{ width: 22, color: T.text3, textAlign: 'right' }}>{rows.indexOf(r) + 1}</span>
+            <span style={{ width: 170 }}>{r.url ? r.label : 'direct (your connection)'}</span>
+            <span className="truncate" title={r.country} style={{ width: 130, whiteSpace: 'nowrap', color: inUse ? T.cyan : T.text2 }}>{r.country ?? ''}</span>
+            <span style={{ width: 70, textAlign: 'right' }}>{r.firstMs === null ? 'failed' : `${r.firstMs} ms`}</span>
+            <span style={{ width: 70, color: T.text3 }}>{inUse ? 'in use' : r.ok < r.runs ? `${r.ok}/${r.runs} ok` : ''}</span>
+            {onUse && r.url && r.firstMs !== null && !inUse && (
+              <Btn small onClick={() => onUse(r.url)}>
+                Use
+              </Btn>
+            )}
+          </div>
+        )
+      })}
+      {rows.length > top.length && (
+        <span className="text-xs" style={{ color: T.text3 }}>
+          {rows.length - top.length} more{dead ? `, ${dead} failed` : ''}.
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function VoiceOutput() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -38,6 +80,10 @@ export function VoiceOutput() {
   const [catalog, setCatalog] = useState<TtsCatalog | null>(null)
   const [previewing, setPreviewing] = useState<string | null>(null)
   const [proxyDraft, setProxyDraft] = useState<string | null>(null)
+  const [listDraft, setListDraft] = useState<string | null>(null)
+  const [showRanking, setShowRanking] = useState(false)
+  const route = useStore((s) => s.edgeRoute)
+  const [now, setNow] = useState(() => Date.now())
   const engine = settings?.voice.engine ?? 'edge'
   const cloud: CloudTtsProvider | null = isCloudTts(engine) ? engine : null
 
@@ -54,6 +100,15 @@ export function VoiceOutput() {
         setVoices(en)
       })
       .catch(() => setVoices([]))
+  }, [])
+
+  useEffect(() => {
+    window.api.speak
+      .route()
+      .then((edgeRoute) => useStore.setState({ edgeRoute }))
+      .catch(() => undefined)
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
@@ -109,7 +164,31 @@ export function VoiceOutput() {
     if (proxyDraft !== null && proxyDraft.trim() !== v.proxy.url) void updateSettings({ voice: { ...v, proxy: { ...v.proxy, url: proxyDraft.trim() } } })
     setProxyDraft(null)
   }
-
+  const list = listDraft ?? v.proxy.list ?? ''
+  const proxyCount = list.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#')).length
+  const commitList = () => {
+    if (listDraft !== null && listDraft !== v.proxy.list) void updateSettings({ voice: { ...v, proxy: { ...v.proxy, list: listDraft } } })
+    setListDraft(null)
+  }
+  const auto = v.proxy.auto !== false
+  const testAll = async () => {
+    commitList()
+    try {
+      useStore.setState({ edgeRoute: await window.api.speak.testRoutes() })
+      setShowRanking(true)
+    } catch {
+      /* the state event carries the outcome */
+    }
+  }
+  const routeLine = !route
+    ? ''
+    : route.testing
+      ? 'Testing routes…'
+      : route.proxies === 0
+        ? 'No proxies yet: Edge goes direct.'
+        : `${route.url ? `Now through ${route.label}${route.country ? ` (${route.country})` : ''}` : 'Now direct'}${route.firstMs != null ? ` · ${route.firstMs} ms` : ''}${route.url ? ` (direct ${route.directMs != null ? `${route.directMs} ms` : 'failed'})` : ''} · checked ${ago(route.checkedAt, now)} · ${route.proxies} proxies, all tested ${ago(route.rankedAt, now)}`
+  const kokoroState = engine === 'kokoro' ? tts?.state : undefined
+  const kokoroLoading = kokoroState === 'starting' && !!tts?.detail?.includes('loading')
   return (
     <Section icon={Headphones} title="Voice output">
       <Card pad={0}>
@@ -163,6 +242,28 @@ export function VoiceOutput() {
             </>
           )}
           {engine === 'kokoro' && (
+            <Row
+              label="Kokoro"
+              sub={
+                kokoroState === 'ready'
+                  ? 'Loaded on this machine.'
+                  : kokoroState === 'error'
+                    ? (tts?.detail ?? 'Failed to load.')
+                    : 'Loading takes 30 to 60 seconds. Edge speaks until it is ready, then replies switch to Kokoro by themselves.'
+              }
+            >
+              <span className="inline-flex items-center gap-2 text-xs" style={{ color: kokoroState === 'ready' ? T.green : kokoroState === 'error' ? T.red : T.amber }}>
+                <Dot color={serviceColor(kokoroState)} />
+                {kokoroState === 'ready' ? 'Ready' : kokoroState === 'error' ? 'Failed' : kokoroLoading ? <span className="va-pulse">Loading…</span> : 'Not loaded'}
+                {kokoroState !== 'ready' && !kokoroLoading && (
+                  <Btn small onClick={() => void window.api.speak.startKokoro()}>
+                    {kokoroState === 'error' ? 'Retry' : 'Load now'}
+                  </Btn>
+                )}
+              </span>
+            </Row>
+          )}
+          {engine === 'kokoro' && (
             <Row label="Kokoro voice" sub="af_ = American female, am_ = male, bf_/bm_ = British.">
               <Select
                 value={v.kokoroVoice}
@@ -180,7 +281,14 @@ export function VoiceOutput() {
               <input type="range" min={-50} max={50} step={5} value={v.pitch} onChange={(e) => void updateSettings({ voice: { ...v, pitch: Number(e.target.value) } })} />
             </Row>
           )}
-          <Row label="Proxy" sub="http://user:pass@host:port. Microsoft throttles the free Edge voice per IP address; a proxy gets around it. The hosted voices are quick direct, so leave them off unless they are blocked.">
+          <Row
+            label="Proxy"
+            sub={
+              auto && route?.proxies
+                ? 'http://user:pass@host:port. For the hosted voices (Hosted toggle); Edge picks its own route while Automatic is on.'
+                : 'http://user:pass@host:port. Microsoft throttles the free Edge voice per IP address; a proxy gets around it. The hosted voices are quick direct, so leave them off unless they are blocked.'
+            }
+          >
             <span className="inline-flex items-center gap-3 text-xs" style={{ color: T.text2 }}>
               <TextInput
                 mono
@@ -192,13 +300,62 @@ export function VoiceOutput() {
                 onKeyDown={(e) => e.key === 'Enter' && commitProxy()}
                 onBlur={commitProxy}
               />
-              <label className="inline-flex items-center gap-1.5">
+              <label className="inline-flex items-center gap-1.5" style={{ opacity: auto && route?.proxies ? 0.45 : 1 }}>
                 Edge <Toggle on={v.proxy.edge} onChange={(edge) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, edge } } })} />
               </label>
               <label className="inline-flex items-center gap-1.5">
                 Hosted <Toggle on={v.proxy.cloud} onChange={(c) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, cloud: c } } })} />
               </label>
             </span>
+          </Row>
+          <Row
+            label="Edge route"
+            sub={
+              auto
+                ? 'Automatic: your own connection while Edge answers quickly, the fastest of your proxies when Microsoft throttles it. Re-checks when Edge slows down or fails, and tests the whole list once a day.'
+                : 'Off: Edge uses the Proxy above when its Edge toggle is on, else your own connection.'
+            }
+          >
+            <span className="inline-flex items-center gap-3 text-xs" style={{ color: T.text2 }}>
+              <label className="inline-flex items-center gap-1.5">
+                Automatic <Toggle on={auto} onChange={(on) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, auto: on } } })} />
+              </label>
+              <Btn small icon={Gauge} onClick={() => void testAll()} disabled={!!route?.testing || (proxyCount === 0 && !route?.proxies)}>
+                {route?.testing ? 'Testing…' : 'Test all'}
+              </Btn>
+            </span>
+          </Row>
+          {route && (
+            <div className="pb-2 flex flex-col gap-1 text-xs" data-testid="route-status">
+              <span style={{ color: route.testing ? T.amber : T.text2 }}>{routeLine}</span>
+              {route.note && !route.testing && (route.proxies === 0 || /^Couldn't/.test(route.note)) && <span style={{ color: T.text3 }}>{route.note}</span>}
+              {route.rows.length > 1 && (
+                <button type="button" onClick={() => setShowRanking((x) => !x)} className="self-start" style={{ color: T.cyan, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                  {showRanking ? 'Hide ranking' : 'Show ranking'}
+                </button>
+              )}
+            </div>
+          )}
+          {route && showRanking && (
+            <RouteTable
+              rows={route.rows}
+              current={auto ? route.url : v.proxy.edge ? v.proxy.url : ''}
+              onUse={auto ? undefined : (url) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, url, edge: true } } })}
+            />
+          )}
+          <Row label="Proxy list" sub="One per line: host:port:user:pass or a URL. PROXY_LIST_URL in .env (a Webshare download link) adds the list it returns, fetched at most hourly.">
+            <textarea
+              aria-label="Proxy list"
+              value={list}
+              onChange={(e) => setListDraft(e.target.value)}
+              onBlur={commitList}
+              rows={2}
+              spellCheck={false}
+              placeholder="203.0.113.10:8080:user:pass"
+              className="rounded-lg p-2 text-xs resize-y"
+              // the lines carry passwords: hidden like the URL field unless you are editing them
+              style={{ width: 300, background: T.bg, color: T.text, border: `1px solid ${T.border}`, fontFamily: T.mono, ...(listDraft === null ? ({ WebkitTextSecurity: 'disc' } as CSSProperties) : {}) }}
+            />
           </Row>
         </div>
         {engine === 'edge' && (

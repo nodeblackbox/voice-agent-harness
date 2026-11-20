@@ -129,6 +129,8 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `ttsTimeoutMs` | 12000 | — | Per-sentence Edge TTS timeout. |
 | `ttsAttempts` | 2 | — | Tries per sentence before it is skipped (the text stays in the transcript). |
 | `ttsDegradeAfter` | 3 | — | Consecutive failures before the rest of the turn uses the system voice (one toast). |
+| `edgeSlowMs` | 1200 | — | Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best few proxies (at most every 2 min). |
+| `proxyRankParallel` | 4 | — | Proxies the automatic Edge route tests at once in its daily full test (one run each). Fifty at 4 take about 15 s; much higher and the tests slow each other down, which skews the ranking. |
 
 ## Playback (`playback`)
 

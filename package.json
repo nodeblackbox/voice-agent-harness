@@ -38,7 +38,9 @@
     "lab:manager": "tsx lab/claude-sdk/05-manager.ts",
     "lab:fence": "tsx lab/claude-sdk/04-fence.ts",
     "lab:auth": "tsx lab/claude-sdk/06-auth.ts",
-    "lab:modes": "tsx lab/claude-sdk/07-modes.ts"
+    "lab:modes": "tsx lab/claude-sdk/07-modes.ts",
+    "lab:proxies": "tsx --tsconfig tsconfig.node.json lab/proxy-rank.ts",
+    "lab:edge-turns": "tsx --tsconfig tsconfig.node.json lab/edge-turns.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.56",

@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentName: 'Ava',
   userName: 'the user',
   aboutUser: '',
-  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false } },
+  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false, list: '', auto: true } },
   audio: {},
   ...defaultTuning(),
   stt: { model: 'nemo-parakeet-tdt-0.6b-v2', device: 'hybrid', pythonPath: '' },
@@ -141,8 +141,13 @@ export class SettingsService implements KeySource {
       }
       if (next.voice || next.model || next.instruction) cloud[p] = next
     }
-    const proxy = { ...v.proxy, url: v.proxy?.url?.trim() || this.env.TTS_PROXY?.trim() || '' }
+    const proxy = { auto: true, ...v.proxy, list: v.proxy?.list ?? '', url: v.proxy?.url?.trim() || this.env.TTS_PROXY?.trim() || '' }
     return { ...v, cloud, proxy }
+  }
+
+  /** A URL that returns proxy lines (a Webshare "download" link), from PROXY_LIST_URL in .env; '' = none. */
+  proxyListUrl(): string {
+    return this.env.PROXY_LIST_URL?.trim() || ''
   }
 
   /** The Qwen WebSocket host from DASHSCOPE_HOST (a workspace host), else the public Singapore endpoint. */

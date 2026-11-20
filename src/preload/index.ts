@@ -35,6 +35,9 @@ const api: VoiceAgentApi = {
     stop: () => invoke(IPC.speakStop),
     preview: (voice, engine) => invoke(IPC.ttsPreview, voice, engine),
     catalog: (provider) => invoke(IPC.ttsCatalog, provider),
+    route: () => invoke(IPC.ttsRoute),
+    testRoutes: () => invoke(IPC.ttsRouteTest),
+    startKokoro: () => invoke(IPC.kokoroStart),
     voices: () => invoke(IPC.voicesList)
   },
   playback: {

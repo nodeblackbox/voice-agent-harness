@@ -172,7 +172,7 @@ describe('SettingsService', () => {
     expect(s.get().voice.cloud.fish).toEqual({ voice: 'stored', model: 's1', instruction: '' })
     expect(s.get().voice.cloud.qwen).toEqual({ voice: 'qv', model: '', instruction: 'calm' })
     expect(s.get().voice.cloud.elevenlabs).toBeUndefined()
-    expect(s.get().voice.proxy).toEqual({ url: 'http://u:p@h:1', edge: false, cloud: false })
+    expect(s.get().voice.proxy).toEqual({ url: 'http://u:p@h:1', edge: false, cloud: false, list: '', auto: true })
     expect(s.qwenHost()).toBe('ws-x.ap-southeast-1.maas.aliyuncs.com')
     expect(new SettingsService(dir, join(dir, 'none.env')).qwenHost()).toBe('dashscope-intl.aliyuncs.com')
   })

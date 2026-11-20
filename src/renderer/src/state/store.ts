@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { isCloudTts } from '@shared/tts'
 import type {
+  EdgeRouteState,
   AgentEvent,
   AgentState,
   ChatMessage,
@@ -66,6 +67,8 @@ interface Store {
   messages: ChatMessage[]
   agentState: AgentState
   services: Partial<Record<ServiceName, ServiceStatus>>
+  /** The automatic Edge route (pushed by main whenever it re-checks). */
+  edgeRoute: EdgeRouteState | null
   partial: string
   level: number
   cueOn: boolean
@@ -132,6 +135,7 @@ export const useStore = create<Store>((set, get) => ({
   messages: [],
   agentState: 'idle',
   services: {},
+  edgeRoute: null,
   partial: '',
   level: 0,
   cueOn: false,
@@ -174,6 +178,9 @@ export const useStore = create<Store>((set, get) => ({
           break
         case 'service':
           set({ services: { ...get().services, [e.status.name]: e.status } })
+          break
+        case 'edge-route':
+          set({ edgeRoute: e.state })
           break
         case 'message': {
           const msgs = get().messages

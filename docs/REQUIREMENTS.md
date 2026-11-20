@@ -1,0 +1,65 @@
+# What the owner wants
+
+The standing requirements for this app, in the owner's terms, so changes keep to them. When a request
+adds or changes one, update this file in the same commit. Implementation details live in the other docs;
+this is the "why" and the bar each part has to meet.
+
+## Voice conversation
+
+- **It must answer, every time.** A reply that comes back empty, or a model that fails, is never silent:
+  the next model in the chain is tried, and if all fail the user is told in words. A reasoning model that
+  spends its budget thinking and writes nothing counts as a failure.
+- **Fast first words.** Latency is the main complaint about any voice; first audio should come within
+  about a second of the end of speech. Slow paths (cold model loads, throttled Edge, slow hosted voices)
+  are measured in the trace and fixed, not tolerated.
+- **Nothing the user says is lost.** No dropped words while a model reloads, no cut-off replies without
+  a reason in the log.
+
+## Switching voices (TTS engines)
+
+- Picking an engine in Settings takes effect, visibly. The status shows what is actually speaking now,
+  and when a fallback covers ("Edge speaks until Kokoro is ready").
+- **Kokoro (local) is loaded on demand**: picking it starts loading straight away (30-60 s), with a
+  loading indicator and a Load/Retry button; replies keep using Edge until it is ready and then switch by
+  themselves, with a toast. It must never look selected while something else silently speaks.
+- A failed engine says why (no key, deleted voice, rate limit) instead of degrading without a word.
+
+## Speech recognition (Parakeet)
+
+- Can stay loaded the whole time ("Keep speech recognition loaded" in Settings > Behaviour): loaded at
+  launch, never unloaded for being idle. The cold load is ~20 s and used to drop the start of speech.
+
+## Edge TTS routing and proxies
+
+- Edge is free but Microsoft throttles it per IP address, on and off. The app picks the route itself:
+  **direct while Edge is quick, the fastest of the owner's proxies when it is throttled**, switching back
+  when direct recovers.
+- The owner should never have to paste a proxy in by hand. The list comes from `PROXY_LIST_URL` in
+  `.env` (a Webshare download link), plus anything in Settings > Proxy list.
+- **Don't test all the proxies every time.** The full list is tested once a day or when it changes
+  (one short phrase each, a few at once); otherwise only direct and the best few are re-checked, at
+  launch and when Edge gets slow or fails.
+- Proxies are for Edge. The hosted voices are fast direct; they only use a proxy when the owner turns
+  that on.
+- Measured 2026-11-20 from London (warm socket, time to first audio): direct ~150 ms when not throttled;
+  through Paris and Frankfurt proxies about the same; Milan and US East a little slower; US West
+  (Palo Alto) ~1.2 s; Tokyo ~1.7 s. Throttled direct was 1-4 s. `pnpm lab:proxies` re-measures by country.
+
+## Secrets
+
+- Proxy lists, the Webshare link, API keys and `extra_keys.env` never get committed. They live in
+  `.env`, `proxies.txt` or the app's user-data folder, all ignored by git. Code never prints a key or
+  proxy password in full; logs show `host:port` only.
+- The Groq key pool's proxies (`GROQ_KEYS` in `.env`) must point at proxies on the current list.
+
+## Seeing what happens
+
+- The owner wants to watch live what the app is doing (what was heard, which model and voice answered,
+  what was cut off and why) in a log view of its own. Each run's trace
+  (`%APPDATA%/Voice Agent/logs/sessions/<id>.jsonl`) is the record; `docs/DEBUGGING.md` lists the events.
+
+## Working style
+
+- Plans are executed without check-ins once agreed; commit and push at each phase boundary.
+- UI changes are checked visually before they are called done; tests cover the logic.
+- No personal defaults baked into code (names, voices, keys): those come from Settings or `.env`.

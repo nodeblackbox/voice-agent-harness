@@ -2,7 +2,8 @@
 
 Voice Agent Harness is an Electron + TypeScript desktop app with two small Python sidecars. It is a voice harness for
 Claude Code sessions and a voice assistant. Read this, then [docs/EXTENDING.md](docs/EXTENDING.md) for recipes
-and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the map.
+and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the map. [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) is what the owner
+wants from each part; keep changes to it, and update it when a request changes it.
 
 ## Commands
 

@@ -31,6 +31,8 @@ Every line has `t` (ISO time), `sid` (session), usually `turn`, and `ev`. Prefix
 | `cc.*` | Claude Code sessions (main) | `status{session, status, queued, costUsd}` (every status change: idle, running, needs_input, needs_permission, error, stopped), `needs_input{session, kind: question|permission|plan, summary}`, `finished{session, chars}`, `denied{reason}` (the workspace fence refused a tool call). Unprompted speech shows as `announce.queued{text, queued}` then `turn.announce{text}` in the `turn.*`/agent stream. |
 | `settings.migrated` | main | `{migrated: [{group, key, from, to}]}` — superseded tuning defaults replaced at launch (see docs/TUNING.md "Changing a default") |
 | `tts.warm` | agent | `{turnId, ms}` — the Edge socket pre-opened at turn start (only logged when it had to reconnect or succeeded) |
+| `tts.route` | main | `{reason, full, tested, url, firstMs, directMs, changed, ms}` — the automatic Edge route re-checked (launch, slow, trouble, manual); `url` is host:port or direct |
+| `tts.kokoro_state` | main | `{state, error?}` — Kokoro loading, ready, failed or off (drives the voice status chip) |
 | `tts.sentence` | speaker | `{seq, kind, chars, ms, firstByteMs, attempts, outcome: ok|skip|fallback, engine}` |
 | `playback.*` | renderer via agent | `started{seq, kind}`, `finished{seq}`, `drained{chunks}` |
 | `sidecar.*` | process supervisor | `spawn`, `connected{port, retries}`, `buffer_flushed{frames, ms}`, `ws_close{code, processAlive}`, `heartbeat_lost`, `restart{delayMs, reason?}` (`asr_broken` = the ears reloaded the speech model, kept failing, and exited with code 4), `idle_shutdown`, `exit{code}`, `handler_error{event}` (an exception inside the app's handler for a sidecar event, logged with its stack in errors.log) |

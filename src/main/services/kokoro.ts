@@ -15,12 +15,18 @@ const LOAD_TIMEOUT_MS = 120_000
 /** After a failed load, don't try again for this long (a broken venv shouldn't respawn every sentence). */
 const RETRY_AFTER_MS = 5 * 60_000
 
-// Kokoro-82M in a Python child (`sidecar/mouth`), started on demand when Edge TTS is unreachable.
+export type KokoroState = { state: 'off' } | { state: 'loading'; since: number } | { state: 'ready' } | { state: 'failed'; error: string }
+
+// Kokoro-82M in a Python child (`sidecar/mouth`). Started when it is picked as the voice, or on demand
+// as the contingency when a remote voice is down. Loading takes 30-60 s (model onto the GPU).
 export class KokoroService implements KokoroBackend {
   private proc: ChildProcess | null = null
   private port: number | null = null
   private starting: Promise<boolean> | null = null
   private failedAt = 0
+  private lastError = ''
+  private loadingSince = 0
+  private readonly listeners = new Set<(s: KokoroState) => void>()
 
   constructor(private readonly opts: KokoroOptions) {}
 
@@ -28,13 +34,35 @@ export class KokoroService implements KokoroBackend {
     return this.port !== null
   }
 
-  start(): Promise<boolean> {
+  state(): KokoroState {
+    if (this.port !== null) return { state: 'ready' }
+    if (this.starting) return { state: 'loading', since: this.loadingSince }
+    if (this.failedAt) return { state: 'failed', error: this.lastError }
+    return { state: 'off' }
+  }
+
+  /** Called on every state change (loading, ready, failed, off). */
+  onState(cb: (s: KokoroState) => void): () => void {
+    this.listeners.add(cb)
+    return () => this.listeners.delete(cb)
+  }
+
+  private changed(): void {
+    const s = this.state()
+    for (const cb of this.listeners) cb(s)
+  }
+
+  /** `force`: the user asked for it, so skip the back-off after a failed load. */
+  start(opts: { force?: boolean } = {}): Promise<boolean> {
     if (this.port !== null) return Promise.resolve(true)
     if (this.starting) return this.starting
-    if (Date.now() - this.failedAt < RETRY_AFTER_MS) return Promise.resolve(false)
+    if (!opts.force && Date.now() - this.failedAt < RETRY_AFTER_MS) return Promise.resolve(false)
+    this.loadingSince = Date.now()
     this.starting = this.launch().finally(() => {
       this.starting = null
+      this.changed()
     })
+    this.changed()
     return this.starting
   }
 
@@ -48,8 +76,10 @@ export class KokoroService implements KokoroBackend {
         if (settled) return
         settled = true
         clearTimeout(timer)
-        if (!ok) {
+        if (ok) this.failedAt = 0
+        else {
           this.failedAt = Date.now()
+          this.lastError = why ?? 'failed to load'
           logAt('warn', 'kokoro', `not available: ${why}`)
           this.stop()
         }
@@ -85,11 +115,13 @@ export class KokoroService implements KokoroBackend {
       proc.on('error', (e) => done(false, e.message))
       proc.on('exit', (code) => {
         log('kokoro', `exited code=${code}`)
+        const wasReady = this.proc === proc && this.port !== null
         if (this.proc === proc) {
           this.proc = null
           this.port = null
         }
         done(false, `exited with code ${code} while loading`)
+        if (wasReady) this.changed()
       })
     })
   }
@@ -107,10 +139,12 @@ export class KokoroService implements KokoroBackend {
   }
 
   stop(): void {
+    const was = this.port !== null
     // closing stdin is the child's cue to exit; kill covers a wedged process
     this.proc?.stdin?.end()
     this.proc?.kill()
     this.proc = null
     this.port = null
+    if (was) this.changed()
   }
 }

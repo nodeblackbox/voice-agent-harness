@@ -363,6 +363,48 @@ export interface TtsProxySettings {
   edge: boolean
   /** Route the hosted voice APIs through it too. */
   cloud: boolean
+  /** Proxies to choose from, one per line (host:port:user:pass or a URL); PROXY_LIST_URL in .env adds a fetched list. */
+  list: string
+  /**
+   * Pick Edge's route by itself: direct while it is quick, the fastest listed proxy when Edge is throttled
+   * (see main/services/edgeRoute). Off: `url` with the `edge` toggle, as set by hand.
+   */
+  auto?: boolean
+}
+
+/** One route tested by "Find fastest": Edge time to first audio through it. `url` '' is the direct connection. */
+export interface ProxyRank {
+  url: string
+  /** host:port, or "direct"; never the credentials. */
+  label: string
+  /** Median ms to first audio, socket open included, over the runs that worked; null when none did. */
+  firstMs: number | null
+  ok: number
+  runs: number
+  error?: string
+  /** Country code and city of the proxy IP ('' = unknown or direct). */
+  country?: string
+}
+
+/** The automatic Edge route (Settings > Voice output): which way Edge goes out now and why. */
+export interface EdgeRouteState {
+  /** Proxy URL in use; '' = direct. */
+  url: string
+  label: string
+  country: string
+  /** Last measured ms to first audio through the route in use, and direct. */
+  firstMs: number | null
+  directMs: number | null
+  /** Last check of any kind, and last full test of every route (epoch ms, 0 = never). */
+  checkedAt: number
+  rankedAt: number
+  testing: boolean
+  /** Proxies in the ranking. */
+  proxies: number
+  /** One line on the last decision. */
+  note: string
+  /** The ranking, fastest first (direct included, url ''). */
+  rows: ProxyRank[]
 }
 
 export interface VoiceSettings {
@@ -389,6 +431,8 @@ export interface BehaviourSettings {
   loadingSound: boolean
   speakTypedReplies: boolean
   listenOnLaunch: boolean
+  /** Load the speech recognition (Parakeet) at launch and never unload it while idle; costs GPU memory, saves the ~20 s cold load. */
+  keepEarsLoaded?: boolean
 }
 
 export interface LocationSettings {
@@ -523,6 +567,7 @@ export type AgentEvent =
   | { type: 'sessions-changed' }
   | { type: 'settings-changed'; settings: Settings }
   | { type: 'toast'; toast: Toast }
+  | { type: 'edge-route'; state: EdgeRouteState }
   | { type: 'context'; snapshot: ContextSnapshot }
   | { type: 'skills-changed' }
   | { type: 'mcp-changed' }

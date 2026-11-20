@@ -35,3 +35,6 @@ backups/
 *.bak
 # proxy list for pnpm tts:latency (holds passwords)
 proxies.txt
+proxies_ranked.txt
+# extra API keys kept beside .env
+extra_keys.env

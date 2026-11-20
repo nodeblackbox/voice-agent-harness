@@ -161,6 +161,9 @@ function Behaviour() {
           <Row label="Listen on launch" sub="Open the microphone as soon as the ears are ready">
             <Toggle on={b.listenOnLaunch} onChange={(v) => set({ listenOnLaunch: v })} />
           </Row>
+          <Row label="Keep speech recognition loaded" sub="Load Parakeet when the app opens and never unload it, so the first words after a pause aren't lost to a 20 s reload. Holds a few GB of GPU memory.">
+            <Toggle on={!!b.keepEarsLoaded} onChange={(v) => set({ keepEarsLoaded: v })} />
+          </Row>
         </div>
       </Card>
     </Section>

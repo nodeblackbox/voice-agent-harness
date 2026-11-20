@@ -1126,8 +1126,20 @@ export class Agent {
   /** The engine the settings name, unless it is a remote one that is currently down (then the local fallback). */
   private engineFor(s: Settings): TtsEngine {
     const chosen = this.chosenEngine(s)
-    if (chosen === this.system || chosen === this.kokoro) return chosen
+    if (chosen === this.system) return chosen
+    if (chosen === this.kokoro) return this.kokoroCover() ?? chosen
     return this.health(chosen.name).down ? this.fallbackEngine() : chosen
+  }
+
+  /**
+   * Kokoro is picked but still loading (30-60 s): Edge speaks until it is ready, rather than the Windows
+   * voice. Null once Kokoro is up, or when Edge is down too (then Kokoro's own null-while-loading
+   * hands the sentence to the Windows voice).
+   */
+  private kokoroCover(): TtsEngine | null {
+    if (!this.deps.kokoro || this.deps.kokoro.ready()) return null
+    void this.deps.kokoro.start()
+    return this.health('edge').down ? null : this.edge
   }
 
   private chosenEngine(s: Settings): TtsEngine {
@@ -1163,7 +1175,7 @@ export class Agent {
     let line = TTS_ENGINE_LABELS[engine.name]
     if (fields.voice && engine.name !== 'system') line += `, voice "${fields.voice.length > 40 ? `${fields.voice.slice(0, 38)}…` : fields.voice}"`
     if (fields.model) line += ` (${fields.model})`
-    if (engine !== chosen) line += `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    if (engine !== chosen) line += chosen === this.kokoro ? `, covering while ${TTS_ENGINE_LABELS.kokoro} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
     const cues = s.voice.expressive && isCloudTts(engine.name) && engine.acceptsTags?.(fields)
     line += cues ? '; delivery cues are on' : '; it reads plain text, no cue tags'
     return line

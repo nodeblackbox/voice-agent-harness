@@ -6,6 +6,7 @@ import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
 import { withProjectDefaults } from '@core/projects'
+import type { EdgeRouteService } from '../services/edgeRoute'
 import { BUILTIN_STYLES } from '@core/prompts/styles'
 import { ModelFactory } from '@core/providers/factory'
 import type { MemoryStore } from '@core/memory/store'
@@ -30,6 +31,8 @@ export interface IpcDeps {
   mcp: McpService
   claude: ClaudeService
   services: () => ServiceStatus[]
+  edgeRoute: EdgeRouteService
+  kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
   broadcastSettings(s: Settings): void
 }
 
@@ -83,6 +86,9 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.speakStop, () => d.agent.stopReading())
   h(IPC.ttsPreview, (_e, voice: string, engine?: TtsEngineId) => d.agent.preview(voice, engine))
   h(IPC.ttsCatalog, (_e, provider: CloudTtsProvider) => d.agent.catalog(provider))
+  h(IPC.ttsRoute, () => d.edgeRoute.state())
+  h(IPC.ttsRouteTest, () => d.edgeRoute.retestAll())
+  h(IPC.kokoroStart, () => d.kokoro.start({ force: true }))
   h(IPC.voicesList, () => d.agent.voices())
 
   ipcMain.on(IPC.playbackStarted, (_e, turnId: string, seq: number, emittedAt?: number) => d.agent.onPlaybackStarted(turnId, seq, typeof emittedAt === 'number' ? emittedAt : undefined))

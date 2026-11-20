@@ -59,7 +59,8 @@ export const isAbort = (e: unknown): boolean => e instanceof Error && e.name ===
 /** The local Kokoro process, owned by the main process. */
 export interface KokoroBackend {
   ready(): boolean
-  start(): Promise<boolean>
+  /** `force`: the user picked Kokoro, so skip any back-off after an earlier failed load. */
+  start(opts?: { force?: boolean }): Promise<boolean>
   synth(text: string, voice: string, speed: number, signal: AbortSignal): Promise<Buffer>
 }
 
@@ -262,6 +263,13 @@ export class EdgeTtsEngine implements TtsEngine {
     } finally {
       this.release(w, healthy)
     }
+  }
+
+  /** Close every idle socket; for a throwaway engine such as a proxy probe. */
+  close(): void {
+    for (const w of this.idle) w.dispose()
+    this.idle = []
+    this.count = 0
   }
 
   async listVoices(): Promise<Array<{ name: string; shortName: string; locale: string; gender: string }>> {

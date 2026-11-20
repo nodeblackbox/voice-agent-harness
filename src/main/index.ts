@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme, protocol, session, shell } from 'electron'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HttpsProxyAgent } from 'https-proxy-agent'
@@ -18,6 +19,8 @@ import { SettingsService } from './services/settings'
 import { SidecarService } from './services/sidecar'
 import { SearxngService } from './services/searxng'
 import { KokoroService } from './services/kokoro'
+import { EdgeRouteService, ipCountries } from './services/edgeRoute'
+import { edgeProbe } from '@core/speech/proxyRank'
 import { ClaudeService } from './services/claude'
 import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
@@ -166,7 +169,7 @@ app.whenReady().then(async () => {
     projectRoot,
     stt: () => settings.get().stt,
     earConfig: () => earConfig(settings.get()),
-    idleShutdownMs: () => settings.get().runtime.idleShutdownMs,
+    idleShutdownMs: () => (settings.get().behaviour.keepEarsLoaded ? 0 : settings.get().runtime.idleShutdownMs),
     onStatus,
     trace,
     onEvent: (evt) => {
@@ -228,20 +231,61 @@ app.whenReady().then(async () => {
 
   // Hosted voices. One proxy URL serves both the Edge socket (an https Agent) and the HTTP engines (an undici
   // dispatcher); each is built once per URL and only used when its toggle is on.
-  let proxy: { url: string; agent: HttpsProxyAgent<string>; dispatcher: ProxyAgent } | null = null
+  const proxies = new Map<string, { agent: HttpsProxyAgent<string>; dispatcher: ProxyAgent }>()
   const proxyFor = (url: string) => {
     if (!url) return null
-    if (proxy?.url !== url) {
+    let p = proxies.get(url)
+    if (!p) {
       try {
-        proxy = { url, agent: new HttpsProxyAgent(url), dispatcher: new ProxyAgent(url) }
+        p = { agent: new HttpsProxyAgent(url), dispatcher: new ProxyAgent(url) }
+        proxies.set(url, p)
       } catch (e) {
         logAt('warn', 'tts', `bad proxy URL: ${(e as Error).message}`)
         return null
       }
     }
-    return proxy
+    return p
   }
-  const edgeAgent = (): unknown => (settings.get().voice.proxy.edge ? proxyFor(settings.get().voice.proxy.url)?.agent : undefined)
+
+  // Edge's route: automatic (direct while quick, the fastest proxy when throttled) when a proxy list exists,
+  // else the hand-set proxy URL behind the Edge toggle. The list is Settings > Proxy list plus PROXY_LIST_URL.
+  let fetchedList: { at: number; text: string } | null = null
+  const listCache = join(userData, 'proxy-list.txt')
+  const proxyLines = async (): Promise<string> => {
+    const own = settings.get().voice.proxy.list ?? ''
+    const url = settings.proxyListUrl()
+    if (!url) return own
+    if (!fetchedList || Date.now() - fetchedList.at > 3600_000) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+        const text = await res.text()
+        if (!res.ok || !/^\S+:\d+/m.test(text)) throw new Error(`${res.status} ${text.slice(0, 80)}`)
+        fetchedList = { at: Date.now(), text }
+        writeFileSync(listCache, text)
+      } catch (e) {
+        logAt('warn', 'tts', `couldn't fetch PROXY_LIST_URL (${(e as Error).message}); using the last copy`)
+        fetchedList = { at: Date.now(), text: existsSync(listCache) ? readFileSync(listCache, 'utf8') : '' }
+      }
+    }
+    return `${own}
+${fetchedList.text}`
+  }
+  const edgeRoute = new EdgeRouteService({
+    userData,
+    lines: proxyLines,
+    probe: edgeProbe((url) => proxyFor(url)?.agent, () => settings.get().voice.voice || 'en-US-AvaNeural', 10_000),
+    geo: ipCountries,
+    log: (m) => log('tts', m),
+    trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data }),
+    onChange: (s) => emit({ type: 'edge-route', state: s }),
+    parallel: () => settings.get().speech.proxyRankParallel
+  })
+  const autoRoute = (): boolean => settings.get().voice.proxy.auto !== false && edgeRoute.state().proxies > 0
+  const edgeAgent = (): unknown => {
+    const p = settings.get().voice.proxy
+    if (autoRoute()) return proxyFor(edgeRoute.current())?.agent
+    return p.edge ? proxyFor(p.url)?.agent : undefined
+  }
   const cloudAgent = (): unknown => (settings.get().voice.proxy.cloud ? proxyFor(settings.get().voice.proxy.url)?.agent : undefined)
   const cloudFetch: typeof fetch = (input, init) => {
     const d = settings.get().voice.proxy.cloud ? proxyFor(settings.get().voice.proxy.url)?.dispatcher : undefined
@@ -290,7 +334,13 @@ app.whenReady().then(async () => {
     emitAudio: (chunk: AudioChunk) => send(IPC.audioChunk, chunk),
     cancelAudio: (turnId) => send(IPC.audioCancel, turnId),
     log: (m) => log('agent', m),
-    trace
+    // Edge's per-sentence timings and failures steer the automatic route
+    trace: (rec) => {
+      trace(rec)
+      if (!autoRoute()) return
+      if (rec.ev === 'tts.sentence' && rec.engine === 'edge' && typeof rec.firstByteMs === 'number') edgeRoute.sentence(rec.firstByteMs, settings.get().speech.edgeSlowMs)
+      if (rec.ev === 'tts.engine_down' && rec.engine === 'edge') edgeRoute.trouble(String(rec.reason ?? 'down'))
+    }
   })
 
   const ttsStatus = (): ServiceStatus => {
@@ -298,6 +348,14 @@ app.whenReady().then(async () => {
     const noKey = isCloudTts(v.engine) && !settings.keysFor(v.engine).length
     const raw = requestFields(v, v.engine).voice
     const voice = v.engine === 'edge' ? raw.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '') : raw
+    if (v.engine === 'kokoro') {
+      const k = kokoro.state()
+      const who = `${TTS_ENGINE_LABELS.kokoro} · ${v.kokoroVoice}`
+      if (k.state === 'ready') return { name: 'tts', state: 'ready', detail: who }
+      if (k.state === 'loading') return { name: 'tts', state: 'starting', detail: `${TTS_ENGINE_LABELS.kokoro}: loading… Edge speaks until it is ready` }
+      if (k.state === 'failed') return { name: 'tts', state: 'error', detail: `${TTS_ENGINE_LABELS.kokoro} failed: ${k.error.slice(0, 80)}` }
+      return { name: 'tts', state: 'starting', detail: `${TTS_ENGINE_LABELS.kokoro}: not loaded yet` }
+    }
     return {
       name: 'tts',
       state: v.engine === 'system' ? 'off' : noKey ? 'error' : 'ready',
@@ -330,6 +388,13 @@ app.whenReady().then(async () => {
     if (Object.keys(changed).length) trace({ ev: 'settings.changed', sid: agent.currentSessionId, changed })
     if ('behaviour.theme' in changed) applyNativeTheme(s)
     if (Object.keys(changed).some((k) => k.startsWith('voice.proxy'))) agent.resetTts()
+    // picking Kokoro loads it now (30-60 s), not on the first sentence of the next reply
+    if (changed['voice.engine'] === 'kokoro') void kokoro.start({ force: true })
+    // switched on: load the ears now; switched off: the idle timer applies from the next time the mic closes
+    if (changed['behaviour.keepEarsLoaded'] === true) sidecar.start()
+    // a new proxy list, or automatic routing switched on: test it (a full test when the list changed)
+    if ('voice.proxy.list' in changed || changed['voice.proxy.auto'] === true) void edgeRoute.start()
+    if (Object.keys(changed).some((k) => k.startsWith('voice.'))) onStatus(ttsStatus())
     sidecar.applyConfig()
     emit({ type: 'settings-changed', settings: s })
     emit({ type: 'context', snapshot: agent.snapshot() })
@@ -358,8 +423,22 @@ app.whenReady().then(async () => {
     mcp,
     claude,
     services,
+    edgeRoute,
+    kokoro,
     broadcastSettings: (s) => emit({ type: 'settings-changed', settings: s })
   })
+
+  // Kokoro's loading state drives the voice status chip; say when it is ready or failed, if it is the chosen voice
+  kokoro.onState((k) => {
+    onStatus(ttsStatus())
+    trace({ ev: 'tts.kokoro_state', sid: agent.currentSessionId, state: k.state, ...(k.state === 'failed' ? { error: k.error.slice(0, 200) } : {}) })
+    if (settings.get().voice.engine !== 'kokoro') return
+    if (k.state === 'ready') emit({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'info', text: 'Kokoro is loaded; replies use it from now on.' } })
+    if (k.state === 'failed') emit({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'error', text: `Kokoro couldn't load (${k.error.slice(0, 100)}); Edge keeps speaking. Pick Kokoro again to retry.` } })
+  })
+  if (settings.get().voice.engine === 'kokoro') void kokoro.start()
+  // pick Edge's route in the background; the first reply goes direct if this is still running
+  if (settings.get().voice.proxy.auto !== false) void edgeRoute.start()
 
   win = createWindow(applyNativeTheme(settings.get()))
   win.on('closed', () => {
@@ -369,7 +448,7 @@ app.whenReady().then(async () => {
   // The ears hold Parakeet on the GPU and several GB of RAM, so they are only started when the
   // microphone is actually wanted. Typed chat never needs them.
   // the dev replay harnesses wait for the ears, so they start them too
-  if (settings.get().behaviour.listenOnLaunch || (isDev && (process.env.VA_WAV || process.env.VA_MIC))) sidecar.start()
+  if (settings.get().behaviour.listenOnLaunch || settings.get().behaviour.keepEarsLoaded || (isDev && (process.env.VA_WAV || process.env.VA_MIC))) sidecar.start()
   void mcp.reload()
   // Claude session events: stream to the UI, and speak the ones that need the user (a question, an approval, a finished job)
   const lastCcStatus = new Map<string, string>()
