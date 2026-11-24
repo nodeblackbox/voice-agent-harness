@@ -1,5 +1,5 @@
 import { app, BrowserWindow, nativeTheme, protocol, session, shell } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFile, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HttpsProxyAgent } from 'https-proxy-agent'
@@ -350,6 +350,12 @@ ${fetchedList.text}`
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
     appDir: () => appDir,
+    // the explorer module: copies of files as they were before an edit, and one line per action taken or refused
+    explore: {
+      backupDir: join(userData, 'pc-edit-backups'),
+      log: (a) => appendFile(join(userData, 'logs', 'pc-actions.jsonl'), `${JSON.stringify(a)}
+`, (err) => err && logAt('warn', 'explore', `could not write the action log: ${err.message}`))
+    },
     search: { baseUrl: () => searxng.baseUrl(), ensure: () => searxng.ensure(), configured: () => searxng.configured() },
     ears: {
       agentSpeaking: (on) => sidecar.agentSpeaking(on),

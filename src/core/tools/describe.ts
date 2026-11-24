@@ -59,7 +59,7 @@ export function describeInput(name: string, input: unknown): string {
     case 'pc_read':
       return str(i.path, 90)
     case 'pc_explore':
-      return str(i.request, 100)
+      return `${str(i.goal, 100)}${i.may_edit ? ' (may edit)' : ''}`
     case 'claude_start':
       return typeof i.name === 'string' ? `${i.name}${typeof i.task === 'string' && i.task ? ` · ${str(i.task, 70)}` : ''}` : ''
     case 'claude_send':
@@ -160,9 +160,10 @@ export function describeOutput(name: string, output: unknown): { detail?: string
       return { detail: r?.lines ? `lines ${r.lines}` : '' }
     }
     case 'pc_explore': {
-      const r = o as { answer?: string; steps_taken?: unknown[]; unfinished?: string } | undefined
+      const r = o as { status?: string; steps_taken?: unknown[]; edits?: unknown[]; refused?: unknown[] } | undefined
       const n = r?.steps_taken?.length ?? 0
-      return { detail: `${n} step${n === 1 ? '' : 's'}${r?.unfinished ? ', unfinished' : ''}` }
+      const how = r?.status && r.status !== 'done' ? `, ${r.status.replace('_', ' ')}` : ''
+      return { detail: `${n} step${n === 1 ? '' : 's'}${how}${r?.edits?.length ? `, ${r.edits.length} file${r.edits.length === 1 ? '' : 's'} edited` : ''}${r?.refused?.length ? `, ${r.refused.length} refused` : ''}` }
     }
     case 'claude_list':
       return { detail: `${((o as { sessions?: unknown[] })?.sessions ?? []).length} sessions` }

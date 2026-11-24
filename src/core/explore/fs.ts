@@ -542,3 +542,8 @@ function fsError(e: unknown, p: string): string {
   if (code === 'ENOTDIR') return `${p} is a file, not a folder.`
   return `Could not open ${p} (${code ?? (e as Error)?.message ?? 'unknown error'}).`
 }
+
+/** True when a file is not text by its extension or its first bytes. */
+export function isBinary(p: string, data: Buffer): boolean {
+  return BINARY_EXT.has(ext(p)) || looksBinary(data)
+}

@@ -284,13 +284,14 @@ export function describe(e: ConsoleEntry): ConsoleRow {
     case 'app.crash':
       return row(`Crash caught: ${str(d.message)}`, str(d.kind), 'bad')
     case 'explore.start':
-      return row(`File helper asked: ${quote(d.request, 200)}`, model(d.model), 'accent')
+      return d.goal !== undefined ? row(`Explorer goal: ${quote(d.goal, 200)}`, join(model(d.model), d.mayEdit ? 'may edit files' : 'read-only', `up to ${str(d.maxSteps)} steps, ${ms(d.budgetMs)}`), 'accent') : row('Explorer started', model(d.model), 'dim', { noisy: true })
     case 'explore.step':
-      return row(`File helper step ${str(d.step)}: ${str(d.call)}`, '', 'dim')
+      return row(`Explorer step ${str(d.step)}: ${str(d.call)}`, '', d.outcome === 'refused' ? 'warn' : d.outcome === 'error' ? 'bad' : 'dim')
+    case 'explore.usage':
+      return row('Explorer token use', `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens`, 'dim')
     case 'explore.done': {
-      const why = str(d.reason)
-      const used = num(d.inputTokens) !== undefined ? `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens` : ''
-      return row(d.answered ? 'File helper answered' : `File helper stopped without an answer${why ? ` (${why})` : ''}`, join(`${str(d.steps)} steps`, ms(d.ms), used, str(d.error)), d.answered ? 'good' : 'warn')
+      const status = str(d.status).replace('_', ' ')
+      return row(d.answered ? `Explorer finished: ${status}` : `Explorer stopped without an answer (${str(d.reason) || status})`, join(`${str(d.steps)} steps`, ms(d.ms), num(d.edits) ? `${str(d.edits)} edited` : '', num(d.refused) ? `${str(d.refused)} refused` : ''), d.answered && d.status === 'done' ? 'good' : 'warn')
     }
     case 'trace.dropped':
       return row('Some events were dropped (too many at once)', str(d.note), 'warn')

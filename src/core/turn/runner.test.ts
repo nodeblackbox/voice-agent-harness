@@ -114,6 +114,26 @@ describe('TurnRunner', () => {
     expect(metrics.ttftMs).toBeGreaterThanOrEqual(0)
   })
 
+  it('gives a named tool its own time allowance, longer than the usual tool stall timeout', async () => {
+    const slow = tool({
+      description: 'works on a goal for a while',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await new Promise((r) => setTimeout(r, 450))
+        return { status: 'done' }
+      }
+    })
+    const model = () => ({ 'anthropic:claude-haiku-4-5': mockModel([toolCallStream('pc_explore', {}), textStream(['Found it.'])]) })
+    const stalls = (h: ReturnType<typeof harness>) => vi.mocked(h.deps.trace!).mock.calls.filter(([ev]) => ev === 'turn.stall')
+    // with the usual allowance the tool call is cut off as a stall
+    const cut = harness(model(), { tools: { pc_explore: slow }, toolStallTimeoutMs: 150, fallbacks: [], fillerEnabled: false })
+    await cut.run()
+    expect(stalls(cut)[0]?.[1]).toMatchObject({ reason: 'the pc_explore tool took too long' })
+    const h = harness(model(), { tools: { pc_explore: slow }, toolStallTimeoutMs: 150, fallbacks: [], fillerEnabled: false, toolStallMsFor: (name) => (name === 'pc_explore' ? 3000 : undefined) })
+    expect((await h.run()).text).toBe('Found it.')
+    expect(stalls(h)).toHaveLength(0)
+  })
+
   it('runs a tool round, speaks a filler once, and reports input and output', async () => {
     const calc = tool({
       description: 'add',

@@ -17,7 +17,7 @@ export function PcAccess() {
   const [typed, setTyped] = useState('')
   const [error, setError] = useState('')
   if (!settings) return null
-  const x: ExploreSettings = settings.explore ?? { enabled: false, roots: [], agent: true }
+  const x: ExploreSettings = settings.explore ?? { enabled: false, roots: [], agent: true, edit: false, terminal: false }
   const name = settings.agentName || 'The assistant'
   const set = (patch: Partial<ExploreSettings>) => void updateSettings({ explore: { ...x, ...patch } })
 
@@ -44,16 +44,30 @@ export function PcAccess() {
         <div className="px-4">
           <Row
             label={`Let ${name} look at your files`}
-            sub="Read-only: list a folder, find files and folders by name, read text files and search inside them. Nothing can be changed, moved, deleted or run, and only the folders below can be seen."
+            sub="List a folder, find files and folders by name, read text files and search inside them. Only the folders below can be seen, and nothing can ever be deleted, moved or run. Every action is written to pc-actions.jsonl in the logs folder."
           >
             <Toggle on={x.enabled} onChange={(v) => set({ enabled: v })} />
           </Row>
           <Row
-            label="Explorer helper"
-            sub="For questions that take several steps (“find my lemon AI project on the D drive”), a helper chains the searches itself and comes back with one short answer. Off: the assistant makes each call itself, which uses more of its tool rounds per reply."
+            label="Explorer"
+            sub="Give it a goal (“find my lemon AI project on the D drive”) and it works by itself until it is done, trying other names, folders and searches inside files, within 12 steps and 45 seconds, then answers in a sentence or two. Off: the assistant makes each call itself and can only read."
           >
             <Toggle on={x.agent} onChange={(v) => set({ agent: v })} />
           </Row>
+          <div style={{ opacity: x.enabled && x.agent ? 1 : 0.55 }}>
+            <Row
+              label="Explorer may edit files"
+              sub="Only when you ask for a change: it replaces a piece of text inside an existing text file in an approved folder. It cannot create, delete, rename, move or empty a file, and a copy of the file as it was is kept first."
+            >
+              <Toggle on={!!x.edit} onChange={(v) => set({ edit: v })} />
+            </Row>
+            <Row
+              label="Explorer may run read-only commands"
+              sub="A fixed list: ls, dir, cat, type, head, tail, grep, findstr, find, wc, pwd, and git status, log, diff and branch. Everything else is refused, including anything that deletes, moves, installs or goes online, and any chaining (;, &&), redirection (>) or variables."
+            >
+              <Toggle on={!!x.terminal} onChange={(v) => set({ terminal: v })} />
+            </Row>
+          </div>
           <div className="py-3 flex flex-col gap-2" style={{ opacity: x.enabled ? 1 : 0.55 }}>
             <div className="flex flex-col gap-0.5">
               <span className="text-sm">Approved folders</span>

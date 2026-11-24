@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // workspaceRoot '' = filled at construction from SettingsOptions.defaultWorkspaceRoot (the main process passes a Documents folder)
   claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 8, defaultMode: 'auto', limitChosen: true },
   // roots [] and seeded false = the main process adds the first-run folders once (see seedExploreRoots)
-  explore: { enabled: true, roots: [], agent: true, seeded: false }
+  explore: { enabled: true, roots: [], agent: true, edit: true, terminal: true, seeded: false }
 }
 
 export interface SettingsOptions {

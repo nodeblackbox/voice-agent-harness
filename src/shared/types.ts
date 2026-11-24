@@ -478,8 +478,12 @@ export interface ExploreSettings {
   enabled: boolean
   /** Approved folders, as absolute paths ("D:\\", "C:\Users\me\Projects"). Nothing outside them can be listed, searched or read. */
   roots: string[]
-  /** Offer pc_explore: a helper that chains find, list and read by itself and returns one short answer. */
+  /** Offer pc_explore: the explorer works on a whole goal by itself and returns one short answer. */
   agent: boolean
+  /** The explorer may change text inside existing files in the approved folders (a copy is kept first). Never deletes, moves or creates. */
+  edit: boolean
+  /** The explorer may run the allowlisted read-only commands (ls, dir, cat, type, grep, find, git status, git log…). */
+  terminal: boolean
   /** Set once the first-run folders (the app's own, the session workspace, project folders) have been added. */
   seeded?: boolean
 }

@@ -71,15 +71,16 @@ const pcTools = (t: { tools: ToolSet }): string[] => Object.keys(t.tools).filter
 const exec = (tools: ToolSet, name: string, input: unknown) => tools[name]!.execute!(input, { toolCallId: '1', messages: [], abortSignal: undefined, context: undefined as never })
 // no flush timer: streamed message updates are saved at once, so nothing fires after a test closes the store
 const base: Settings = { ...DEFAULT_SETTINGS, brain: { ...DEFAULT_SETTINGS.brain, uiFlushMs: 0 } }
-const explore = (patch: Partial<Settings['explore']>): Settings => ({ ...base, explore: { enabled: true, agent: true, roots: [], seeded: true, ...patch } })
+const explore = (patch: Partial<Settings['explore']>): Settings => ({ ...base, explore: { enabled: true, agent: true, edit: true, terminal: true, roots: [], seeded: true, ...patch } })
 
-describe('Agent: read-only PC tools', () => {
+describe('Agent: PC tools', () => {
   it('offers them next to the other tools once a folder is approved, with the rules for using them', async () => {
     const t = await turn(agentWith(() => explore({ roots: [allowed] })), 'find my lemon AI project')
     expect(pcTools(t)).toEqual(['pc_find', 'pc_list', 'pc_read', 'pc_grep', 'pc_explore'])
     expect(Object.keys(t.tools)).toContain('current_time')
-    expect(t.system.stable).toContain("The user's PC (read-only)")
-    expect(t.system.stable).toContain('goes to pc_explore in a single call')
+    expect(t.system.stable).toContain("The user's PC")
+    expect(t.system.stable).toContain('goes to pc_explore as one goal')
+    expect(t.system.stable).toContain('Nothing on the PC can ever be deleted')
     expect(t.system.stable).toMatch(/You have tools: .*pc_find, pc_list, pc_read, pc_grep, pc_explore/)
   })
 
@@ -95,6 +96,14 @@ describe('Agent: read-only PC tools', () => {
     expect(pcTools(t)).toEqual(['pc_find', 'pc_list', 'pc_read', 'pc_grep'])
     expect(t.system.stable).toContain('Chain the calls yourself in the same turn')
     expect(t.system.stable).not.toContain('pc_explore')
+  })
+
+  it('never hands the assistant the edit tool or the terminal: those exist only inside the explorer', async () => {
+    const t = await turn(agentWith(() => explore({ roots: [allowed] })), 'hi')
+    expect(Object.keys(t.tools)).not.toContain('pc_edit')
+    expect(Object.keys(t.tools)).not.toContain('pc_run')
+    // without a backup folder (none is given to this agent) the explorer cannot edit, and the tool says nothing of it
+    expect(String(t.tools.pc_explore!.description)).not.toContain('may_edit')
   })
 
   it('reads inside the approved folder, refuses outside it, and follows a change of the list without a restart', async () => {

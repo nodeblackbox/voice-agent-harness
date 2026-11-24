@@ -15,7 +15,7 @@ const pickFolder = vi.fn(async (): Promise<string | null> => 'C:\\Users\\sam\\Pr
 const { useStore } = await import('../../state/store')
 const { PcAccess } = await import('./PcAccess')
 
-const settings = (explore: Partial<Settings['explore']> = {}) => ({ agentName: 'Ava', explore: { enabled: true, agent: true, roots: ['D:\\Code\\app'], seeded: true, ...explore } }) as unknown as Settings
+const settings = (explore: Partial<Settings['explore']> = {}) => ({ agentName: 'Ava', explore: { enabled: true, agent: true, edit: true, terminal: true, roots: ['D:\\Code\\app'], seeded: true, ...explore } }) as unknown as Settings
 
 let root: Root
 let host: HTMLDivElement
@@ -48,7 +48,9 @@ describe('PcAccess', () => {
     await show()
     expect(roots()).toEqual(['D:\\Code\\app'])
     expect(host.textContent).toContain('Let Ava look at your files')
-    expect(host.textContent).toContain('Nothing can be changed, moved, deleted or run')
+    expect(host.textContent).toContain('nothing can ever be deleted, moved or run')
+    expect(host.textContent).toContain('Explorer may edit files')
+    expect(host.textContent).toContain('Explorer may run read-only commands')
   })
 
   it('adds a typed folder once the main process has checked it, tidied', async () => {
@@ -86,10 +88,14 @@ describe('PcAccess', () => {
     await show()
     expect(host.textContent).toContain('No folders approved, so Ava cannot see any files yet.')
     const toggles = [...host.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[]
-    expect(toggles).toHaveLength(2)
+    expect(toggles).toHaveLength(4)
     await act(async () => { toggles[0]!.click() })
     expect(saved().enabled).toBe(false)
     await act(async () => { toggles[1]!.click() })
     expect(saved().agent).toBe(false)
+    await act(async () => { toggles[2]!.click() })
+    expect(saved().edit).toBe(false)
+    await act(async () => { toggles[3]!.click() })
+    expect(saved().terminal).toBe(false)
   })
 })

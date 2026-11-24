@@ -45,9 +45,8 @@ import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
 import { diagramContextBlock, diagramTools, type DiagramDeps } from './tools/diagram'
 import { searchTools, type SearchDeps } from './tools/search'
-import { exploreTools, pcReadTools } from './tools/explore'
-import { PcExplorer } from './explore/fs'
-import { runExplorer } from './explore/agent'
+import { exploreTools } from './tools/explore'
+import { EXPLORER_MAX_MS, ExplorerModule, type ExploreAction } from './explore'
 import { mcpTools, type McpBridge } from './tools/mcp-adapter'
 import { StateMachine } from './turn/state-machine'
 import { TurnRunner } from './turn/runner'
@@ -83,6 +82,8 @@ export interface AgentDeps {
   diagrams?: DiagramDeps
   /** The folder this app's own source code is in, when it runs from source; the active project when none is picked. */
   appDir?: () => string | null
+  /** For the explorer module: where a file's copy goes before an edit (no folder, no edits), and the action log. */
+  explore?: { backupDir?: string; log?(a: ExploreAction): void }
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
@@ -181,7 +182,12 @@ export class Agent {
   readonly sm: StateMachine
   private factory: ModelFactory
   /** Read-only access to the folders approved in Settings > PC access; reads the list fresh on every call. */
-  private readonly explorer = new PcExplorer(() => this.deps.settings().explore?.roots ?? [])
+  private readonly explorer = new ExplorerModule({
+    roots: () => this.deps.settings().explore?.roots ?? [],
+    permissions: () => ({ edit: !!this.deps.settings().explore?.edit, terminal: !!this.deps.settings().explore?.terminal }),
+    backupDir: () => this.deps.explore?.backupDir,
+    log: (a) => this.deps.explore?.log?.(a)
+  })
   private edge: EdgeTtsEngine
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
@@ -819,6 +825,8 @@ export class Agent {
       firstTokenTimeoutMs: settings.brain.firstTokenTimeoutMs,
       stallTimeoutMs: settings.brain.stallTimeoutMs,
       toolStallTimeoutMs: settings.brain.toolStallTimeoutMs,
+      // the explorer works on a goal for up to its own time cap; give it that, and a little to hand the answer back
+      toolStallMsFor: (name) => (name === 'pc_explore' ? EXPLORER_MAX_MS + 5000 : undefined),
       onDelta: (delta) => {
         assistant.text += delta
         this.upsert(assistant)
@@ -1288,24 +1296,21 @@ export class Agent {
     return !!s.explore?.enabled && this.explorer.roots().length > 0
   }
 
-  /** pc_explore: the helper loop, on the model this turn runs on, inside the time a tool call is allowed. */
-  private async exploreWith(request: string, model: ModelInfo, s: Settings, signal?: AbortSignal): Promise<unknown> {
+  /** pc_explore: hand the goal to the explorer module, on the model this turn runs on. The module has its own caps. */
+  private async exploreWith(goal: string, mayEdit: boolean, model: ModelInfo, s: Settings, signal?: AbortSignal): Promise<unknown> {
     let lm
     try {
       lm = this.factory.create(model).model
     } catch (e) {
-      return { error: `The helper has no model to run on (${(e as Error).message}). Use pc_find, pc_list and pc_read yourself.` }
+      return { status: 'error', note: `The explorer has no model to run on (${(e as Error).message}). Use pc_find, pc_list and pc_read yourself.` }
     }
-    this.tr('explore.start', { request, model: model.id })
-    return runExplorer({
+    return this.explorer.run({
+      goal,
+      mayEdit,
       model: lm,
-      tools: pcReadTools(this.explorer),
-      request,
-      roots: this.explorer.roots(),
       context: `The user's active project: ${this.projectName(s)}.`,
-      budgetMs: Math.max(8000, Math.min(45000, s.brain.toolStallTimeoutMs - 4000)),
       signal,
-      trace: (ev, data) => this.tr(ev, data)
+      trace: (ev, data) => this.tr(ev, { ...data, ...(ev === 'explore.start' ? { model: model.id, mayEdit } : {}) })
     })
   }
 
@@ -1354,7 +1359,7 @@ export class Agent {
     }
     if (this.deps.search.configured()) Object.assign(tools, searchTools(this.deps.search))
     if (this.exploreOn(s)) {
-      Object.assign(tools, exploreTools({ explorer: this.explorer, agent: s.explore.agent ? (request, signal) => this.exploreWith(request, model, s, signal) : undefined }))
+      Object.assign(tools, exploreTools({ module: this.explorer, run: s.explore.agent ? (goal, mayEdit, signal) => this.exploreWith(goal, mayEdit, model, s, signal) : undefined }))
     }
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
     if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))

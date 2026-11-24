@@ -26,6 +26,8 @@ export interface RunnerDeps {
   firstTokenTimeoutMs: number
   stallTimeoutMs: number
   toolStallTimeoutMs: number
+  /** A longer (or shorter) allowance for one tool, e.g. the explorer, which works on a goal for many seconds. */
+  toolStallMsFor?(toolName: string): number | undefined
   onDelta(text: string): void
   onToolStart(id: string, name: string, input: unknown): void
   onToolEnd(id: string, name: string, ok: boolean, output: unknown, error?: string): void
@@ -402,7 +404,7 @@ export class TurnRunner {
               scheduleContinuation(part.toolName, this.deps.speech.fillerAfterMs)
             }
             this.deps.onCue(true)
-            arm(this.deps.toolStallTimeoutMs, `the ${part.toolName} tool took too long`)
+            arm(this.deps.toolStallMsFor?.(part.toolName) ?? this.deps.toolStallTimeoutMs, `the ${part.toolName} tool took too long`)
             break
           }
           case 'tool-result': {

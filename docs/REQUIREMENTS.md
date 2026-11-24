@@ -115,8 +115,11 @@ this is the "why" and the bar each part has to meet.
 - The agent can understand what is on the owner's PC: list a folder, find files and folders by name, read a
   text file, search inside files (`pc_list`, `pc_find`, `pc_read`, `pc_grep`). Asked for "my lemon AI
   project", it looks for it instead of asking for the path.
-- **Read-only, always.** These tools cannot change, move, delete or run anything. Changing files is a job
-  for a Claude Code session.
+- The four tools the agent calls itself only read. Everything else on the PC goes through the explorer
+  (below).
+- **Absolutely no deleting.** Nothing is ever deleted, moved, renamed, created, installed, downloaded or
+  run, by any path through the app's PC tools. There is no tool for it, and no command for it exists in the
+  restricted terminal.
 - **Only inside approved folders** (Settings > PC access; a whole drive or single folders). Every path is
   resolved first (`..`, symlinks and junctions included) and refused when it ends up outside the list.
   Network and device paths are refused. Nothing is approved by the code: a fresh install starts with the
@@ -128,9 +131,27 @@ this is the "why" and the bar each part has to meet.
   spoken aloud.
 - **Short enough to say.** Results are capped (entries, matches, characters, folders walked, seconds). A
   name search of a whole drive returns the nearest matches and says it stopped there.
-- **Several steps in one reply.** With the explorer helper on (the default), a question that needs find,
-  then list, then read goes to `pc_explore`: a helper with only the four read tools chains them and
-  returns one short answer. Off, the agent chains the calls itself within its tool rounds.
+- **The explorer is its own module** (`src/core/explore`). The agent hands it a goal ("find the lemon AI
+  project on the D drive") with `pc_explore`, and it works until the goal is done: when a search finds
+  nothing or a path is wrong it tries other names, folders and searches inside files. "Not found" is not
+  accepted before three different searches. Hard caps: 12 steps and 45 seconds, then it returns what it
+  has. The answer is short enough to speak. Off, the agent chains the read tools itself.
+- **Edits, narrowly.** The explorer can replace a piece of text inside an existing text file in an
+  approved folder, and only for a goal the agent marked as a change the owner asked for. It cannot create,
+  delete, rename or empty a file. The text to replace must occur exactly once (or every occurrence is asked
+  for). A copy of the file as it was goes to `<userData>/pc-edit-backups` first. Secrets files, git's own
+  files, binaries, hard-linked files and files over 1 MB are never edited.
+- **A restricted terminal, by allowlist.** `ls`, `dir`, `cat`, `type`, `head`, `tail`, `grep`, `findstr`,
+  `find`, `wc`, `pwd` and `git status|log|diff|branch`. It is not a shell: the line is parsed in the app, the
+  file commands are answered by the app's own fenced code, and git is the only program started (by its full
+  path, with an argument list, a timeout and a minimal environment). Anything not on the list is refused,
+  as are `;`, `&&`, `||`, `>`, `<`, `$`, backticks, `%VAR%`, and a pipe into anything but a text filter.
+- **When in doubt, refuse and say so.** An unclear goal, an ambiguous edit or an unknown command option is
+  refused with the reason; the explorer returns what was refused and the agent tells the owner.
+- **Everything is logged.** Every action taken or refused is one line in
+  `<userData>/logs/pc-actions.jsonl` (who, goal, tool, target, outcome, time), and the explorer's steps show
+  in the Console.
+- Each permission has a switch in Settings > PC access (the explorer, edits, the terminal).
 - The agent knows its own source folder as the active project when no other is picked (running from
   source), so "change yourself" starts a Claude Code session there, after a clear yes.
 

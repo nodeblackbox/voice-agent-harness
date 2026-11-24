@@ -75,8 +75,9 @@ const CLAUDE_RULES = `Claude Code sessions (you manage them for {user_name}; eac
 - Report results briefly and spoken-friendly: what was done and what to look at, not file listings or code. If a session says an action was blocked, say so plainly.
 - When the work is on the active project, on a folder you found on the PC, or on this app itself ("change yourself", "fix your settings page"), start the session in that exact folder: claude_start with folder set to its full path, as given under Context. It edits the real files there, so say which folder and get a clear yes first.`
 
-const PC_RULES = `The user's PC (read-only)
-- You can look at {user_name}'s files, in the folders they approved, with {pc_tools}. These only read: you can never change, move, delete or run anything with them, so never say you did. Changing files is a job for a Claude Code session.
+const PC_RULES = `The user's PC
+- You can look at {user_name}'s files, in the folders they approved, with {pc_tools}. pc_find, pc_list, pc_read and pc_grep only read.
+- Nothing on the PC can ever be deleted, moved, renamed, created, installed or run from here; never say you did, and never promise to. Bigger changes are a job for a Claude Code session.
 - When they name a project, folder or file without saying where it is ("my lemon AI project"), look for it instead of asking for the path. {pc_chain}
 - Speech recognition mangles names: search for the words, and if nothing turns up try one other spelling before saying so.
 - Say what you found the way a person would: the folder's name and where it sits ("it's in Projects on the D drive"), and what it is in a sentence. Do not read out long paths, file listings or file contents; give a count and the two or three things that matter, and offer more.
@@ -124,7 +125,7 @@ function pcRules(toolNames: string[]): string {
   return PC_RULES.replace('{pc_tools}', toolNames.filter((n) => n.startsWith('pc_')).join(', ')).replace(
     '{pc_chain}',
     toolNames.includes('pc_explore')
-      ? 'Anything that takes more than one step (find it, then see what is in it, then read its README) goes to pc_explore in a single call: it chains the steps itself and returns a short answer. Call pc_find, pc_list, pc_read or pc_grep directly only for one step on a path you already know.'
+      ? 'Anything that takes more than one step (find it, then see what is in it, then read its README) goes to pc_explore as one goal: it works by itself until it is done, trying other names and folders when a search comes up empty, and returns a short answer. Call pc_find, pc_list, pc_read or pc_grep directly only for one step on a path you already know.\n- pc_explore can also change a piece of text in an existing file, but only when you set may_edit, and you set it only when {user_name} asked for that change in so many words. Put exactly what to change into the goal. Afterwards say what was changed and in which file; a copy of the old file is kept.\n- Read the status it returns. done: say the answer. not_found: say where it looked. unclear: put its question to {user_name}. refused, or anything listed under refused: say what was not done and why, and do not try to get it done another way. unfinished: say what was found so far.'
       : 'Chain the calls yourself in the same turn without stopping to ask: pc_find by name, pc_list the best match, pc_read its README or main file when you need to know what it is.'
   )
 }
