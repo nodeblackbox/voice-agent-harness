@@ -71,6 +71,8 @@ export interface VoiceAgentApi {
     route(): Promise<EdgeRouteState>
     /** Test every route again now (the Settings "Test all" button). */
     testRoutes(): Promise<EdgeRouteState>
+    /** Time an Edge voice on new text: ms until a sentence's audio is ready (median of 3). */
+    speed(voice: string): Promise<number>
     /** Load Kokoro now (skips the back-off after a failed load); true once it is ready. */
     startKokoro(): Promise<boolean>
     voices(): Promise<VoiceInfo[]>

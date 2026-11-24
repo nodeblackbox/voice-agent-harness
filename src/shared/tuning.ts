@@ -121,11 +121,12 @@ export const TUNING = {
     maxChars: n(220, 80, 600, 10, 'core', 'Max sentence chars', 'Run-on sentences are force-cut at the last comma or space past this length so a long sentence cannot stall first audio.', { unit: 'chars', old: 220 }),
     fillerAfterMs: n(1500, 300, 6000, 100, 'core', 'Continuation filler after', 'If a tool is still running and nothing has been spoken for this long, say one short filler ("Still looking.") so the agent never goes dead quiet.', { unit: 'ms', old: 1500 }),
     fillerMinGapMs: n(4000, 0, 20000, 500, 'core', 'Filler min gap', 'Skip the lead-in filler for a tool call if another filler was spoken more recently than this.', { unit: 'ms' }),
-    ttsPoolSize: n(3, 1, 6, 1, 'core', 'TTS pool size', 'Edge TTS sockets kept open; also the number of sentences synthesized ahead of playback.', { unit: 'sockets', restart: true }),
+    ttsPoolSize: n(4, 1, 6, 1, 'core', 'TTS pool size', 'Edge TTS sockets kept open; also the number of sentences synthesized ahead of playback.', { unit: 'sockets', restart: true, superseded: [3] }),
+    ttsRaceFirst: n(3, 1, 4, 1, 'core', 'Race the first sentence', "Copies of a reply's first sentence sent to Edge TTS at once; the quickest is spoken and the rest are cancelled. Edge's answer time swings a lot between identical requests: measured on plain Ava, one request averaged 1.4 s (worst 2.2 s), two copies 1.2 s, three 0.9 s (worst 1.5 s). Costs that many requests for one sentence per reply; lower it if Edge starts refusing (429). 1 sends one request.", { unit: 'copies' }),
     ttsTimeoutMs: n(12000, 3000, 30000, 500, 'core', 'TTS timeout', 'Give up on one sentence of Edge TTS after this long.', { unit: 'ms' }),
     ttsAttempts: n(2, 1, 4, 1, 'core', 'TTS attempts', 'Tries per sentence before it is spoken with the fallback voice.', { unit: 'tries' }),
     ttsDegradeAfter: n(3, 1, 10, 1, 'core', 'TTS degrade after', 'Consecutive failed sentences before the rest of the turn uses the fallback voice (immediately when Edge is unreachable).', { unit: 'failures' }),
-    edgeSlowMs: n(1200, 400, 5000, 100, 'main', 'Edge slow threshold', 'Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best proxies.', { unit: 'ms' }),
+    edgeSlowMs: n(2000, 400, 5000, 100, 'main', 'Edge slow threshold', 'Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best proxies. A healthy plain voice answers new text in about 1 s, so the old 1200 re-checked on ordinary swings.', { unit: 'ms', superseded: [1200] }),
     proxyRankParallel: n(4, 1, 10, 1, 'main', 'Proxy tests at once', 'Proxies the automatic Edge route tests at the same time. Higher finishes a long list sooner; too high and the tests slow each other down.', { unit: 'proxies' })
   },
   playback: {

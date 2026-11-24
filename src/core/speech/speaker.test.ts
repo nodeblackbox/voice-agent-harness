@@ -185,3 +185,23 @@ describe('Speaker', () => {
     expect(fallbackReqs.map((r) => r.voice)).toEqual(['af_heart', 'af_heart'])
   })
 })
+
+describe('Speaker racing', () => {
+  it('asks for the first spoken sentence more than once, and only that one', async () => {
+    const seen: Array<[string, number | undefined]> = []
+    const { speaker } = make({ raceFirst: 2, engine: engine(async (req) => (seen.push([req.text, req.race]), Buffer.from('x'))) })
+    speaker.say('One moment.', 'filler')
+    speaker.say('First.')
+    speaker.say('Second.')
+    await speaker.finish()
+    expect(seen).toEqual([['One moment.', undefined], ['First.', 2], ['Second.', undefined]])
+  })
+
+  it('sends one request when racing is off', async () => {
+    const seen: Array<number | undefined> = []
+    const { speaker } = make({ raceFirst: 1, engine: engine(async (req) => (seen.push(req.race), Buffer.from('x'))) })
+    speaker.say('First.')
+    await speaker.finish()
+    expect(seen).toEqual([undefined])
+  })
+})

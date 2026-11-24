@@ -1,7 +1,11 @@
+import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 
 const setMetadata = vi.fn(async () => {})
 const constructed: unknown[] = []
+/** How each toStream call answers, in call order: ms until its audio, or 'never'. */
+const answers: Array<number | 'never'> = []
+const streams: PassThrough[] = []
 vi.mock('msedge-tts', () => ({
   MsEdgeTTS: class {
     constructor(opts?: { agent?: unknown }) {
@@ -9,6 +13,13 @@ vi.mock('msedge-tts', () => ({
     }
     setMetadata = setMetadata
     close = vi.fn()
+    toStream(text: string) {
+      const audioStream = new PassThrough()
+      const n = streams.push(audioStream)
+      const after = answers.shift() ?? 0
+      if (after !== 'never') setTimeout(() => !audioStream.destroyed && audioStream.end(Buffer.from(`#${n}:${text}`)), after)
+      return { audioStream }
+    }
   },
   OUTPUT_FORMAT: { AUDIO_24KHZ_48KBITRATE_MONO_MP3: 'mp3' }
 }))
@@ -116,6 +127,67 @@ describe('EdgeTtsEngine proxy', () => {
     await e.warm('en-US-AvaNeural')
     expect(constructed).toEqual([undefined, { proxy: 'http://h:1' }])
     await e.warm('en-US-AvaNeural')
+    expect(constructed).toHaveLength(2)
+  })
+})
+
+describe('EdgeTtsEngine racing', () => {
+  const req = { text: 'Hi there.', voice: 'en-US-AvaNeural', rate: 0, pitch: 0 }
+
+  it('sends the sentence twice and keeps the quicker answer, cancelling the other', async () => {
+    streams.length = 0
+    answers.splice(0, answers.length, 80, 5)
+    const first = vi.fn()
+    const e = new EdgeTtsEngine(3, 1000)
+    const out = await e.synth({ ...req, race: 2, onFirstByte: first }, new AbortController().signal)
+    expect(out.toString()).toBe('#2:Hi there.')
+    expect(streams).toHaveLength(2)
+    expect(streams[0]!.destroyed).toBe(true)
+    expect(first).toHaveBeenCalledTimes(1)
+    // both sockets went back to the pool healthy: the next sentence reuses one
+    constructed.length = 0
+    answers.push(0)
+    await e.synth(req, new AbortController().signal)
+    expect(streams).toHaveLength(3)
+    expect(constructed).toHaveLength(0)
+  })
+
+  it('one request without race, and never more copies than free sockets', async () => {
+    streams.length = 0
+    answers.length = 0
+    const e = new EdgeTtsEngine(1, 1000)
+    await e.synth(req, new AbortController().signal)
+    expect(streams).toHaveLength(1)
+    await e.synth({ ...req, race: 3 }, new AbortController().signal)
+    expect(streams).toHaveLength(2)
+  })
+
+  it('survives one copy failing, and fails with the real reason when both do', async () => {
+    streams.length = 0
+    answers.splice(0, answers.length, 'never', 5)
+    const e = new EdgeTtsEngine(2, 40)
+    await expect(e.synth({ ...req, race: 2 }, new AbortController().signal)).resolves.toBeInstanceOf(Buffer)
+    answers.splice(0, answers.length, 'never', 'never')
+    await expect(e.synth({ ...req, race: 2 }, new AbortController().signal)).rejects.toThrow('Edge TTS timed out')
+  })
+
+  it('a barge-in cancels every copy', async () => {
+    streams.length = 0
+    answers.splice(0, answers.length, 'never', 'never')
+    const c = new AbortController()
+    const p = new EdgeTtsEngine(2, 1000).synth({ ...req, race: 2 }, c.signal)
+    await new Promise((r) => setTimeout(r, 5))
+    c.abort()
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+    expect(streams).toHaveLength(2)
+    expect(streams.every((s) => s.destroyed)).toBe(true)
+  })
+})
+
+describe('EdgeTtsEngine.warm with racing', () => {
+  it('opens as many sockets as the first sentence will use', async () => {
+    constructed.length = 0
+    await new EdgeTtsEngine(4, 1000).warm('en-US-AvaNeural', 2)
     expect(constructed).toHaveLength(2)
   })
 })

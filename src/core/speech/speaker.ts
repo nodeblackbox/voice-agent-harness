@@ -13,6 +13,8 @@ export interface SpeakerDeps {
   attempts?: number
   /** Consecutive failed sentences before the rest of the turn uses the fallback engine. */
   degradeAfter?: number
+  /** Copies of the first spoken sentence sent at once, the quickest kept (see TtsRequest.race). 1 = off. */
+  raceFirst?: number
   emit(chunk: AudioChunk): void
   /** The engine failed this turn; `reason` is the last error (e.g. a 429 from Edge). */
   onDegraded(reason: string): void
@@ -43,6 +45,7 @@ export class Speaker {
   private consecutiveFailures = 0
   private degraded = false
   private busyUntil = 0
+  private spoken = 0
   private resolveDone!: () => void
   readonly done = new Promise<void>((r) => (this.resolveDone = r))
   /** Fillers spoken this turn. */
@@ -101,6 +104,8 @@ export class Speaker {
       firstByte = ms
     }
     const req = this.request(this.deps.engine, text, onFirstByte)
+    // the first thing said in a reply is the wait the listener hears: ask for it more than once
+    if (req && kind === 'speech' && this.spoken++ === 0 && (this.deps.raceFirst ?? 1) > 1) req.race = this.deps.raceFirst
     const fallbackReq = (): TtsRequest | null => (this.deps.fallback === this.deps.engine ? req : this.request(this.deps.fallback, text, onFirstByte))
     const done = (outcome: 'ok' | 'skip' | 'fallback', attempts: number, bytes?: number): void => {
       const ms = Math.round(performance.now() - t0)

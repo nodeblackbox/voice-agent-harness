@@ -36,6 +36,24 @@ export interface TtsRequest {
   pitch: number
   /** Called once with request -> first audio byte latency, when the engine can measure it. */
   onFirstByte?: (ms: number) => void
+  /**
+   * Edge: send this many copies of the request at once and keep the first that answers (the rest are
+   * cancelled). For the first sentence of a reply, where the wait is heard. Absent or 1 = one request.
+   */
+  race?: number
+}
+
+const WORDS = 'kettle window garden river morning coffee engine yellow market people music paper winter summer story answer simple early little gentle corner bridge letter number orange silver planet forest minute dinner travel basket pocket ticket candle mirror button carpet'.split(' ')
+
+/**
+ * A sentence nobody has asked Edge for before, about `chars` long. Microsoft answers a sentence it has
+ * already synthesized from a cache in ~150 ms whatever the voice, so timing a fixed phrase measures the
+ * network and nothing else; a speed test has to use new text.
+ */
+export function freshPhrase(chars = 45, random: () => number = Math.random): string {
+  let s = `Number ${100 + Math.floor(random() * 900)},`
+  while (s.length < chars - 7) s += ` ${WORDS[Math.floor(random() * WORDS.length)]}`
+  return `${s}.`
 }
 
 // Returns MP3 bytes, or null when the renderer should speak the text itself (system voice).
@@ -189,7 +207,12 @@ export class EdgeTtsEngine implements TtsEngine {
    * Pre-open one socket for `voice` so the first sentence of the coming reply skips the handshake.
    * Runs while the model is still thinking; never throws and never waits for a busy pool.
    */
-  async warm(voice: string): Promise<boolean> {
+  async warm(voice: string, sockets = 1): Promise<boolean> {
+    const all = await Promise.all(Array.from({ length: Math.max(1, Math.min(sockets, this.max)) }, () => this.warmOne(voice)))
+    return all[0]!
+  }
+
+  private async warmOne(voice: string): Promise<boolean> {
     if (this.idle.length === 0 && this.count >= this.max) return false
     const w = await this.acquire()
     let healthy = true
@@ -204,7 +227,50 @@ export class EdgeTtsEngine implements TtsEngine {
     }
   }
 
+  /** A socket is free (or can be opened) without making anyone wait. */
+  private spare(): boolean {
+    return this.idle.length > 0 || this.count < this.max
+  }
+
+  /**
+   * One sentence. With `req.race` > 1 the same request goes out on that many sockets and the first full
+   * answer wins: Microsoft's time for one sentence swings widely between identical requests (measured
+   * 2026-11-24 on plain Ava, 20 new sentences each: one request averaged 1.37 s with a worst of 2.2 s, three
+   * copies 0.93 s with a worst of 1.45 s), and on a reply's first sentence that swing is silence the
+   * listener sits through. Extra copies only take
+   * sockets that are free, so racing never delays another sentence.
+   */
   async synth(req: TtsRequest, signal: AbortSignal): Promise<Buffer> {
+    const copies = Math.min(req.race ?? 1, this.max)
+    if (copies <= 1) return this.one(req, signal)
+    if (signal.aborted) throw abortError()
+    const losers = new AbortController()
+    const stop = (): void => losers.abort()
+    signal.addEventListener('abort', stop, { once: true })
+    let reported = false
+    const mine: TtsRequest = {
+      ...req,
+      onFirstByte: (ms) => {
+        if (reported) return
+        reported = true
+        req.onFirstByte?.(ms)
+      }
+    }
+    const runs: Array<Promise<Buffer>> = [this.one(mine, losers.signal)]
+    while (runs.length < copies && this.spare()) runs.push(this.one(mine, losers.signal))
+    try {
+      return await Promise.any(runs)
+    } catch (e) {
+      if (signal.aborted) throw abortError()
+      // every copy failed: report the first one's reason, as a single request would
+      throw e instanceof AggregateError ? (e.errors[0] as Error) : e
+    } finally {
+      signal.removeEventListener('abort', stop)
+      losers.abort()
+    }
+  }
+
+  private async one(req: TtsRequest, signal: AbortSignal): Promise<Buffer> {
     if (signal.aborted) throw abortError()
     const w = await this.acquire()
     let healthy = true

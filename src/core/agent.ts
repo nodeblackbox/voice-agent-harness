@@ -37,6 +37,7 @@ import { Speaker } from './speech/speaker'
 import { LatencyEstimate, firstChunkWords } from './speech/pace'
 import { EdgeHealth } from './speech/edge-health'
 import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type AgentSource, type KokoroBackend, type TtsEngine } from './speech/tts'
+import { voiceSpeed } from './speech/voiceSpeed'
 import { TTS_ENGINE_LABELS, expressiveGuide, isCloudTts, requestFields } from '@shared/tts'
 import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
@@ -623,6 +624,7 @@ export class Agent {
         voice: settings.voice,
         attempts: settings.speech.ttsAttempts,
         degradeAfter: settings.speech.ttsDegradeAfter,
+        raceFirst: settings.speech.ttsRaceFirst,
         emit: (chunk) => {
           if (this.turn?.id !== turnId) return
           this.turn.chunks.set(chunk.seq, { seq: chunk.seq, text: chunk.text, kind: chunk.kind })
@@ -663,7 +665,7 @@ export class Agent {
     this.probeEngine(settings)
     if (speakThisTurn && engine === this.edge) {
       const t0 = Date.now()
-      void this.edge.warm(settings.voice.voice).then((ok) => {
+      void this.edge.warm(settings.voice.voice, settings.speech.ttsRaceFirst).then((ok) => {
         if (ok) this.tr('tts.warm', { turnId, ms: Date.now() - t0 })
         // Edge can't even open a socket: get the contingency voice loading before the sentences fail
         else void this.deps.kokoro?.start()
@@ -1050,6 +1052,17 @@ export class Agent {
 
   async voices() {
     return this.edge.listVoices()
+  }
+
+  /** How long the Edge voice `voice` takes to answer new text right now, in ms (see voiceSpeed). */
+  voiceSpeed(voice: string, runs = 3): Promise<number> {
+    const v = this.deps.settings().voice
+    return voiceSpeed(this.edge, voice, { runs, rate: v.rate, pitch: v.pitch })
+  }
+
+  /** True while a reply is being produced or spoken. */
+  get busy(): boolean {
+    return this.turn !== null
   }
 
   /** Voices and models a hosted provider offers (live listing where it has one). */

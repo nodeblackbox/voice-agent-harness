@@ -48,9 +48,26 @@ this is the "why" and the bar each part has to meet.
   launch and when Edge gets slow or fails.
 - Proxies are for Edge. The hosted voices are fast direct; they only use a proxy when the owner turns
   that on.
-- Measured 2026-11-20 from London (warm socket, time to first audio): direct ~150 ms when not throttled;
-  through Paris and Frankfurt proxies about the same; Milan and US East a little slower; US West
-  (Palo Alto) ~1.2 s; Tokyo ~1.7 s. Throttled direct was 1-4 s. `pnpm lab:proxies` re-measures by country.
+- **The 2026-11-20 numbers here were wrong** (direct ~150 ms, "throttled" 1-4 s). The test spoke the same
+  phrase every time, and Microsoft answers a sentence it has already made from a cache in ~150 ms, so it
+  timed the network. Every speed test now speaks new text.
+- Measured 2026-11-24 from London on new text: **the voice decides the speed, not the route.** Edge sends
+  no audio until the whole sentence is synthesized. `en-US-AvaMultilingualNeural` took 3-5 s for a short
+  sentence (up to 10 s for a long one) direct and through proxies in France, Germany, Italy, the US and
+  Japan alike; `en-US-AvaNeural`, the same speaker, took about 1 s direct; Jenny and Aria 0.3-0.8 s.
+  Proxies are for an address Microsoft refuses (429/403), not for speed.
+
+## Voice speed
+
+- The owner must be able to see which voice is slow and fix it in one click. Settings > Voice output
+  times any Edge voice on new text ("speed"), and marks the Multilingual ones as slower to start.
+- When the chosen voice has taken over 2 s a sentence for four sentences, the app times the plain voice
+  of the same name once the agent is quiet and, if it is clearly quicker, shows a banner above the chat
+  with "Switch to Ava". It never switches voice by itself: the voice is the owner's choice.
+- A reply's first sentence is sent to Edge three times at once and the first answer is spoken
+  (`speech.ttsRaceFirst`): Edge's time for identical requests swings between 0.5 and 2.2 s, and three
+  copies brought the average from 1.37 s to 0.93 s and the worst case from 2.2 s to 1.45 s.
+- The header names the voice in full ("Ava Multilingual", not "Ava"), since the two differ this much.
 
 ## Secrets
 

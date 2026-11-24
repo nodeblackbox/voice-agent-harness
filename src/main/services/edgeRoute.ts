@@ -6,10 +6,11 @@ import { parseProxyList, proxyLabel, rankProxies, type ProxyProbe } from '@core/
 /**
  * Which way Edge TTS goes out: your own connection or one of your proxies, picked automatically.
  *
- * Microsoft throttles the free voice per IP address, and only some of the time: measured 2026-11-20 from
- * London, a warm socket answered in ~150 ms both direct and through a Paris proxy, while the same direct
- * line had answered in 1-4 s an hour earlier. So the rule is "direct while it is quick, the fastest proxy
- * when it is not", with a ranking that is cached rather than re-run on every launch:
+ * Microsoft can throttle or refuse the free voice per IP address (429/403), and a proxy gets around that.
+ * So the rule is "direct while it works as well as anything, the fastest proxy when it does not", with a
+ * ranking that is cached rather than re-run on every launch. What a route cannot do is make a slow voice
+ * quick: that is the voice (see @core/speech/voiceSpeed), and the probe now speaks new text each time so
+ * the numbers here are real synthesis times, not cache hits.
  *
  * - full test (every route, one run each, a few at once): when the list changes, or the ranking is a day old;
  * - quick check (direct and the best few from the ranking): at launch, and when Edge turns slow or fails;
@@ -57,6 +58,8 @@ export class EdgeRouteService {
   private lastCheck = 0
   private note = ''
   private slowStreak = 0
+  /** Wait between "slow" re-checks; doubles each time one changes nothing, so a slow voice is not re-tested all day. */
+  private slowGap = 0
   private readonly path: string
 
   constructor(private readonly opts: EdgeRouteOptions) {
@@ -121,7 +124,9 @@ export class EdgeRouteService {
 
   private async check(reason: string, o: { full?: boolean; force?: boolean; avoid?: string } = {}): Promise<EdgeRouteState> {
     if (this.testing) return this.testing
-    if (!o.force && reason !== 'launch' && this.now() - this.lastCheck < (this.opts.recheckGapMs ?? 120_000)) return this.state()
+    const base = this.opts.recheckGapMs ?? 120_000
+    const gap = reason.startsWith('slow') ? Math.max(base, this.slowGap) : base
+    if (!o.force && reason !== 'launch' && this.now() - this.lastCheck < gap) return this.state()
     this.testing = this.run(reason, o).finally(() => {
       this.testing = null
       this.opts.onChange?.(this.state())
@@ -170,6 +175,8 @@ export class EdgeRouteService {
     this.lastCheck = this.now()
     const prev = this.url
     this.url = choose(rows, this.opts.marginMs ?? 150, o.avoid)
+    const base = this.opts.recheckGapMs ?? 120_000
+    this.slowGap = reason.startsWith('slow') && this.url === prev ? Math.min(30 * 60_000, Math.max(base, this.slowGap) * 2) : base
     const pick = rows.find((r) => r.url === this.url)
     const direct = rows.find((r) => !r.url)
     this.note = this.url

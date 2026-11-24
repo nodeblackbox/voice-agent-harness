@@ -20,6 +20,7 @@ export const IPC = {
   consoleEntries: 'console:entries',
   ttsRoute: 'tts:route',
   ttsRouteTest: 'tts:route-test',
+  ttsVoiceSpeed: 'tts:voice-speed',
   kokoroStart: 'tts:kokoro-start',
   voicesList: 'voices:list',
   stylesList: 'styles:list',

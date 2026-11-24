@@ -37,6 +37,7 @@ const api: VoiceAgentApi = {
     catalog: (provider) => invoke(IPC.ttsCatalog, provider),
     route: () => invoke(IPC.ttsRoute),
     testRoutes: () => invoke(IPC.ttsRouteTest),
+    speed: (voice) => invoke(IPC.ttsVoiceSpeed, voice),
     startKokoro: () => invoke(IPC.kokoroStart),
     voices: () => invoke(IPC.voicesList)
   },

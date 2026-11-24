@@ -127,3 +127,36 @@ describe('EdgeRouteService', () => {
     expect(probed).toHaveLength(0)
   })
 })
+
+describe('EdgeRouteService slow re-checks', () => {
+  it('waits twice as long after each re-check that changes nothing', async () => {
+    let clock = 1_000_000
+    let probes = 0
+    const svc = new EdgeRouteService({
+      userData: mkdtempSync(join(tmpdir(), 'route-')),
+      lines: async () => LIST,
+      // a slow voice: every route is equally slow, so no re-check ever finds a better one
+      probe: async () => (probes++, 3000),
+      now: () => clock,
+      recheckGapMs: 120_000
+    })
+    await svc.start()
+    const slowTwice = async (): Promise<number> => {
+      const before = probes
+      svc.sentence(4000, 2000)
+      svc.sentence(4000, 2000)
+      await new Promise((r) => setTimeout(r, 5))
+      return probes - before
+    }
+    clock += 121_000
+    expect(await slowTwice()).toBeGreaterThan(0) // the normal gap has passed
+    clock += 121_000
+    expect(await slowTwice()).toBe(0) // nothing changed last time: now 4 minutes
+    clock += 121_000
+    expect(await slowTwice()).toBeGreaterThan(0)
+    clock += 7 * 60_000
+    expect(await slowTwice()).toBe(0) // and now 8
+    clock += 2 * 60_000
+    expect(await slowTwice()).toBeGreaterThan(0)
+  })
+})

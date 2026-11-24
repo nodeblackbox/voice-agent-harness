@@ -395,6 +395,15 @@ export interface ProxyRank {
   country?: string
 }
 
+/** The chosen Edge voice has been slow to start; `twin` is the plain voice of the same name, measured quicker. */
+export interface SlowVoiceNotice {
+  voice: string
+  /** Median ms until a sentence's audio was ready, over the last few spoken. */
+  ms: number
+  twin?: string
+  twinMs?: number
+}
+
 /** The automatic Edge route (Settings > Voice output): which way Edge goes out now and why. */
 export interface EdgeRouteState {
   /** Proxy URL in use; '' = direct. */
@@ -580,6 +589,7 @@ export type AgentEvent =
   | { type: 'settings-changed'; settings: Settings }
   | { type: 'toast'; toast: Toast }
   | { type: 'edge-route'; state: EdgeRouteState }
+  | { type: 'voice-slow'; notice: SlowVoiceNotice }
   | { type: 'context'; snapshot: ContextSnapshot }
   | { type: 'skills-changed' }
   | { type: 'mcp-changed' }

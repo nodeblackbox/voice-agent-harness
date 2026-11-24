@@ -91,6 +91,7 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.ttsCatalog, (_e, provider: CloudTtsProvider) => d.agent.catalog(provider))
   h(IPC.ttsRoute, () => d.edgeRoute.state())
   h(IPC.ttsRouteTest, () => d.edgeRoute.retestAll())
+  h(IPC.ttsVoiceSpeed, (_e, voice: string) => d.agent.voiceSpeed(String(voice)))
   h(IPC.kokoroStart, () => d.kokoro.start({ force: true }))
   h(IPC.voicesList, () => d.agent.voices())
 

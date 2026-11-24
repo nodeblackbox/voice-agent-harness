@@ -91,6 +91,8 @@ export function VoiceOutput() {
   const [voices, setVoices] = useState<VoiceInfo[]>([])
   const [catalog, setCatalog] = useState<TtsCatalog | null>(null)
   const [previewing, setPreviewing] = useState<string | null>(null)
+  /** Edge voices timed from here: ms until a new sentence is ready, 'timing' while measuring, 'failed' on error. */
+  const [speeds, setSpeeds] = useState<Record<string, number | 'timing' | 'failed'>>({})
   const [proxyDraft, setProxyDraft] = useState<string | null>(null)
   const [listDraft, setListDraft] = useState<string | null>(null)
   const [showRanking, setShowRanking] = useState(false)
@@ -152,6 +154,16 @@ export function VoiceOutput() {
   const tts = services.tts
   const info = cloud ? TTS_PROVIDERS[cloud] : null
   const choice = cloud ? cloudChoice(v, cloud) : null
+  const timeVoice = async (name: string) => {
+    if (speeds[name] === 'timing') return
+    setSpeeds((s) => ({ ...s, [name]: 'timing' }))
+    try {
+      const ms = await window.api.speak.speed(name)
+      setSpeeds((s) => ({ ...s, [name]: ms }))
+    } catch {
+      setSpeeds((s) => ({ ...s, [name]: 'failed' }))
+    }
+  }
   const setCloud = (patch: Partial<CloudVoiceChoice>) => {
     if (!cloud) return
     void updateSettings({ voice: { ...v, cloud: { ...v.cloud, [cloud]: { ...v.cloud?.[cloud], ...patch } } } })
@@ -400,6 +412,9 @@ export function VoiceOutput() {
             <span className="text-xs font-medium" style={{ color: T.text3 }}>
               Voice
             </span>
+            <span className="text-xs" style={{ color: T.text3, lineHeight: 1.5 }}>
+              Edge sends nothing until a whole sentence is ready, and how long that takes depends on the voice: the Multilingual ones are several times slower to start than the plain voice of the same name. "speed" times a voice on new text.
+            </span>
             {voices.length === 0 && (
               <span className="text-xs" style={{ color: T.text3 }}>
                 Voice list unavailable (offline?). Current: {v.voice}
@@ -408,6 +423,8 @@ export function VoiceOutput() {
             {voices.map((voice) => {
               const selected = v.voice === voice.shortName
               const isDefault = voice.shortName === 'en-US-AvaNeural'
+              const speed = speeds[voice.shortName]
+              const slowKind = voice.shortName.includes('Multilingual')
               return (
                 <button
                   key={voice.shortName}
@@ -416,14 +433,25 @@ export function VoiceOutput() {
                   style={{ background: selected ? T.raised : 'transparent', border: `1px solid ${selected ? T.cyanBorder : 'transparent'}`, cursor: 'pointer' }}
                 >
                   <span style={{ width: 14, color: T.cyan }}>{selected ? <Check size={13} /> : null}</span>
-                  <span className="text-sm" style={{ width: 110 }}>
+                  <span className="text-sm" style={{ width: 160 }}>
                     {voice.name}
                   </span>
                   <span className="text-xs" style={{ color: T.text3, fontFamily: T.mono, width: 50 }}>
                     {voice.locale}
                   </span>
                   <span className="text-xs flex-1" style={{ color: T.text2 }}>
-                    {isDefault ? 'Default · warm, quick' : voice.gender}
+                    {isDefault ? 'Default · warm, quick' : slowKind ? `${voice.gender} · slower to start` : voice.gender}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1 text-xs"
+                    title="Time this voice on a new sentence (three tries, the middle one shown)"
+                    style={{ width: 76, justifyContent: 'flex-end', fontFamily: typeof speed === 'number' ? T.mono : undefined, color: typeof speed === 'number' ? (speed > 2000 ? T.amber : speed <= 1200 ? T.green : T.text2) : T.text3, cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void timeVoice(voice.shortName)
+                    }}
+                  >
+                    {speed === 'timing' ? 'timing…' : speed === 'failed' ? 'failed' : typeof speed === 'number' ? `${(speed / 1000).toFixed(1)} s` : (<><Gauge size={11} /> speed</>)}
                   </span>
                   <span
                     className="inline-flex items-center gap-1 text-xs"

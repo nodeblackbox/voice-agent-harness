@@ -9,7 +9,8 @@ import { formatTokens, usageTitle } from '../../lib/format'
 
 export function friendlyVoice(name: string | undefined): string {
   if (!name) return 'Ava'
-  return name.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '')
+  // "Ava Multilingual" and "Ava" are different voices (the Multilingual one is several times slower to start)
+  return name.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/Neural$/, '').replace(/(.)Multilingual$/, '$1 Multilingual')
 }
 
 /** What the header calls the current voice: the Edge voice's short name, a hosted voice's name, or the engine when the voice is an opaque id. */

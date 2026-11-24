@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { isCloudTts } from '@shared/tts'
 import type {
   EdgeRouteState,
+  SlowVoiceNotice,
   AgentEvent,
   AgentState,
   ChatMessage,
@@ -83,6 +84,8 @@ interface Store {
   services: Partial<Record<ServiceName, ServiceStatus>>
   /** The automatic Edge route (pushed by main whenever it re-checks). */
   edgeRoute: EdgeRouteState | null
+  /** The chosen Edge voice has been slow; shown above the chat until switched or dismissed. */
+  slowVoice: SlowVoiceNotice | null
   partial: string
   level: number
   cueOn: boolean
@@ -152,6 +155,7 @@ export const useStore = create<Store>((set, get) => ({
   agentState: 'idle',
   services: {},
   edgeRoute: null,
+  slowVoice: null,
   partial: '',
   level: 0,
   cueOn: false,
@@ -198,6 +202,9 @@ export const useStore = create<Store>((set, get) => ({
           break
         case 'edge-route':
           set({ edgeRoute: e.state })
+          break
+        case 'voice-slow':
+          set({ slowVoice: e.notice })
           break
         case 'message': {
           const msgs = get().messages

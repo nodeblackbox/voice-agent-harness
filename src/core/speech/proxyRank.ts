@@ -1,10 +1,11 @@
 import type { ProxyRank } from '@shared/types'
-import { EdgeTtsEngine } from './tts'
+import { EdgeTtsEngine, freshPhrase } from './tts'
 
 /**
  * "Find fastest" for the Edge proxy: time a short phrase through each proxy (and direct, for comparison)
- * and rank by the median time to first audio. Microsoft throttles the free voice per IP, so the spread is
- * large: a few hundred milliseconds through a nearby proxy against seconds on a throttled address.
+ * and rank by the median time to first audio. This finds a throttled or blocked address; it does not make
+ * a slow voice quick (measured 2026-11-24: a Multilingual voice took 3-5 s through every route in five
+ * countries, while the plain voice of the same name took about 1 s direct).
  */
 
 /** One proxy per line: host:port, host:port:user:pass, or an http(s):// URL. Blank lines and # comments are skipped. */
@@ -72,7 +73,8 @@ export async function rankProxies(urls: string[], probe: ProxyProbe, opts: { run
 
 /**
  * A probe that speaks one short phrase in `voice` on a fresh Edge socket through the agent `agentFor(url)`
- * builds, timing from before the socket opens (a throttled address is slow at the handshake too).
+ * builds, timing from before the socket opens (a throttled address is slow at the handshake too). The
+ * phrase is new every time: a repeated one comes back from Microsoft's cache and every route looks quick.
  */
 export function edgeProbe(agentFor: (url: string) => unknown, voice: string | (() => string), timeoutMs: number): ProxyProbe {
   return async (url, signal) => {
@@ -81,7 +83,7 @@ export function edgeProbe(agentFor: (url: string) => unknown, voice: string | ((
     const t0 = performance.now()
     let first: number | null = null
     try {
-      await engine.synth({ text: 'Testing the voice.', voice: typeof voice === 'function' ? voice() : voice, rate: 0, pitch: 0, onFirstByte: () => (first ??= performance.now() - t0) }, signal)
+      await engine.synth({ text: freshPhrase(), voice: typeof voice === 'function' ? voice() : voice, rate: 0, pitch: 0, onFirstByte: () => (first ??= performance.now() - t0) }, signal)
     } finally {
       engine.close()
     }

@@ -22,6 +22,7 @@ import { SearxngService } from './services/searxng'
 import { KokoroService } from './services/kokoro'
 import { EdgeRouteService, ipCountries } from './services/edgeRoute'
 import { edgeProbe } from '@core/speech/proxyRank'
+import { SlowVoiceWatch, quickTwin } from '@core/speech/voiceSpeed'
 import { ClaudeService } from './services/claude'
 import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
@@ -354,11 +355,34 @@ ${fetchedList.text}`
     // Edge's per-sentence timings and failures steer the automatic route
     trace: (rec) => {
       trace(rec)
+      if (rec.ev === 'tts.sentence' && rec.engine === 'edge' && rec.kind === 'speech' && rec.outcome === 'ok' && typeof rec.ms === 'number') {
+        const voice = settings.get().voice.voice
+        const slow = slowVoice.sample(voice, rec.ms)
+        if (slow !== null) void reportSlowVoice(voice, slow)
+      }
       if (!autoRoute()) return
       if (rec.ev === 'tts.sentence' && rec.engine === 'edge' && typeof rec.firstByteMs === 'number') edgeRoute.sentence(rec.firstByteMs, settings.get().speech.edgeSlowMs)
       if (rec.ev === 'tts.engine_down' && rec.engine === 'edge') edgeRoute.trouble(String(rec.reason ?? 'down'))
     }
   })
+
+  // The chosen Edge voice keeps answering slowly: time the plain voice of the same name once the agent is
+  // quiet, and offer it when it is clearly quicker. No route change fixes a slow voice (see voiceSpeed.ts).
+  const slowVoice = new SlowVoiceWatch()
+  const reportSlowVoice = async (voice: string, ms: number): Promise<void> => {
+    try {
+      for (let i = 0; i < 60 && agent.busy; i++) await new Promise((r) => setTimeout(r, 1000))
+      if (settings.get().voice.voice !== voice || settings.get().voice.engine !== 'edge') return
+      const twin = quickTwin(voice, (await agent.voices()).map((v) => v.shortName))
+      const twinMs = twin ? await agent.voiceSpeed(twin, 3) : undefined
+      trace({ ev: 'tts.voice_slow', sid: agent.currentSessionId, voice, ms, twin, twinMs })
+      log('tts', `${voice} is slow: ${ms} ms a sentence${twin ? `; ${twin} measured ${twinMs} ms` : ''}`)
+      if (twin && twinMs !== undefined && twinMs * 1.6 < ms) emit({ type: 'voice-slow', notice: { voice, ms, twin, twinMs } })
+      else if (!twin) emit({ type: 'voice-slow', notice: { voice, ms } })
+    } catch (e) {
+      log('tts', `slow-voice check failed: ${(e as Error).message}`)
+    }
+  }
 
   const ttsStatus = (): ServiceStatus => {
     const v = settings.get().voice

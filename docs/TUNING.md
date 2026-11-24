@@ -126,11 +126,12 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `maxChars` | 220 | 220 | Run-on sentences are force-cut at the last comma/space past this so a long sentence cannot stall first audio. |
 | `fillerAfterMs` | 1500 | 1500 | If a tool is still running and nothing has played for this long, say one continuation filler ("Still looking."). Once per tool call. |
 | `fillerMinGapMs` | 4000 | — | Skip the lead-in filler ("Let me check.") if another filler was spoken more recently than this, so back-to-back tool calls do not chatter. |
-| `ttsPoolSize` | 3 | — | Edge TTS sockets kept open = sentences synthesized ahead of playback. Next launch. |
+| `ttsPoolSize` | 4 | — | Edge TTS sockets kept open = sentences synthesized ahead of playback. Next launch. |
+| `ttsRaceFirst` | 3 | — | Copies of a reply's first sentence sent to Edge at once; the quickest is spoken, the rest cancelled. Measured 2026-11-24 on plain Ava, 20 new sentences each: one request mean 1.37 s / worst 2.2 s, two copies 1.22 s / 2.3 s, three 0.93 s / 1.45 s. Costs that many requests for one sentence per reply: lower it if Edge starts refusing (429). 1 = one request. |
 | `ttsTimeoutMs` | 12000 | — | Per-sentence Edge TTS timeout. |
 | `ttsAttempts` | 2 | — | Tries per sentence before it is skipped (the text stays in the transcript). |
 | `ttsDegradeAfter` | 3 | — | Consecutive failures before the rest of the turn uses the system voice (one toast). |
-| `edgeSlowMs` | 1200 | — | Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best few proxies (at most every 2 min). |
+| `edgeSlowMs` | 2000 | — | Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best few proxies (at most every 2 min; the wait doubles, up to 30 min, each time a re-check changes nothing). A route cannot fix a slow voice: Multilingual voices take 3-5 s on every route, the plain voice of the same name about 1 s. |
 | `proxyRankParallel` | 4 | — | Proxies the automatic Edge route tests at once in its daily full test (one run each). Fifty at 4 take about 15 s; much higher and the tests slow each other down, which skews the ranking. |
 
 ## Playback (`playback`)
