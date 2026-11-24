@@ -1,6 +1,7 @@
 // Shared contracts between main, preload, renderer and the agent core.
 // Everything crossing an IPC boundary is defined here.
 
+import type { DiagramDoc } from './diagram'
 import type { CcManagerEvent, CcMode } from './claude'
 import type { TuningValues } from './tuning'
 
@@ -66,7 +67,7 @@ export interface ToolSource {
 export interface ToolActivity {
   name: string
   label: string
-  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'claude' | 'other'
+  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'claude' | 'diagram' | 'other'
   status: ToolStatus
   startedAt: number
   endedAt?: number
@@ -82,6 +83,8 @@ export interface ToolActivity {
   resultText?: string
   /** Before/after of a memory edit, shown as a diff under the pill. */
   diff?: { before: string; after: string }
+  /** The diagram this call drew or changed, and the version it produced: the chat shows it under the pill. */
+  diagram?: { id: string; version: number }
 }
 
 export interface TurnMetrics {
@@ -581,6 +584,8 @@ export type AgentEvent =
   | { type: 'skills-changed' }
   | { type: 'mcp-changed' }
   | { type: 'claude'; event: CcManagerEvent }
+  /** A diagram was drawn, changed or (doc null) deleted. */
+  | { type: 'diagram'; id: string; doc: DiagramDoc | null }
 
 export interface AudioChunk {
   turnId: string

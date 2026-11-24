@@ -99,6 +99,17 @@ select:focus {
   outline: none;
 }
 
+/* a rendered Mermaid diagram fills the box its wrapper sized for it */
+.va-diagram > svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  display: block;
+}
+.va-diagram .edgeLabel, .va-diagram .nodeLabel {
+  line-height: 1.35;
+}
+
 @keyframes vaWave {
   0%,
   100% {

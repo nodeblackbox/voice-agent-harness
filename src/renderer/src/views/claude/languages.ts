@@ -28,7 +28,40 @@ const CPP: Lang = { label: 'C / C++', load: async () => (await import('@codemirr
 const SHELL: Lang = { label: 'Shell', load: () => legacy(import('@codemirror/legacy-modes/mode/shell'), 'shell') }
 const PROPS: Lang = { label: 'Config', load: () => legacy(import('@codemirror/legacy-modes/mode/properties'), 'properties') }
 
+const MERMAID_WORDS = /^(?:flowchart|graph|subgraph|end|sequenceDiagram|participant|actor|as|loop|alt|else|opt|par|and|critical|break|rect|note|over|left of|right of|activate|deactivate|autonumber|stateDiagram-v2|stateDiagram|state|classDiagram|class|erDiagram|mindmap|timeline|gantt|title|section|journey|pie|showData|quadrantChart|gitGraph|commit|branch|checkout|merge|classDef|style|linkStyle|click|direction|dateFormat|axisFormat|TD|TB|LR|RL|BT)(?![\w-])/
+
+/** Mermaid has no grammar package; this colours its keywords, arrows, labels and comments. */
+const MERMAID: Lang = {
+  label: 'Mermaid',
+  load: async () => {
+    const { StreamLanguage } = await import('@codemirror/language')
+    return StreamLanguage.define<Record<string, never>>({
+      startState: () => ({}),
+      token(stream) {
+        if (stream.eatSpace()) return null
+        if (stream.match('%%')) {
+          stream.skipToEnd()
+          return 'comment'
+        }
+        if (stream.match(/^"(?:[^"\\]|\\.)*"?/)) return 'string'
+        if (stream.match(/^\|[^|\n]*\|/)) return 'string'
+        if (stream.match(/^[<ox]?(?:--+|==+|-\.+-?|\.\.+|~~+)(?:[>xo)]+|\|)?/) || stream.match(/^(?:\|\||\|o|o\||\}o|o\{|\}\||\|\{)/)) return 'operator'
+        // a node's label, brackets included: words inside it are text, not keywords
+        if (stream.match(/^[[({]+[^\])}\n]*[\])}]+/)) return 'string'
+        if (stream.match(MERMAID_WORDS)) return 'keyword'
+        if (stream.match(/^:::?\s*\w*/)) return 'atom'
+        if (stream.match(/^[[\](){}<>]/)) return 'bracket'
+        if (stream.match(/^\d+(?:\.\d+)?/)) return 'number'
+        if (stream.match(/^[\wÀ-￿][\wÀ-￿-]*/)) return 'variableName'
+        stream.next()
+        return null
+      }
+    })
+  }
+}
+
 const BY_EXT: Record<string, Lang> = {
+  mmd: MERMAID, mermaid: MERMAID,
   ts: TS, mts: TS, cts: TS,
   tsx: js('TypeScript React', { typescript: true, jsx: true }),
   js: JS, mjs: JS, cjs: JS,

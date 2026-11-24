@@ -15,6 +15,8 @@ import type { SidecarService } from '../services/sidecar'
 import type { SearxngService } from '../services/searxng'
 import type { McpService } from '../services/mcp'
 import type { ClaudeService } from '../services/claude'
+import type { DiagramService } from '../services/diagrams'
+import type { DiagramCheck } from '@shared/diagram'
 import { CC_MODES, type CcAnswer, type CcMode } from '@shared/claude'
 import { consoleHistory, log, logAt } from '../services/log'
 import { diagnosticsReport, lastTurn, listLogs, openLogsFolder, readTrace, sessionAnalysis, suggestTuning, tailLog } from '../services/diagnostics'
@@ -30,6 +32,7 @@ export interface IpcDeps {
   searxng: SearxngService
   mcp: McpService
   claude: ClaudeService
+  diagrams: DiagramService
   services: () => ServiceStatus[]
   edgeRoute: EdgeRouteService
   kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
@@ -186,6 +189,14 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeRead, (_e, id: string, rel: string) => d.claude.manager.readFile(id, rel))
   h(IPC.claudeWrite, (_e, id: string, rel: string, text: string, expectedMtime?: number) => d.claude.manager.writeFile(id, rel, text, expectedMtime))
   h(IPC.claudeExternal, () => d.claude.manager.external())
+
+  h(IPC.diagramsList, () => d.diagrams.library.list())
+  h(IPC.diagramsGet, (_e, id: string) => d.diagrams.library.get(id) ?? null)
+  // the owner's own edits: a new version, never a replacement
+  h(IPC.diagramsSave, (_e, id: string, x: { code?: string; title?: string; note?: string }) => d.diagrams.library.commit(id, { ...x, by: 'user' })?.doc ?? null)
+  h(IPC.diagramsCreate, (_e, x: { title: string; code: string }) => d.diagrams.library.create({ ...x, by: 'user', sessionId: d.agent.currentSessionId }))
+  h(IPC.diagramsDelete, (_e, id: string) => d.diagrams.library.remove(id))
+  ipcMain.on(IPC.diagramChecked, (_e, id: string, result: DiagramCheck | null) => d.diagrams.checked(id, result))
   h(IPC.claudeExternalEvents, (_e, sessionId: string, cwd?: string) => d.claude.manager.externalEvents(sessionId, cwd))
   h(IPC.claudeAttach, (_e, x: { sessionId: string; title: string; cwd: string }) => d.claude.manager.attach(x))
   h(IPC.claudeOpen, (_e, id: string, rel: string, how: 'default' | 'reveal' | 'code') => d.claude.open(id, rel, how))

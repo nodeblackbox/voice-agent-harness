@@ -5,6 +5,8 @@ import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { VoiceBars } from '../VoiceBars'
 import { ToolPill } from './ToolPill'
+import { DiagramCard, InlineDiagram } from '../diagram/DiagramCard'
+import { splitFences } from '@shared/diagram'
 import { fmtUsd } from '@shared/pricing'
 import { formatTokens, usageTitle } from '../../lib/format'
 import { splitBySentences, splitInterrupted } from '../../lib/spoken'
@@ -166,7 +168,11 @@ const AssistantBubble = memo(function AssistantBubble({
     setTimeout(() => setCopied(false), 1200)
   }
   const interruptedTitle = m.interrupted ? `heard: "${m.spokenText ?? ''}"\nnot heard: "${m.unspokenText ?? ''}"` : undefined
+  // Mermaid written straight into the reply is drawn under it, not left as a block of code
+  const parts = useMemo(() => splitFences(m.text, !!m.streaming), [m.text, m.streaming])
+  const shownMsg = parts.text === m.text ? m : { ...m, text: parts.text }
   return (
+    <>
     <div className="self-start flex flex-col gap-1.5 va-fade" style={{ maxWidth: '70%' }}>
       <div
         className="px-4 py-3 text-sm"
@@ -179,7 +185,7 @@ const AssistantBubble = memo(function AssistantBubble({
           wordBreak: 'break-word'
         }}
       >
-        <ReplyText m={m} />
+        <ReplyText m={shownMsg} />
         {m.streaming && m.text && (
           <span className="va-pulse" style={{ color: T.text3 }}>
             {' ▍'}
@@ -232,6 +238,8 @@ const AssistantBubble = memo(function AssistantBubble({
         )}
       </div>
     </div>
+    {parts.diagrams.map((code, i) => <InlineDiagram key={i} code={code} keep />)}
+    </>
   )
 })
 
@@ -350,6 +358,14 @@ export function Transcript() {
         )}
         {messages.map((m, i) => {
           if (i < from) return null
+          if (m.role === 'tool' && m.tool?.diagram) {
+            return (
+              <div key={m.id} className="flex flex-col gap-3">
+                <ToolPill tool={m.tool} />
+                <DiagramCard id={m.tool.diagram.id} version={m.tool.diagram.version} />
+              </div>
+            )
+          }
           if (m.role === 'tool' && m.tool) return <ToolPill key={m.id} tool={m.tool} />
           if (m.role === 'user') return <UserBubble key={m.id} m={m} gapMs={pauseBefore(messages, i)} />
           if (m.role === 'assistant') return <AssistantBubble key={m.id} m={m} speaking={speakingId === m.id} onSpeak={speak} onStop={stop} />

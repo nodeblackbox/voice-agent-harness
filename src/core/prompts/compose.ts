@@ -21,6 +21,8 @@ export interface PromptContext {
   voiceLine?: string
   /** The chat model and speech recognition in use this turn, so the agent can say what it runs on. */
   setupLine?: string
+  /** The diagrams drawn in this chat, one per line; empty when there are none. */
+  diagramsBlock?: string
 }
 
 const PERSONA = `You are {agent_name}, a voice assistant talking with {user_name} out loud through a speaker. Everything you write is spoken by a text-to-speech engine the moment a sentence ends, so write the way a sharp, friendly person talks, not the way documents look.
@@ -69,6 +71,15 @@ const CLAUDE_RULES = `Claude Code sessions (you manage them for {user_name}; eac
 - When a session is WAITING ON THE USER, tell {user_name} what it asks in one or two plain sentences with the options numbered, then wait. When they answer ("the second one", "yes go ahead", "no, use Postgres"), call claude_answer. A plan: give the headline and the number of steps, then ask whether it should go ahead; "yes" = approve, changes = approve false with their words as text. "Yes, and stop asking" = approve with mode auto. Never answer for them and never guess; if their reply is ambiguous, ask once.
 - If {user_name} says stop, hold on or cancel about a session, call claude_interrupt right away, then confirm in a few words.
 - Report results briefly and spoken-friendly: what was done and what to look at, not file listings or code. If a session says an action was blocked, say so plainly.`
+
+const DIAGRAM_RULES = `Diagrams
+- You can draw. diagram_create puts a rendered Mermaid diagram in the chat straight away, so never say you cannot show or render one, and never write Mermaid code in your reply: the code goes in the tool, not in what you say.
+- When {user_name} asks for a diagram, a chart of steps, a flow, a map of how something fits together, or says "draw", "sketch" or "visualise" (speech recognition may hear Mermaid as "mermaid", "memory diagram" or "mummy diagram"), draw it without asking permission first; make sensible assumptions and let them correct you.
+- To change one, call diagram_edit with small find-and-replace edits rather than drawing it again: {user_name} sees the change as a red and green diff and keeps every earlier version. They can edit the code by hand too, so the current code may differ from what you wrote; diagram_get reads it.
+- Afterwards say in one short sentence what it shows or what changed. Do not read the diagram out step by step, and do not mention ids or version numbers unless asked.`
+
+const DIAGRAMS_NOW = `Diagrams in this chat
+{diagrams}`
 
 const FILLER_ON = `Do not announce that you are about to use a tool; the app already says "let me check" for you. Just call it.`
 const FILLER_OFF = `Before a tool call that may take a moment, say in a few words what you are doing, then call it.`
@@ -119,10 +130,12 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
   if (ctx.toolNames.length) parts.push(fill(TOOL_RULES))
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
   if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))
+  if (ctx.toolNames.includes('diagram_create')) parts.push(fill(DIAGRAM_RULES))
   // memory is picked per turn (what's relevant to what was just said), so it lives with the clock, not the cache
   const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '') + (ctx.setupLine ? `\n${SETUP_LINE.replace('{setup}', ctx.setupLine)}` : '')]
   if (ctx.memoryBlock.trim()) live.push(fill(MEMORY))
   if (ctx.claudeBlock !== undefined) live.push(fill(CLAUDE_NOW))
+  if (ctx.diagramsBlock?.trim()) live.push(DIAGRAMS_NOW.replace('{diagrams}', ctx.diagramsBlock))
   return { stable: parts.join('\n\n'), live: live.join('\n\n') }
 }
 

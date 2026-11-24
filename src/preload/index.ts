@@ -112,6 +112,23 @@ const api: VoiceAgentApi = {
     pickFolder: () => invoke(IPC.claudePickFolder),
     account: (fresh) => invoke(IPC.claudeAccount, fresh)
   },
+  diagrams: {
+    list: () => invoke(IPC.diagramsList),
+    get: (id) => invoke(IPC.diagramsGet, id),
+    save: (id, x) => invoke(IPC.diagramsSave, id, x),
+    create: (x) => invoke(IPC.diagramsCreate, x),
+    remove: (id) => invoke(IPC.diagramsDelete, id),
+    onCheck: (handler) => {
+      const listener = (_e: Electron.IpcRendererEvent, id: string, code: string): void => {
+        void handler(code).then(
+          (r) => ipcRenderer.send(IPC.diagramChecked, id, r),
+          () => ipcRenderer.send(IPC.diagramChecked, id, null)
+        )
+      }
+      ipcRenderer.on(IPC.diagramCheck, listener)
+      return () => ipcRenderer.removeListener(IPC.diagramCheck, listener)
+    }
+  },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },
   log: { write: (level, scope, msg) => ipcRenderer.send(IPC.logWrite, level, scope, msg) },

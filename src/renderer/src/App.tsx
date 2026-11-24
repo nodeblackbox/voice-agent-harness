@@ -37,6 +37,9 @@ export default function App() {
     void init()
   }, [init])
 
+  // the agent's drawings are run through Mermaid's parser here before they are shown
+  useEffect(() => window.api.diagrams?.onCheck((code) => import('./lib/mermaid').then((m) => m.checkDiagram(code))), [])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.code === 'Space') {

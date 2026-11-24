@@ -80,6 +80,19 @@ this is the "why" and the bar each part has to meet.
   file): the owner is shown the choice between the new version and their own.
 - Saving stays inside the workspace fence, like reading does, and only changes files that already exist.
 
+## Diagrams
+
+- The agent can draw: asked for a diagram (a flow, a sequence, a mind map, a timeline...), it shows a
+  rendered Mermaid diagram in the chat straight away. It never answers with a block of code to paste
+  somewhere else, and the code is never read aloud.
+- Every diagram has three views: the picture, its code, and what changed since the version before, as a
+  red and green diff. The picture opens full-window with zoom and pan.
+- The agent changes a diagram with small find-and-replace edits, so the diff shows exactly what moved.
+  A drawing that does not compile is never shown: the parser's error goes back to the agent, which fixes it.
+- The owner can edit the code in place (Save or Ctrl+S). An edit is a new version, never a replacement;
+  every version can be stepped through and brought back. The agent sees the owner's edits.
+- Mermaid written straight into a reply or a Markdown file is drawn too.
+
 ## Tokens and cost
 
 - The owner wants to see what a conversation uses and whether it is efficient: tokens in and out and the

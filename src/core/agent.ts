@@ -40,6 +40,7 @@ import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type Age
 import { TTS_ENGINE_LABELS, expressiveGuide, isCloudTts, requestFields } from '@shared/tts'
 import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
+import { diagramContextBlock, diagramTools, type DiagramDeps } from './tools/diagram'
 import { searchTools, type SearchDeps } from './tools/search'
 import { mcpTools, type McpBridge } from './tools/mcp-adapter'
 import { StateMachine } from './turn/state-machine'
@@ -72,6 +73,8 @@ export interface AgentDeps {
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
   claude?: ClaudeSessionManager
+  /** The diagram library and Mermaid's parser; the diagram_* tools exist only when this is set. */
+  diagrams?: DiagramDeps
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
@@ -735,6 +738,7 @@ export class Agent {
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
       expressiveBlock: this.expressiveBlock(settings),
       voiceLine: this.voiceLine(settings),
+      diagramsBlock: this.deps.diagrams ? diagramContextBlock(this.deps.diagrams.library, this.sessionId) : undefined,
       setupLine: `chat model ${model.label} (${model.providerLabel})${fallbacks[0] && fallbacks[0].id !== model.id ? `, with ${fallbacks[0].label} as the backup if it fails` : ''}; speech recognition ${settings.stt.model}, running locally on this computer`,
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
@@ -843,6 +847,8 @@ export class Agent {
             m.tool.resultText = compactToolResult(output, settings.brain.toolResultKeepChars)
             const o = output as { before?: unknown; after?: unknown } | null
             if (o && typeof o.before === 'string' && typeof o.after === 'string') m.tool.diff = { before: o.before, after: o.after }
+            const d = output as { status?: unknown; id?: unknown; version?: unknown } | null
+            if ((name === 'diagram_create' || name === 'diagram_edit') && d && (d.status === 'shown' || d.status === 'updated') && typeof d.id === 'string' && typeof d.version === 'number') m.tool.diagram = { id: d.id, version: d.version }
           } else m.tool.detail = error
           this.tr('turn.tool_end', { id, name, ok, ms: m.tool.endedAt - m.tool.startedAt, detail: m.tool.detail, resultChars: ok ? resultChars(output) : undefined })
           this.upsert(m)
@@ -1291,6 +1297,7 @@ export class Agent {
     if (this.deps.search.configured()) Object.assign(tools, searchTools(this.deps.search))
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
     if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))
+    if (this.deps.diagrams) Object.assign(tools, diagramTools(this.deps.diagrams, () => this.sessionId))
     return tools
   }
 

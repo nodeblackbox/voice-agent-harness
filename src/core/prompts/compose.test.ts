@@ -135,4 +135,14 @@ describe('mergeSkills', () => {
     expect(live).not.toContain('Delivery cues:')
     expect(composeSystemParts(style('short'), ctx).stable).not.toContain('Delivery cues:')
   })
+
+  it('teaches drawing only when the diagram tools exist, and lists this chat\'s diagrams in the live part', () => {
+    const off = composeSystemParts(style('short'), ctx)
+    expect(off.stable).not.toContain('diagram_create')
+    const on = composeSystemParts(style('short'), { ...ctx, toolNames: ['diagram_create', 'diagram_edit'], diagramsBlock: '- "Making tea" (Flowchart, id d1, version 2)' })
+    expect(on.stable).toContain('never say you cannot show or render one')
+    expect(on.stable).toContain('red and green diff')
+    expect(on.live).toContain('Diagrams in this chat\n- "Making tea" (Flowchart, id d1, version 2)')
+    expect(on.stable).not.toContain('Making tea')
+  })
 })

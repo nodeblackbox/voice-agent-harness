@@ -1,3 +1,4 @@
+import { useDiagrams } from './diagrams'
 import { create } from 'zustand'
 import { isCloudTts } from '@shared/tts'
 import type {
@@ -266,6 +267,9 @@ export const useStore = create<Store>((set, get) => ({
         case 'skills-changed':
           void get().reloadSkills()
           void get().reloadContext()
+          break
+        case 'diagram':
+          useDiagrams.getState().apply(e.id, e.doc)
           break
         case 'claude': {
           const next = applyClaudeEvent({ sessions: get().claudeSessions, output: get().claudeOutput }, e.event)

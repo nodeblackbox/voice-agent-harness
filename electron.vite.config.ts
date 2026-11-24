@@ -48,7 +48,7 @@ export default defineConfig({
     optimizeDeps: {
       // pre-bundled together at dev start: the editor's grammars load on demand, and one found later would
       // be bundled apart from the core it has to share
-      include: ['codemirror', '@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/commands', '@lezer/highlight']
+      include: ['codemirror', '@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/commands', '@lezer/highlight', 'mermaid']
     },
     build: {
       rollupOptions: {

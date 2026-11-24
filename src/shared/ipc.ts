@@ -69,6 +69,11 @@ export const IPC = {
   claudeFolders: 'claude:folders',
   claudePickFolder: 'claude:pick-folder',
   claudeAccount: 'claude:account',
+  diagramsList: 'diagrams:list',
+  diagramsGet: 'diagrams:get',
+  diagramsSave: 'diagrams:save',
+  diagramsCreate: 'diagrams:create',
+  diagramsDelete: 'diagrams:delete',
   mcpStatus: 'mcp:status',
   mcpReload: 'mcp:reload',
   mcpTestTool: 'mcp:test-tool',
@@ -97,9 +102,12 @@ export const IPC = {
   playbackDrained: 'playback:drained',
   trainingTapStop: 'training:tap-stop',
   trainingFrame: 'training:frame',
+  diagramChecked: 'diagrams:checked',
 
   // main -> renderer
   event: 'agent:event',
   audioChunk: 'audio:chunk',
-  audioCancel: 'audio:cancel'
+  audioCancel: 'audio:cancel',
+  /** Ask the window to run Mermaid's parser on some code; it answers on diagramChecked. */
+  diagramCheck: 'diagrams:check'
 } as const

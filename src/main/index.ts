@@ -26,6 +26,7 @@ import { ClaudeService } from './services/claude'
 import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
+import { DiagramService } from './services/diagrams'
 import { setupTraining } from './training'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -325,6 +326,8 @@ ${fetchedList.text}`
     })
   }
 
+  const diagrams = new DiagramService(userData, send, (doc, id) => emit({ type: 'diagram', id, doc }))
+
   const agent = new Agent({
     store,
     settings: () => training?.settings(settings.get()) ?? settings.get(),
@@ -333,6 +336,7 @@ ${fetchedList.text}`
     skills: () => settings.skills(),
     mcp,
     claude: claude.manager,
+    diagrams: { library: diagrams.library, check: diagrams.check },
     search: { baseUrl: () => searxng.baseUrl(), ensure: () => searxng.ensure(), configured: () => searxng.configured() },
     ears: {
       agentSpeaking: (on) => sidecar.agentSpeaking(on),
@@ -435,6 +439,7 @@ ${fetchedList.text}`
     searxng,
     mcp,
     claude,
+    diagrams,
     services,
     edgeRoute,
     kokoro,

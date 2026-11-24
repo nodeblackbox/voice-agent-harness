@@ -6,6 +6,9 @@ const BY_TOOL: Record<string, string[]> = {
   search_history: ['Let me look through our earlier chats.'],
   remember: ['Got it, noting that down.'],
   update_memory: ['Updating that.', 'Let me fix that note.'],
+  diagram_create: ['Let me draw that.', 'One sec, sketching it out.'],
+  diagram_edit: ['Let me change that.', 'Updating the diagram.'],
+  diagram_get: ['Let me look at it.'],
   default: ['Hold on.', 'One sec.', 'Let me check.']
 }
 
@@ -44,6 +47,9 @@ export function toolLabel(toolName: string): string {
       update_memory: 'Updating memory',
       forget: 'Asking to forget',
       current_time: 'Checking the time',
+      diagram_create: 'Drawing a diagram',
+      diagram_edit: 'Changing the diagram',
+      diagram_get: 'Reading the diagram',
       claude_list: 'Listing sessions',
       claude_start: 'Starting a session',
       claude_send: 'Sending to Claude',

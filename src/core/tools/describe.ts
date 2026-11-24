@@ -7,6 +7,7 @@ export function toolKind(name: string): ToolActivity['kind'] {
   if (name === 'read_page') return 'read'
   if (name === 'remember' || name === 'recall' || name === 'forget' || name === 'search_history' || name === 'update_memory') return 'memory'
   if (name === 'current_time') return 'time'
+  if (name.startsWith('diagram_')) return 'diagram'
   return 'other'
 }
 
@@ -42,6 +43,12 @@ export function describeInput(name: string, input: unknown): string {
       return i.id !== undefined ? `#${String(i.id)}` : ''
     case 'current_time':
       return ''
+    case 'diagram_create':
+      return typeof i.title === 'string' ? i.title : ''
+    case 'diagram_edit':
+      return str(i.note ?? i.title ?? i.diagram ?? '', 80)
+    case 'diagram_get':
+      return typeof i.diagram === 'string' ? i.diagram : ''
     case 'claude_start':
       return typeof i.name === 'string' ? `${i.name}${typeof i.task === 'string' && i.task ? ` · ${str(i.task, 70)}` : ''}` : ''
     case 'claude_send':
@@ -117,6 +124,16 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     }
     case 'current_time':
       return { detail: (o as { now?: string })?.now }
+    case 'diagram_create':
+      return { detail: (o as { kind?: string })?.kind ? `${(o as { kind: string }).kind.toLowerCase()} drawn` : 'drawn' }
+    case 'diagram_edit': {
+      const r = o as { status?: string; version?: number; changed?: string } | undefined
+      return { detail: r?.status === 'no_change' ? 'nothing to change' : `version ${r?.version ?? '?'}${r?.changed ? ` · ${r.changed}` : ''}` }
+    }
+    case 'diagram_get': {
+      const r = o as { title?: string; version?: number } | undefined
+      return { detail: r?.title ? `${r.title} · version ${r.version ?? 1}` : '' }
+    }
     case 'claude_list':
       return { detail: `${((o as { sessions?: unknown[] })?.sessions ?? []).length} sessions` }
     case 'claude_start':

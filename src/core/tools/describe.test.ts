@@ -99,3 +99,14 @@ describe('mcpTools', () => {
     expect(calls).toEqual([['demo srv', 'roll-dice', { sides: 6 }, false]])
   })
 })
+
+describe('diagram tools in the transcript', () => {
+  it('reads as drawing and changing a diagram', () => {
+    expect(toolKind('diagram_create')).toBe('diagram')
+    expect(describeInput('diagram_create', { title: 'Making tea', code: 'flowchart TD' })).toBe('Making tea')
+    expect(describeInput('diagram_edit', { note: 'Filtered water', edits: [] })).toBe('Filtered water')
+    expect(describeOutput('diagram_create', { status: 'shown', kind: 'Flowchart' }).detail).toBe('flowchart drawn')
+    expect(describeOutput('diagram_edit', { status: 'updated', version: 3, changed: '+2 −1' }).detail).toBe('version 3 · +2 −1')
+    expect(describeOutput('diagram_edit', { error: 'The edit did not apply' }).detail).toBe('The edit did not apply')
+  })
+})

@@ -1,3 +1,4 @@
+import type { DiagramCheck, DiagramDoc, DiagramSummary } from '@shared/diagram'
 import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
@@ -126,6 +127,17 @@ export interface VoiceAgentApi {
     mcpSetConfig(servers: McpServerConfig[]): Promise<McpServerStatus[]>
     searxngEnsure(): Promise<ServiceStatus>
     sidecarRestart(): Promise<void>
+  }
+  /** Diagrams the agent (or the owner) drew. Live changes arrive as `{type:'diagram'}` events. */
+  diagrams: {
+    list(): Promise<DiagramSummary[]>
+    get(id: string): Promise<DiagramDoc | null>
+    /** The owner's edit: adds a version (and/or renames). Null when the diagram is gone. */
+    save(id: string, x: { code?: string; title?: string; note?: string }): Promise<DiagramDoc | null>
+    create(x: { title: string; code: string }): Promise<DiagramDoc>
+    remove(id: string): Promise<boolean>
+    /** The main process asks this window to run Mermaid's parser (the agent's drawings are checked before they are shown). */
+    onCheck(handler: (code: string) => Promise<DiagramCheck | null>): () => void
   }
   /** Claude Code sessions managed by the voice agent. Live changes arrive as `{type:'claude'}` events. */
   claude: {
