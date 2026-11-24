@@ -31,6 +31,19 @@ export function spareModels(keys: KeySource, exclude: Iterable<Provider>): Model
 }
 
 /**
+ * How the prompt names the chat model a turn actually runs on, with the reason when it isn't the one picked in
+ * Settings, e.g. `Claude Haiku 4.5 (Anthropic), the default because no chat model is picked in Settings`.
+ */
+export function chatModelLabel(pickedId: string, model: ModelInfo, resolved: ResolvedModel | null, backup?: ModelInfo): string {
+  let line = `${model.label} (${model.providerLabel})`
+  if (resolved?.substituted) line += `, standing in because ${resolved.substituted.from.label} has no API key`
+  else if (!resolved) line += ', but no API key is set for it, so replies will fail'
+  else if (!findModel(pickedId)) line += ', the default because no chat model is picked in Settings'
+  if (backup && backup.id !== model.id) line += `, with ${backup.label} as the backup if it fails`
+  return line
+}
+
+/**
  * The model a turn should run on: the configured one when its provider has a key, otherwise the first fast model
  * (then any model) of a provider that does. Null when no provider has a key. Never writes settings: the user's
  * choice stays, and comes back the moment its key is added.

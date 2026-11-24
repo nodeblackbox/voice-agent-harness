@@ -28,7 +28,7 @@ import { SpeakableFilter } from './prompts/speakable'
 import { ModelFactory } from './providers/factory'
 import type { KeySource } from './providers/keys'
 import { DEFAULT_FALLBACK_MODEL_ID, findModel } from './providers/models'
-import { resolveModel, spareModels } from './providers/resolve'
+import { chatModelLabel, resolveModel, spareModels } from './providers/resolve'
 import { SentenceChunker } from './speech/chunker'
 import { toolLabel } from './speech/fillers'
 import { describeInput, describeOutput, mcpServerOf, toolKind } from './tools/describe'
@@ -757,7 +757,11 @@ export class Agent {
       expressiveBlock: this.expressiveBlock(settings),
       voiceLine: this.voiceLine(settings),
       diagramsBlock: this.deps.diagrams ? diagramContextBlock(this.deps.diagrams.library, this.sessionId) : undefined,
-      setupLine: `chat model ${model.label} (${model.providerLabel})${fallbacks[0] && fallbacks[0].id !== model.id ? `, with ${fallbacks[0].label} as the backup if it fails` : ''}; speech recognition ${settings.stt.model}, running locally on this computer`,
+      models: {
+        chat: chatModelLabel(settings.modelId, model, resolved, fallbacks[0]),
+        stt: `${settings.stt.model}, running locally on this computer`,
+        tts: this.ttsSummary(settings)
+      },
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -1214,8 +1218,8 @@ export class Agent {
     return { ...s.speech, firstMinWords }
   }
 
-  /** One line for the prompt about the voice actually speaking this turn, so the model never guesses. */
-  private voiceLine(s: Settings): string {
+  /** The engine and voice actually speaking this turn, e.g. `Inworld, voice "Hana" (inworld-tts-2-flash)`. */
+  private ttsSummary(s: Settings): string {
     const engine = this.engineFor(s)
     const chosen = this.chosenEngine(s)
     const fields = requestFields(s.voice, engine.name)
@@ -1223,6 +1227,14 @@ export class Agent {
     if (fields.voice && engine.name !== 'system') line += `, voice "${fields.voice.length > 40 ? `${fields.voice.slice(0, 38)}…` : fields.voice}"`
     if (fields.model) line += ` (${fields.model})`
     if (engine !== chosen) line += chosen === this.kokoro ? `, covering while ${TTS_ENGINE_LABELS.kokoro} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    return line
+  }
+
+  /** One line for the prompt about the voice actually speaking this turn, so the model never guesses. */
+  private voiceLine(s: Settings): string {
+    const engine = this.engineFor(s)
+    const fields = requestFields(s.voice, engine.name)
+    let line = this.ttsSummary(s)
     const cues = s.voice.expressive && isCloudTts(engine.name) && engine.acceptsTags?.(fields)
     line += cues
       ? '; delivery cues are on'

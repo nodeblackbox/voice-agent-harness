@@ -21,8 +21,8 @@ export interface PromptContext {
   expressiveBlock?: string
   /** Which engine and voice speak this turn, e.g. `Inworld, voice "Hana" (inworld-tts-2-flash); delivery cues are on`. */
   voiceLine?: string
-  /** The chat model and speech recognition in use this turn, so the agent can say what it runs on. */
-  setupLine?: string
+  /** The models actually in use this turn, read from settings at the start of the turn, so the agent can say what it runs on. */
+  models?: ActiveModels
   /** The diagrams drawn in this chat, one per line; empty when there are none. */
   diagramsBlock?: string
 }
@@ -109,7 +109,19 @@ const APP_LINE = `
 
 const VOICE_LINE = `- Your voice right now: {voice}. If asked which voice or engine you are, answer from this line.`
 
-const SETUP_LINE = `- What you run on right now: {setup}. If asked which model you are or what transcribes the user, answer from this line; both can be changed in Settings.`
+export interface ActiveModels {
+  /** e.g. `Claude Haiku 5.5 (Anthropic)`, plus why when it isn't the one picked in Settings. */
+  chat: string
+  /** e.g. `nemo-parakeet-tdt-0.6b-v2, running locally on this computer`. */
+  stt: string
+  /** e.g. `Inworld, voice "Hana" (inworld-tts-2-flash)`. */
+  tts: string
+}
+
+/** The plain models line in the live context, e.g. `Chat model right now: X. Speech to text: Y. Text to speech: Z.` */
+export function activeModelsLine(m: ActiveModels): string {
+  return `- Chat model right now: ${m.chat}. Speech to text: ${m.stt}. Text to speech: ${m.tts}. If asked which model you are, what transcribes the user or what speaks for you, answer from this line; all three can be changed in Settings.`
+}
 
 const ABOUT_USER = `- About {user_name}: {about_user}`
 
@@ -159,7 +171,7 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
   if (ctx.toolNames.includes('diagram_create')) parts.push(fill(DIAGRAM_RULES))
   if (ctx.toolNames.includes('pc_find')) parts.push(fill(pcRules(ctx.toolNames)))
   // memory is picked per turn (what's relevant to what was just said), so it lives with the clock, not the cache
-  const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '') + (ctx.setupLine ? `\n${SETUP_LINE.replace('{setup}', ctx.setupLine)}` : '')]
+  const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '') + (ctx.models ? `\n${activeModelsLine(ctx.models)}` : '')]
   if (ctx.memoryBlock.trim()) live.push(fill(MEMORY))
   if (ctx.claudeBlock !== undefined) live.push(fill(CLAUDE_NOW))
   if (ctx.diagramsBlock?.trim()) live.push(DIAGRAMS_NOW.replace('{diagrams}', ctx.diagramsBlock))

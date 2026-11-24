@@ -122,10 +122,14 @@ describe('mergeSkills', () => {
   })
 
   it('tells the model what it runs on, in the live part', () => {
-    const { live, stable } = composeSystemParts(style('short'), { ...ctx, setupLine: 'chat model Claude Haiku 5.5 (Anthropic); speech recognition nemo-parakeet-tdt-0.6b-v2, running locally' })
-    expect(live).toContain('What you run on right now: chat model Claude Haiku 5.5 (Anthropic); speech recognition nemo-parakeet-tdt-0.6b-v2, running locally.')
-    expect(stable).not.toContain('What you run on')
-    expect(composeSystemParts(style('short'), ctx).live).not.toContain('What you run on')
+    const models = { chat: 'Claude Haiku 5.5 (Anthropic)', stt: 'nemo-parakeet-tdt-0.6b-v2, running locally', tts: 'Inworld, voice "Hana" (inworld-tts-2-flash)' }
+    const { live, stable } = composeSystemParts(style('short'), { ...ctx, voiceLine: 'Inworld, voice "Hana"', models })
+    expect(live).toContain('- Chat model right now: Claude Haiku 5.5 (Anthropic). Speech to text: nemo-parakeet-tdt-0.6b-v2, running locally. Text to speech: Inworld, voice "Hana" (inworld-tts-2-flash).')
+    // same always-current block as the voice line, right after it
+    expect(live.indexOf('Chat model right now')).toBeGreaterThan(live.indexOf('Your voice right now'))
+    expect(live.slice(0, live.indexOf('Chat model right now'))).not.toContain('\n\n')
+    expect(stable).not.toContain('Chat model right now')
+    expect(composeSystemParts(style('short'), ctx).live).not.toContain('Chat model right now')
   })
 
   it('puts the delivery-cue guide in the cached part, before the tool rules, only when given', () => {
