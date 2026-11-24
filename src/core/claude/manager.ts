@@ -14,11 +14,11 @@ import { billingOf } from './account'
 import { digest } from './digest'
 import { historyEvents, messageEvents } from './events'
 import { checkToolUse, insideRoot, scratchRoots } from './fence'
-import { listWorkspace, readWorkspaceFile } from './files'
+import { listWorkspace, readWorkspaceFile, writeWorkspaceFile } from './files'
 import { Pushable } from './pushable'
 import { FENCE_TAG } from './types'
 import type {
-  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
+  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
 
 /** Open Claude Code sessions allowed at once when Settings doesn't say (each is a running process). */
@@ -95,6 +95,11 @@ export class ClaudeSessionManager {
   readFile(id: string, rel: string): CcFileContent | { error: string } {
     const r = this.rts.get(id)
     return r ? readWorkspaceFile(r.s.workspace, rel) : { error: 'No such session.' }
+  }
+  /** A save from the in-app editor; refuses when the file changed on disk since `expectedMtime`. */
+  writeFile(id: string, rel: string, text: string, expectedMtime?: number): CcFileSaved {
+    const r = this.rts.get(id)
+    return r ? writeWorkspaceFile(r.s.workspace, rel, text, expectedMtime) : { ok: false, error: 'No such session.' }
   }
 
   /** Voice-friendly lookup: id, exact name, slug, or a unique case-insensitive partial name. */

@@ -41,7 +41,14 @@ export default defineConfig({
       alias: {
         '@renderer': resolve('src/renderer/src'),
         '@shared': resolve('src/shared')
-      }
+      },
+      // the editor breaks if two copies of its core load (its extensions are matched with instanceof)
+      dedupe: ['@codemirror/state', '@codemirror/view', '@codemirror/language', '@lezer/common', '@lezer/highlight']
+    },
+    optimizeDeps: {
+      // pre-bundled together at dev start: the editor's grammars load on demand, and one found later would
+      // be bundled apart from the core it has to share
+      include: ['codemirror', '@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/commands', '@lezer/highlight']
     },
     build: {
       rollupOptions: {

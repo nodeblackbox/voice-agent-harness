@@ -184,6 +184,7 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeAccount, (_e, fresh?: boolean) => d.claude.account(!!fresh))
   h(IPC.claudeFiles, (_e, id: string) => d.claude.manager.files(id))
   h(IPC.claudeRead, (_e, id: string, rel: string) => d.claude.manager.readFile(id, rel))
+  h(IPC.claudeWrite, (_e, id: string, rel: string, text: string, expectedMtime?: number) => d.claude.manager.writeFile(id, rel, text, expectedMtime))
   h(IPC.claudeExternal, () => d.claude.manager.external())
   h(IPC.claudeExternalEvents, (_e, sessionId: string, cwd?: string) => d.claude.manager.externalEvents(sessionId, cwd))
   h(IPC.claudeAttach, (_e, x: { sessionId: string; title: string; cwd: string }) => d.claude.manager.attach(x))

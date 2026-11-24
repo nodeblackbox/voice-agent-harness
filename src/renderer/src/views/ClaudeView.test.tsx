@@ -228,7 +228,10 @@ describe('ClaudeView', () => {
     expect(host.textContent).toContain('A')
     await click(button('index.html'))
     expect(claude.read).toHaveBeenCalledWith('s1', 'index.html')
+    // the editor is loaded on demand: give it a moment to arrive
+    for (let i = 0; i < 100 && !host.textContent?.includes('<h1>Slop</h1>'); i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
     expect(host.textContent).toContain('<h1>Slop</h1>')
+    expect(host.textContent).toContain('HTML')
     await click(button('VS Code'))
     expect(claude.open).toHaveBeenCalledWith('s1', 'index.html', 'code')
   })

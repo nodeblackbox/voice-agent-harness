@@ -70,6 +70,16 @@ this is the "why" and the bar each part has to meet.
 - Each run's trace (`%APPDATA%/Voice Agent/logs/sessions/<id>.jsonl`) is the record; `docs/DEBUGGING.md`
   lists the events.
 
+## Editing files in the app
+
+- Files in a session's workspace can be edited where they are viewed: a real code editor (monospace,
+  syntax colours by file type: TypeScript/TSX, JavaScript, Python, JSON, Markdown, HTML, CSS, YAML, TOML,
+  shell and more), with a Save button and Ctrl+S.
+- Unsaved edits are marked (in the header and in the file tree) and survive switching to another file.
+- A save never silently overwrites a change made on disk meanwhile (Claude may be editing the same
+  file): the owner is shown the choice between the new version and their own.
+- Saving stays inside the workspace fence, like reading does, and only changes files that already exist.
+
 ## Tokens and cost
 
 - The owner wants to see what a conversation uses and whether it is efficient: tokens in and out and the

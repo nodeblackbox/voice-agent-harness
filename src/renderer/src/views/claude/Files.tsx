@@ -1,16 +1,16 @@
 /** A session's workspace: a live file tree with what Claude changed marked, and a viewer for the selected file. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ChevronRight, Code, Eye, File, FileAudio, FileCode, FileImage, FileJson, FileText, FileVideo, Folder, FolderOpen, FolderSearch, Globe, LayoutGrid, RefreshCw, Search
+  ChevronRight, File, FileAudio, FileCode, FileImage, FileJson, FileText, FileVideo, Folder, FolderOpen, FolderSearch, Globe, LayoutGrid, RefreshCw, Search
 } from 'lucide-react'
-import type { CcFile, CcFileContent } from '@shared/claude'
-import { T, alpha, TERM } from '../../theme'
+import type { CcFile } from '@shared/claude'
+import { T, alpha } from '../../theme'
 import { useStore } from '../../state/store'
-import { Btn } from '../../components/primitives'
-import { Markdown } from './Markdown'
 import { ago, buildTree, ext, fmtBytes, isAudio, isHtml, isImage, isMedia, isPdf, isVideo, type Touched, type TreeNode } from './feed'
-import { AUDIO_TINT, Gallery, MediaView, VIDEO_TINT } from './Media'
+import { AUDIO_TINT, Gallery, VIDEO_TINT } from './Media'
 import { useFileMenu } from './FileMenu'
+import { Viewer } from './Viewer'
+import { unsavedIn, useDrafts } from '../../state/drafts'
 
 const CODE_EXT = new Set(['js', 'ts', 'tsx', 'jsx', 'mjs', 'cjs', 'css', 'scss', 'html', 'htm', 'py', 'rs', 'go', 'java', 'sh', 'ps1', 'yml', 'yaml', 'toml', 'xml', 'sql', 'c', 'cpp', 'h'])
 const iconFor = (p: string) =>
@@ -60,7 +60,7 @@ export function RestartNotice({ what }: { what: string }) {
   )
 }
 
-function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: {
+function TreeRow({ node, depth, selected, open, toggle, select, touched, unsaved, now }: {
   node: TreeNode
   depth: number
   selected: string | null
@@ -68,6 +68,8 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
   toggle: (p: string) => void
   select: (p: string) => void
   touched: Map<string, Touched>
+  /** Paths with edits not saved yet. */
+  unsaved: Set<string>
   now: number
 }) {
   const isOpen = open.has(node.path)
@@ -98,6 +100,7 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
         <ChevronRight size={12} style={{ color: T.text3, flexShrink: 0, opacity: node.dir ? 1 : 0, transform: isOpen ? 'rotate(90deg)' : undefined, transition: 'transform .15s ease' }} />
         <Icon size={14} style={{ color: node.dir ? T.steel : colorFor(node.path), flexShrink: 0 }} />
         <span className="truncate flex-1" style={{ color: node.skipped ? T.text3 : active ? T.text : T.text2, fontStyle: node.skipped ? 'italic' : undefined }}>{node.name}</span>
+        {unsaved.has(node.path) && <span style={{ width: 7, height: 7, borderRadius: 7, background: T.amber, flexShrink: 0 }} title="Unsaved changes" aria-label="Unsaved changes" />}
         {fresh && !t && <span style={{ width: 6, height: 6, borderRadius: 6, background: T.claude }} className="va-pulse" title="changed in the last 2 minutes" />}
         {node.dir ? (
           <span className="text-xs" style={{ color: T.text3, fontSize: 10.5 }}>{node.skipped ? '' : node.children.length}</span>
@@ -117,77 +120,10 @@ function TreeRow({ node, depth, selected, open, toggle, select, touched, now }: 
       </button>
       {node.dir && isOpen && (
         <div style={{ marginLeft: 12, paddingLeft: 6, borderLeft: `1px solid ${T.treeGuide}` }}>
-          {node.children.map((c) => <TreeRow key={c.path} node={c} depth={depth + 1} selected={selected} open={open} toggle={toggle} select={select} touched={touched} now={now} />)}
+          {node.children.map((c) => <TreeRow key={c.path} node={c} depth={depth + 1} selected={selected} open={open} toggle={toggle} select={select} touched={touched} unsaved={unsaved} now={now} />)}
           {node.skipped && <div className="text-xs py-1 pl-6" style={{ color: T.text3 }}>not listed (dependencies)</div>}
           {!node.skipped && node.children.length === 0 && <div className="text-xs py-1 pl-6" style={{ color: T.text3 }}>empty</div>}
         </div>
-      )}
-    </div>
-  )
-}
-
-function Viewer({ id, rel, mtime, size, onPreview }: { id: string; rel: string; mtime: number; size: number; onPreview: (rel: string) => void }) {
-  const pushToast = useStore((s) => s.pushToast)
-  const [content, setContent] = useState<CcFileContent | { error: string } | null>(null)
-  const [raw, setRaw] = useState(false)
-  useEffect(() => {
-    let live = true
-    setContent(null)
-    if (isMedia(rel) || isPdf(rel)) return
-    void window.api.claude.read(id, rel).then((c) => { if (live) setContent(c) })
-    return () => { live = false }
-  }, [id, rel, mtime])
-  const open = async (how: 'default' | 'reveal' | 'code') => {
-    const r = await window.api.claude.open(id, rel, how)
-    if (!r.ok) pushToast('error', r.error)
-  }
-  const md = ext(rel) === 'md'
-  const menu = useFileMenu()
-  return (
-    <div className="flex-1 min-w-0 flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: `1px solid ${T.border}` }}>
-        <span className="text-xs truncate flex-1" style={{ fontFamily: T.mono, color: T.text2 }} onContextMenu={(e) => menu(e, rel)} title="Right-click to copy the path">
-          {rel.split('/').map((p, i, a) => (
-            <span key={i}>
-              {i > 0 && <span style={{ color: T.text3 }}> / </span>}
-              <span style={{ color: i === a.length - 1 ? T.text : T.text2 }}>{p}</span>
-            </span>
-          ))}
-        </span>
-        {content && 'size' in content && <span className="text-xs" style={{ color: T.text3 }}>{fmtBytes(content.size)}</span>}
-        {(isMedia(rel) || isPdf(rel)) && <span className="text-xs" style={{ color: T.text3 }}>{fmtBytes(size)}</span>}
-        {md && <Btn small icon={raw ? Eye : Code} onClick={() => setRaw(!raw)}>{raw ? 'Rendered' : 'Source'}</Btn>}
-        {isHtml(rel) && <Btn small icon={Eye} onClick={() => onPreview(rel)}>Preview</Btn>}
-        <Btn small icon={Globe} onClick={() => void open('default')}>Open</Btn>
-        <Btn small icon={Code} onClick={() => void open('code')}>VS Code</Btn>
-        <Btn small icon={FolderSearch} onClick={() => void open('reveal')}>Show</Btn>
-      </div>
-      {isMedia(rel) || isPdf(rel) ? (
-        <div className="flex-1 min-h-0 flex flex-col p-4">
-          <MediaView id={id} rel={rel} mtime={mtime} size={size} />
-        </div>
-      ) : (
-      <div className="va-scroll flex-1 overflow-auto p-4">
-        {!content ? (
-          <div className="text-xs" style={{ color: T.text3 }}>Loading…</div>
-        ) : 'error' in content ? (
-          <div className="text-xs" style={{ color: T.red }}>{content.error}</div>
-        ) : content.kind === 'binary' ? (
-          <div className="text-sm" style={{ color: T.text3 }}>Binary file ({fmtBytes(content.size)}). Use Open to view it.</div>
-        ) : md && !raw ? (
-          <div style={{ maxWidth: 760 }}><Markdown text={content.text} /></div>
-        ) : (
-          <div className="va-term rounded-xl" style={{ border: `1px solid ${T.border}`, fontSize: 12, lineHeight: 1.6, padding: '8px 0', minWidth: 'fit-content' }}>
-            {content.text.split('\n').map((l, i) => (
-              <div key={i} className="va-code-line flex">
-                <span style={{ color: TERM.gutter, width: 48, textAlign: 'right', paddingRight: 14, userSelect: 'none', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ color: TERM.text, whiteSpace: 'pre', paddingRight: 16 }}>{l || ' '}</span>
-              </div>
-            ))}
-            {content.truncated && <div className="px-4 pt-2 text-xs" style={{ color: T.text3 }}>File cut short here (it is large). Use Open to see all of it.</div>}
-          </div>
-        )}
-      </div>
       )}
     </div>
   )
@@ -211,6 +147,8 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
   const [gallery, setGallery] = useState(false)
   const now = Date.now()
   const touchedMap = useMemo(() => new Map(touched.map((t) => [t.path, t])), [touched])
+  const drafts = useDrafts((s) => s.drafts)
+  const unsaved = useMemo(() => unsavedIn(drafts, id), [drafts, id])
   const shown = useMemo(() => {
     const list = files ?? []
     if (!filter.trim()) return list
@@ -296,6 +234,12 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
               <FolderSearch size={13} />
             </button>
           </div>
+          {unsaved.size > 0 && (
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: T.amber }}>
+              <span style={{ width: 7, height: 7, borderRadius: 7, background: T.amber }} />
+              {unsaved.size} file{unsaved.size === 1 ? '' : 's'} with unsaved changes
+            </div>
+          )}
           {touched.length > 0 && (
             <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3 }}>
               <span className="rounded px-1" style={{ color: T.green, background: alpha(T.green, 10), fontFamily: T.mono, fontWeight: 600, fontSize: 10.5 }}>A</span>
@@ -318,13 +262,13 @@ export function Files({ id, workspace, files, refresh, unavailable, touched, sel
             </div>
           )}
           {filter.trim() && files && shown.length === 0 && <div className="text-xs p-3" style={{ color: T.text3 }}>No file matches “{filter}”.</div>}
-          {tree.map((n) => <TreeRow key={n.path} node={n} depth={0} selected={selected} open={openSet} toggle={toggle} select={(p) => { setGallery(false); onSelect(p) }} touched={touchedMap} now={now} />)}
+          {tree.map((n) => <TreeRow key={n.path} node={n} depth={0} selected={selected} open={openSet} toggle={toggle} select={(p) => { setGallery(false); onSelect(p) }} touched={touchedMap} unsaved={unsaved} now={now} />)}
         </div>
       </div>
       {gallery ? (
         <Gallery id={id} files={all} selected={selected} onSelect={(p) => { setGallery(false); onSelect(p) }} />
       ) : sel ? (
-        <Viewer id={id} rel={sel.path} mtime={sel.mtime} size={sel.size} onPreview={onPreview} />
+        <Viewer id={id} rel={sel.path} mtime={sel.mtime} size={sel.size} onPreview={onPreview} onSaved={refresh} />
       ) : (
         <div className="flex-1 flex flex-col gap-3 items-center justify-center" style={{ color: T.text3 }}>
           <FolderOpen size={36} style={{ opacity: 0.4 }} />

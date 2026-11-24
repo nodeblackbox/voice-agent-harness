@@ -61,6 +61,7 @@ export const IPC = {
   claudeRemove: 'claude:remove',
   claudeFiles: 'claude:files',
   claudeRead: 'claude:read',
+  claudeWrite: 'claude:write',
   claudeOpen: 'claude:open',
   claudeExternal: 'claude:external',
   claudeExternalEvents: 'claude:external-events',

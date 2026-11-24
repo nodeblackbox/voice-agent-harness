@@ -1,5 +1,5 @@
 import type { ConsoleEntry } from '@shared/console'
-import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcMode, CcResult, CcSession } from '@shared/claude'
+import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
   AgentEvent,
   AudioChunk,
@@ -147,6 +147,8 @@ export interface VoiceAgentApi {
     remove(id: string, deleteFolder?: boolean): Promise<CcResult<{ deletedFolder?: string }>>
     files(id: string): Promise<CcFile[]>
     read(id: string, rel: string): Promise<CcFileContent | { error: string }>
+    /** Save an edit; `expectedMtime` (from `read`) makes it refuse when the file changed on disk meanwhile. */
+    write(id: string, rel: string, text: string, expectedMtime?: number): Promise<CcFileSaved>
     /** Open the workspace (rel '') or a file in it: default app, Explorer, or VS Code. */
     open(id: string, rel: string, how: 'default' | 'reveal' | 'code'): Promise<CcResult>
     /** Your other saved Claude Code sessions on this machine, newest first. */

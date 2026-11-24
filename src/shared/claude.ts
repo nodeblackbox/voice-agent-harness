@@ -67,8 +67,12 @@ export interface CcFile {
   skipped?: boolean
 }
 
+/** A save from the in-app editor. `conflict`: the file changed on disk since it was read (nothing was written). */
+export type CcFileSaved = { ok: true; mtime: number; size: number } | { ok: false; error: string; conflict?: boolean }
+
 export type CcFileContent =
-  | { kind: 'text'; text: string; size: number; truncated: boolean }
+  /** `mtime`: the file's change time when read, sent back with a save so an edit made meanwhile is never overwritten unseen. */
+  | { kind: 'text'; text: string; size: number; truncated: boolean; mtime: number }
   | { kind: 'binary'; size: number }
 
 /** Serializable snapshot, safe to send over IPC. */
