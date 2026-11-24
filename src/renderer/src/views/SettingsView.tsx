@@ -19,6 +19,7 @@ import { keyedProviders, useStore } from '../state/store'
 import { Btn, Card, Dot, Page, Row, Select, TextInput, Toggle } from '../components/primitives'
 import { listDevices, type DeviceLists } from '../audio/devices'
 import { McpSection } from './settings/McpSection'
+import { PcAccess } from './settings/PcAccess'
 import { TuningSection } from './settings/TuningSection'
 import { VoiceOutput } from './settings/VoiceOutput'
 
@@ -384,6 +385,7 @@ export function SettingsView() {
         <ContextSection />
         <Providers />
         <WebSearch />
+        <PcAccess />
         <McpSection />
       </div>
     </Page>

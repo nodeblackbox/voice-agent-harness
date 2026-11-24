@@ -8,6 +8,7 @@ export function toolKind(name: string): ToolActivity['kind'] {
   if (name === 'remember' || name === 'recall' || name === 'forget' || name === 'search_history' || name === 'update_memory') return 'memory'
   if (name === 'current_time') return 'time'
   if (name.startsWith('diagram_')) return 'diagram'
+  if (name.startsWith('pc_')) return 'files'
   return 'other'
 }
 
@@ -49,6 +50,16 @@ export function describeInput(name: string, input: unknown): string {
       return str(i.note ?? i.title ?? i.diagram ?? '', 80)
     case 'diagram_get':
       return typeof i.diagram === 'string' ? i.diagram : ''
+    case 'pc_find':
+      return `${str(i.query, 60)}${typeof i.path === 'string' && i.path ? ` in ${str(i.path, 50)}` : ''}`
+    case 'pc_grep':
+      return `“${str(i.text, 50)}”${typeof i.path === 'string' && i.path ? ` in ${str(i.path, 50)}` : ''}`
+    case 'pc_list':
+      return typeof i.path === 'string' && i.path ? str(i.path, 90) : 'approved folders'
+    case 'pc_read':
+      return str(i.path, 90)
+    case 'pc_explore':
+      return str(i.request, 100)
     case 'claude_start':
       return typeof i.name === 'string' ? `${i.name}${typeof i.task === 'string' && i.task ? ` · ${str(i.task, 70)}` : ''}` : ''
     case 'claude_send':
@@ -133,6 +144,25 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'diagram_get': {
       const r = o as { title?: string; version?: number } | undefined
       return { detail: r?.title ? `${r.title} · version ${r.version ?? 1}` : '' }
+    }
+    case 'pc_find':
+    case 'pc_grep': {
+      const r = o as { matches?: unknown[]; more_matches?: number; incomplete?: string } | undefined
+      const n = r?.matches?.length ?? 0
+      return { detail: `${n ? `${n}${r?.more_matches ? '+' : ''} match${n === 1 ? '' : 'es'}` : 'nothing found'}${r?.incomplete ? ' (stopped early)' : ''}` }
+    }
+    case 'pc_list': {
+      const r = o as { total_folders?: number; total_files?: number; approved_folders?: unknown[] } | undefined
+      return { detail: r?.approved_folders ? `${r.approved_folders.length} approved folders` : `${r?.total_folders ?? 0} folders, ${r?.total_files ?? 0} files` }
+    }
+    case 'pc_read': {
+      const r = o as { lines?: string; kb?: number } | undefined
+      return { detail: r?.lines ? `lines ${r.lines}` : '' }
+    }
+    case 'pc_explore': {
+      const r = o as { answer?: string; steps_taken?: unknown[]; unfinished?: string } | undefined
+      const n = r?.steps_taken?.length ?? 0
+      return { detail: `${n} step${n === 1 ? '' : 's'}${r?.unfinished ? ', unfinished' : ''}` }
     }
     case 'claude_list':
       return { detail: `${((o as { sessions?: unknown[] })?.sessions ?? []).length} sessions` }

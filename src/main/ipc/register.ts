@@ -1,4 +1,5 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { checkRoot } from '@core/explore/roots'
 import { generateText } from 'ai'
 import { IPC } from '@shared/ipc'
 import type { CloudTtsProvider, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
@@ -186,6 +187,13 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeFolders, () => d.claude.manager.folders())
   h(IPC.claudePickFolder, () => d.claude.pickFolder())
   h(IPC.claudeAccount, (_e, fresh?: boolean) => d.claude.account(!!fresh))
+  h(IPC.explorePickFolder, async () => {
+    const win = d.win()
+    const opts = { title: 'Choose a folder the assistant may read', properties: ['openDirectory' as const] }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+  h(IPC.exploreCheck, (_e, p: string) => checkRoot(String(p ?? '')))
   h(IPC.claudeFiles, (_e, id: string) => d.claude.manager.files(id))
   h(IPC.claudeRead, (_e, id: string, rel: string) => d.claude.manager.readFile(id, rel))
   h(IPC.claudeWrite, (_e, id: string, rel: string, text: string, expectedMtime?: number) => d.claude.manager.writeFile(id, rel, text, expectedMtime))

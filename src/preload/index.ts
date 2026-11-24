@@ -113,6 +113,10 @@ const api: VoiceAgentApi = {
     pickFolder: () => invoke(IPC.claudePickFolder),
     account: (fresh) => invoke(IPC.claudeAccount, fresh)
   },
+  explore: {
+    pickFolder: () => invoke(IPC.explorePickFolder),
+    check: (path) => invoke(IPC.exploreCheck, path)
+  },
   diagrams: {
     list: () => invoke(IPC.diagramsList),
     get: (id) => invoke(IPC.diagramsGet, id),

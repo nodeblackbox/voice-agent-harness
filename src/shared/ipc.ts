@@ -70,6 +70,8 @@ export const IPC = {
   claudeFolders: 'claude:folders',
   claudePickFolder: 'claude:pick-folder',
   claudeAccount: 'claude:account',
+  explorePickFolder: 'explore:pick-folder',
+  exploreCheck: 'explore:check',
   diagramsList: 'diagrams:list',
   diagramsGet: 'diagrams:get',
   diagramsSave: 'diagrams:save',

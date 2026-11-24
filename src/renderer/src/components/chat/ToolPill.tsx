@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react'
-import { BookOpen, Bot, Brain, ChevronDown, ChevronRight, Clock, ExternalLink, Globe, Plug, Workflow, Wrench, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bot, Brain, ChevronDown, ChevronRight, Clock, ExternalLink, FolderSearch, Globe, Plug, Workflow, Wrench, type LucideIcon } from 'lucide-react'
 import type { ToolActivity, ToolSource } from '@shared/types'
 import { T, alpha } from '../../theme'
 import { faviconUrl, formatElapsed, hostOf, truncate } from '../../lib/format'
@@ -12,6 +12,7 @@ const ICONS: Record<ToolActivity['kind'], LucideIcon> = {
   time: Clock,
   claude: Bot,
   diagram: Workflow,
+  files: FolderSearch,
   other: Wrench
 }
 

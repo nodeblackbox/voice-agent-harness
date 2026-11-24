@@ -177,6 +177,13 @@ export interface VoiceAgentApi {
     /** Who sessions run as (asked of the CLI, no usage); `fresh` skips the cached answer. */
     account(fresh?: boolean): Promise<CcAccount>
   }
+  /** Settings > PC access: the folders the agent's read-only pc_* tools may look in. */
+  explore: {
+    /** Native folder picker; null when cancelled. */
+    pickFolder(): Promise<string | null>
+    /** A typed path, tidied and checked: it must be an existing folder given in full. */
+    check(path: string): Promise<{ ok: true; path: string } | { ok: false; error: string }>
+  }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }
   /** Renderer log lines land in the main process log files (through the same flood guard). */

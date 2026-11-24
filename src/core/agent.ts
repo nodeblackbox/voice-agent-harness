@@ -5,7 +5,9 @@ import type {
   ChatMessage,
   CloudTtsProvider,
   ContextSnapshot,
+  ModelInfo,
   PendingMemorySave,
+  Project,
   PromptStyle,
   Session,
   SessionSummary,
@@ -43,6 +45,9 @@ import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
 import { diagramContextBlock, diagramTools, type DiagramDeps } from './tools/diagram'
 import { searchTools, type SearchDeps } from './tools/search'
+import { exploreTools, pcReadTools } from './tools/explore'
+import { PcExplorer } from './explore/fs'
+import { runExplorer } from './explore/agent'
 import { mcpTools, type McpBridge } from './tools/mcp-adapter'
 import { StateMachine } from './turn/state-machine'
 import { TurnRunner } from './turn/runner'
@@ -76,6 +81,8 @@ export interface AgentDeps {
   claude?: ClaudeSessionManager
   /** The diagram library and Mermaid's parser; the diagram_* tools exist only when this is set. */
   diagrams?: DiagramDeps
+  /** The folder this app's own source code is in, when it runs from source; the active project when none is picked. */
+  appDir?: () => string | null
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
@@ -173,6 +180,8 @@ export const FINAL_OVERDUE_MS = 25_000
 export class Agent {
   readonly sm: StateMachine
   private factory: ModelFactory
+  /** Read-only access to the folders approved in Settings > PC access; reads the list fresh on every call. */
+  private readonly explorer = new PcExplorer(() => this.deps.settings().explore?.roots ?? [])
   private edge: EdgeTtsEngine
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
@@ -726,7 +735,7 @@ export class Agent {
     const named = [fallback, lastResort].filter((m): m is NonNullable<typeof m> => !!m)
     // then one model from every other keyed provider: a stale or rejected key on one provider is not the end of the turn
     const fallbacks = [...named, ...spareModels(this.deps.keys, [model.provider, ...named.map((m) => m.provider)])]
-    const tools = this.tools(settings)
+    const tools = this.tools(settings, model)
     const memory = this.memoryBlock(text, settings)
     const system = composeSystemParts(style, {
       agentName: settings.agentName,
@@ -735,6 +744,7 @@ export class Agent {
       ...timeContext(),
       location: await this.location.resolve(settings.location),
       projectName: this.projectName(settings),
+      appDir: this.pickedProject(settings) ? (this.deps.appDir?.() ?? undefined) : undefined,
       memoryBlock: memory.block,
       skillsBlock: skillsBlock(this.deps.skills()),
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
@@ -1142,11 +1152,12 @@ export class Agent {
       now: t.now,
       timezone: t.timezone,
       location: s.location.mode === 'manual' ? s.location.manual || 'not set' : s.location.mode === 'ip' ? 'from IP (resolved each turn)' : 'off',
-      project: this.projectName(s),
+      project: this.pickedProject(s)?.name ?? (this.deps.appDir?.() ? 'this app' : 'none'),
       style: this.style(s).label,
       memoryEntries: this.deps.store.profile(this.scopeIds(s), s.memory.profileLimit).length,
       skills: this.deps.skills().filter((k) => k.enabled).map((k) => k.name),
-      tools: Object.keys(this.tools(s))
+      // only the names are used here; the model is what pc_explore would run on if it were called
+      tools: Object.keys(this.tools(s, findModel(s.modelId) ?? findModel(DEFAULT_FALLBACK_MODEL_ID)!))
     }
   }
 
@@ -1259,9 +1270,43 @@ export class Agent {
     return s.projectId && s.projectId !== GLOBAL_SCOPE ? [GLOBAL_SCOPE, s.projectId] : [GLOBAL_SCOPE]
   }
 
+  private pickedProject(s: Settings): Project | undefined {
+    if (!s.projectId || s.projectId === GLOBAL_SCOPE) return undefined
+    return this.deps.store.projects().find((p) => p.id === s.projectId)
+  }
+
+  /** The active project for the prompt, with its folder: the picked one, else this app's own code when it runs from source. */
   private projectName(s: Settings): string {
-    if (!s.projectId || s.projectId === GLOBAL_SCOPE) return 'none'
-    return this.deps.store.projects().find((p) => p.id === s.projectId)?.name ?? 'none'
+    const picked = this.pickedProject(s)
+    if (picked) return picked.path ? `${picked.name}, in the folder ${picked.path}` : picked.name
+    const app = this.deps.appDir?.()
+    return app ? `this app itself (your own source code), in the folder ${app}` : 'none'
+  }
+
+  /** The read-only PC tools are offered when they are on and at least one folder is approved. */
+  private exploreOn(s: Settings): boolean {
+    return !!s.explore?.enabled && this.explorer.roots().length > 0
+  }
+
+  /** pc_explore: the helper loop, on the model this turn runs on, inside the time a tool call is allowed. */
+  private async exploreWith(request: string, model: ModelInfo, s: Settings, signal?: AbortSignal): Promise<unknown> {
+    let lm
+    try {
+      lm = this.factory.create(model).model
+    } catch (e) {
+      return { error: `The helper has no model to run on (${(e as Error).message}). Use pc_find, pc_list and pc_read yourself.` }
+    }
+    this.tr('explore.start', { request, model: model.id })
+    return runExplorer({
+      model: lm,
+      tools: pcReadTools(this.explorer),
+      request,
+      roots: this.explorer.roots(),
+      context: `The user's active project: ${this.projectName(s)}.`,
+      budgetMs: Math.max(8000, Math.min(45000, s.brain.toolStallTimeoutMs - 4000)),
+      signal,
+      trace: (ev, data) => this.tr(ev, data)
+    })
   }
 
   /** Profile entries, BM25-relevant entries and matching lines from past sessions, as prompt lines. */
@@ -1291,7 +1336,7 @@ export class Agent {
     return { block: lines.join('\n'), profile: profile.length, relevant: relevantCount, history: history.length }
   }
 
-  private tools(s: Settings): ToolSet {
+  private tools(s: Settings, model: ModelInfo): ToolSet {
     const tools: ToolSet = {
       current_time: currentTimeTool,
       ...memoryTools({
@@ -1308,6 +1353,9 @@ export class Agent {
       })
     }
     if (this.deps.search.configured()) Object.assign(tools, searchTools(this.deps.search))
+    if (this.exploreOn(s)) {
+      Object.assign(tools, exploreTools({ explorer: this.explorer, agent: s.explore.agent ? (request, signal) => this.exploreWith(request, model, s, signal) : undefined }))
+    }
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
     if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))
     if (this.deps.diagrams) Object.assign(tools, diagramTools(this.deps.diagrams, () => this.sessionId))

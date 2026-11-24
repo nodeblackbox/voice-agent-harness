@@ -67,7 +67,7 @@ export interface ToolSource {
 export interface ToolActivity {
   name: string
   label: string
-  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'claude' | 'diagram' | 'other'
+  kind: 'search' | 'read' | 'memory' | 'mcp' | 'time' | 'claude' | 'diagram' | 'files' | 'other'
   status: ToolStatus
   startedAt: number
   endedAt?: number
@@ -473,6 +473,17 @@ export interface ClaudeSettings {
   defaultMode: CcMode
 }
 
+/** Read-only look around the PC (the pc_* tools): which folders the agent may read, and whether it may chain look-ups by itself. */
+export interface ExploreSettings {
+  enabled: boolean
+  /** Approved folders, as absolute paths ("D:\\", "C:\Users\me\Projects"). Nothing outside them can be listed, searched or read. */
+  roots: string[]
+  /** Offer pc_explore: a helper that chains find, list and read by itself and returns one short answer. */
+  agent: boolean
+  /** Set once the first-run folders (the app's own, the session workspace, project folders) have been added. */
+  seeded?: boolean
+}
+
 export interface Settings {
   modelId: string
   fallbackModelId: string
@@ -497,6 +508,7 @@ export interface Settings {
   searxng: { url: string; autostart: boolean }
   mcp: { enabled: boolean }
   claude: ClaudeSettings
+  explore: ExploreSettings
 }
 
 export interface KeyStatus {

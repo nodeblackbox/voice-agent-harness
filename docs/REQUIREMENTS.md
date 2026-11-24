@@ -110,6 +110,30 @@ this is the "why" and the bar each part has to meet.
   every version can be stepped through and brought back. The agent sees the owner's edits.
 - Mermaid written straight into a reply or a Markdown file is drawn too.
 
+## Looking at the PC
+
+- The agent can understand what is on the owner's PC: list a folder, find files and folders by name, read a
+  text file, search inside files (`pc_list`, `pc_find`, `pc_read`, `pc_grep`). Asked for "my lemon AI
+  project", it looks for it instead of asking for the path.
+- **Read-only, always.** These tools cannot change, move, delete or run anything. Changing files is a job
+  for a Claude Code session.
+- **Only inside approved folders** (Settings > PC access; a whole drive or single folders). Every path is
+  resolved first (`..`, symlinks and junctions included) and refused when it ends up outside the list.
+  Network and device paths are refused. Nothing is approved by the code: a fresh install starts with the
+  app's own folder, the session workspace and the folders of the owner's projects, and the owner adds the
+  rest.
+- **Secrets stay out of the conversation.** Files that usually hold passwords or keys (`.env`, private
+  keys, credential stores, proxy lists, `.ssh` and the like) are never opened, even inside an approved
+  folder, and key-shaped text in any other file is masked. What is read goes to a hosted model and may be
+  spoken aloud.
+- **Short enough to say.** Results are capped (entries, matches, characters, folders walked, seconds). A
+  name search of a whole drive returns the nearest matches and says it stopped there.
+- **Several steps in one reply.** With the explorer helper on (the default), a question that needs find,
+  then list, then read goes to `pc_explore`: a helper with only the four read tools chains them and
+  returns one short answer. Off, the agent chains the calls itself within its tool rounds.
+- The agent knows its own source folder as the active project when no other is picked (running from
+  source), so "change yourself" starts a Claude Code session there, after a clear yes.
+
 ## Tokens and cost
 
 - The owner wants to see what a conversation uses and whether it is efficient: tokens in and out and the

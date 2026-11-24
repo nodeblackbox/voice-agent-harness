@@ -28,6 +28,7 @@ import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { DiagramService } from './services/diagrams'
+import { firstRunRoots } from '@core/explore/roots'
 import { setupTraining } from './training'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -145,6 +146,16 @@ app.whenReady().then(async () => {
 
   const store = new MemoryStore(join(userData, 'memory.sqlite'))
   for (const p of store.projects()) store.ensureScope(p.id, p.name)
+
+  // This app's own source folder, when it runs from source: the agent's active project when none is picked, so
+  // "change yourself" can start a Claude Code session there. A packaged build has no source to edit.
+  const appDir = isDev && existsSync(join(projectRoot, 'package.json')) && existsSync(join(projectRoot, 'src')) ? projectRoot : null
+  // PC access starts with the folders the app already works in; the owner adds drives and others in Settings.
+  if (!settings.get().explore.seeded) {
+    const roots = firstRunRoots([...settings.get().explore.roots, appDir, settings.get().claude.workspaceRoot, ...store.projects().map((p) => p.path)])
+    settings.set({ explore: { ...settings.get().explore, roots, seeded: true } })
+    log('settings', `PC access: starting with ${roots.length} approved folder${roots.length === 1 ? '' : 's'}`)
+  }
 
   const send = (channel: string, ...args: unknown[]): void => {
     if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
@@ -338,6 +349,7 @@ ${fetchedList.text}`
     mcp,
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
+    appDir: () => appDir,
     search: { baseUrl: () => searxng.baseUrl(), ensure: () => searxng.ensure(), configured: () => searxng.configured() },
     ears: {
       agentSpeaking: (on) => sidecar.agentSpeaking(on),

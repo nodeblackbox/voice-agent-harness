@@ -166,6 +166,7 @@ Each session is fenced to its own folder. Anything outside it, any delete, any p
 | 🗂️ **Memory and projects** | SQLite with full-text search, global and per-project, with a history and undo. Projects carry a folder, notes and a default prompt style. |
 | 🧩 **Styles, skills, MCP** | Prompt styles drafted with AI, trigger-and-procedure skills, any MCP server (stdio or streamable HTTP) added from Settings. |
 | 🔎 **Local web search** | SearXNG started on demand, with `web_search`, `read_page` and `research` tools. |
+| 📂 **Read-only PC access** | `pc_find`, `pc_list`, `pc_read` and `pc_grep` inside the folders you approve in Settings, plus a `pc_explore` helper that chains them for questions like "find my lemon AI project on the D drive". Nothing can be changed; secrets files are never opened. |
 | 🎛️ **Tuning and diagnostics** | Every timing parameter documented in-app, an advisor that reads your session and suggests values, a per-turn latency timeline. |
 | 🌗 **Light and dark** | Both themes, or follow the system. |
 

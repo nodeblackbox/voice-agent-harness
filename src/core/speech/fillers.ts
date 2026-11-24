@@ -9,6 +9,11 @@ const BY_TOOL: Record<string, string[]> = {
   diagram_create: ['Let me draw that.', 'One sec, sketching it out.'],
   diagram_edit: ['Let me change that.', 'Updating the diagram.'],
   diagram_get: ['Let me look at it.'],
+  pc_find: ['Let me look for that.', 'One sec, searching your files.'],
+  pc_list: ['Let me see what is in there.', 'Having a look.'],
+  pc_read: ['Let me read that.', 'One sec, opening it.'],
+  pc_grep: ['Let me search through those files.'],
+  pc_explore: ['Let me have a look around.', 'Give me a moment, I will dig through your files.'],
   default: ['Hold on.', 'One sec.', 'Let me check.']
 }
 
@@ -50,6 +55,11 @@ export function toolLabel(toolName: string): string {
       diagram_create: 'Drawing a diagram',
       diagram_edit: 'Changing the diagram',
       diagram_get: 'Reading the diagram',
+      pc_find: 'Finding on your PC',
+      pc_list: 'Listing a folder',
+      pc_read: 'Reading a file',
+      pc_grep: 'Searching in files',
+      pc_explore: 'Exploring your PC',
       claude_list: 'Listing sessions',
       claude_start: 'Starting a session',
       claude_send: 'Sending to Claude',

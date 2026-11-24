@@ -100,6 +100,26 @@ describe('mcpTools', () => {
   })
 })
 
+describe('PC tools in the transcript', () => {
+  it('read as looking at files, with what was looked for and how much came back', () => {
+    for (const n of ['pc_find', 'pc_list', 'pc_read', 'pc_grep', 'pc_explore']) {
+      expect(toolKind(n)).toBe('files')
+      expect(toolLabel(n)).not.toBe(n)
+      expect(fillerFor(n)).not.toBe('Hold on.')
+    }
+    expect(describeInput('pc_find', { query: 'lemon ai', path: 'D:\\' })).toBe('lemon ai in D:\\')
+    expect(describeInput('pc_grep', { text: 'port', path: '' })).toBe('“port”')
+    expect(describeInput('pc_list', { path: '' })).toBe('approved folders')
+    expect(describeInput('pc_explore', { request: 'find my lemon AI project' })).toBe('find my lemon AI project')
+    expect(describeOutput('pc_find', { matches: [1, 2], more_matches: 4 }).detail).toBe('2+ matches')
+    expect(describeOutput('pc_find', { matches: [], incomplete: 'Stopped early' }).detail).toBe('nothing found (stopped early)')
+    expect(describeOutput('pc_list', { total_folders: 3, total_files: 12 }).detail).toBe('3 folders, 12 files')
+    expect(describeOutput('pc_read', { lines: '1-40 of 212' }).detail).toBe('lines 1-40 of 212')
+    expect(describeOutput('pc_explore', { answer: 'x', steps_taken: ['a', 'b', 'c'] }).detail).toBe('3 steps')
+    expect(describeOutput('pc_read', { error: 'outside the folders you may read' }).detail).toBe('outside the folders you may read')
+  })
+})
+
 describe('diagram tools in the transcript', () => {
   it('reads as drawing and changing a diagram', () => {
     expect(toolKind('diagram_create')).toBe('diagram')

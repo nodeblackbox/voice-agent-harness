@@ -91,7 +91,7 @@ function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
   }
   const head = name.split('.')[0]
   if (head === 'ear') return 'you'
-  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning') return 'turn'
+  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore') return 'turn'
   if (head === 'tts') return 'voice'
   if (head === 'playback') return 'playback'
   if (head === 'cc') return 'claude'
@@ -283,6 +283,15 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return row('Restarting the ears', join(str(d.reason), ms(d.delayMs)), 'warn')
     case 'app.crash':
       return row(`Crash caught: ${str(d.message)}`, str(d.kind), 'bad')
+    case 'explore.start':
+      return row(`File helper asked: ${quote(d.request, 200)}`, model(d.model), 'accent')
+    case 'explore.step':
+      return row(`File helper step ${str(d.step)}: ${str(d.call)}`, '', 'dim')
+    case 'explore.done': {
+      const why = str(d.reason)
+      const used = num(d.inputTokens) !== undefined ? `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens` : ''
+      return row(d.answered ? 'File helper answered' : `File helper stopped without an answer${why ? ` (${why})` : ''}`, join(`${str(d.steps)} steps`, ms(d.ms), used, str(d.error)), d.answered ? 'good' : 'warn')
+    }
     case 'trace.dropped':
       return row('Some events were dropped (too many at once)', str(d.note), 'warn')
     default: {

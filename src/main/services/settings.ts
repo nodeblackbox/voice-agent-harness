@@ -29,7 +29,9 @@ export const DEFAULT_SETTINGS: Settings = {
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },
   // workspaceRoot '' = filled at construction from SettingsOptions.defaultWorkspaceRoot (the main process passes a Documents folder)
-  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 8, defaultMode: 'auto', limitChosen: true }
+  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 8, defaultMode: 'auto', limitChosen: true },
+  // roots [] and seeded false = the main process adds the first-run folders once (see seedExploreRoots)
+  explore: { enabled: true, roots: [], agent: true, seeded: false }
 }
 
 export interface SettingsOptions {
