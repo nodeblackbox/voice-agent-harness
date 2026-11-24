@@ -471,7 +471,7 @@ ${fetchedList.text}`
       const s = event.session
       if (lastCcStatus.get(s.id) !== s.status) {
         lastCcStatus.set(s.id, s.status)
-        trace({ ev: 'cc.status', sid: agent.currentSessionId, session: s.name, status: s.status, queued: s.queued.length, costUsd: Number(s.costUsd.toFixed(4)) })
+        trace({ ev: 'cc.status', sid: agent.currentSessionId, session: s.name, status: s.status, queued: s.queued.length, costUsd: Number(s.costUsd.toFixed(4)), tokensIn: s.tokensIn, tokensOut: s.tokensOut })
       }
     } else if (event.type === 'needs-input') trace({ ev: 'cc.needs_input', sid: agent.currentSessionId, session: event.name, kind: event.pending.kind, summary: event.pending.summary.slice(0, 160) })
     else if (event.type === 'finished') trace({ ev: 'cc.finished', sid: agent.currentSessionId, session: event.name, chars: event.summary.length })

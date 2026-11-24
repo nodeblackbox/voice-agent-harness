@@ -2,6 +2,7 @@ import { stepCountIs, streamText, type LanguageModel, type ModelMessage, type Sy
 import type { BrainSettings, ModelInfo, SpeechSettings, StyleFormat, TurnMetrics } from '@shared/types'
 import { MissingKeyError, type ModelFactory } from '../providers/factory'
 import { estimateTokens, isRateLimit, isTooLarge, retryAfterMs } from '../providers/capacity'
+import { costUsd } from '@shared/pricing'
 import { SentenceChunker } from '../speech/chunker'
 import { SpeakableFilter } from '../prompts/speakable'
 import type { Speaker } from '../speech/speaker'
@@ -124,6 +125,8 @@ export class TurnRunner {
   private metrics: TurnMetrics = {}
   private lastFillerAt = Number.NEGATIVE_INFINITY
 
+  private costUnknown = false
+
   constructor(private readonly deps: RunnerDeps) {}
 
   /**
@@ -137,6 +140,20 @@ export class TurnRunner {
     const capacity = this.deps.factory.capacity
     const pool = this.deps.factory.groqPool
     const estimate = estimateTokens(this.requestChars(), Object.keys(this.deps.tools).length)
+    {
+      // what this request is made of, so a big prompt can be traced to the part that makes it big
+      const sys = this.deps.system
+      const stableChars = typeof sys === 'string' ? sys.length : sys.stable.length
+      const liveChars = typeof sys === 'string' ? 0 : sys.live.length
+      this.deps.trace?.('turn.context', {
+        estimateTokens: estimate,
+        stableChars,
+        liveChars,
+        historyChars: JSON.stringify(this.deps.messages).length,
+        messages: this.deps.messages.length,
+        tools: Object.keys(this.deps.tools).length
+      })
+    }
     const misses: Miss[] = []
     // the latest miss the user hasn't been told about; announced as "X …, trying Y." when Y is actually tried
     let unannounced: Miss | null = null
@@ -413,10 +430,39 @@ export class TurnRunner {
           case 'finish-step': {
             this.metrics.steps = (this.metrics.steps ?? 0) + 1
             lastFinish = part.finishReason
-            const u = part.usage as { inputTokens?: number | { total?: number }; outputTokens?: number | { total?: number } } | undefined
+            const u = part.usage as
+              | {
+                  inputTokens?: number | { total?: number }
+                  outputTokens?: number | { total?: number }
+                  inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
+                  outputTokenDetails?: { reasoningTokens?: number }
+                }
+              | undefined
             const total = (v: number | { total?: number } | undefined): number => (typeof v === 'number' ? v : (v?.total ?? 0))
-            this.metrics.inputTokens = (this.metrics.inputTokens ?? 0) + total(u?.inputTokens)
-            this.metrics.outputTokens = (this.metrics.outputTokens ?? 0) + total(u?.outputTokens)
+            const step = {
+              inputTokens: total(u?.inputTokens),
+              outputTokens: total(u?.outputTokens),
+              cacheReadTokens: u?.inputTokenDetails?.cacheReadTokens ?? 0,
+              cacheWriteTokens: u?.inputTokenDetails?.cacheWriteTokens ?? 0
+            }
+            const cost = costUsd(info.id, step)
+            const mt = this.metrics
+            mt.inputTokens = (mt.inputTokens ?? 0) + step.inputTokens
+            mt.outputTokens = (mt.outputTokens ?? 0) + step.outputTokens
+            mt.cacheReadTokens = (mt.cacheReadTokens ?? 0) + step.cacheReadTokens
+            mt.cacheWriteTokens = (mt.cacheWriteTokens ?? 0) + step.cacheWriteTokens
+            // a step on a model with no known price leaves the turn's cost unknown rather than too low
+            if (cost === undefined) this.costUnknown = true
+            else mt.costUsd = (mt.costUsd ?? 0) + cost
+            if (this.costUnknown) delete mt.costUsd
+            this.deps.trace?.('turn.usage', {
+              step: mt.steps,
+              model: info.id,
+              ...step,
+              reasoningTokens: u?.outputTokenDetails?.reasoningTokens ?? 0,
+              costUsd: cost,
+              finish: part.finishReason
+            })
             break
           }
           case 'error':

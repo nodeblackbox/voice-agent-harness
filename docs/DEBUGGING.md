@@ -99,6 +99,25 @@ a `?` or extra words (`turn.start` shows what the model got), or the phrase is n
 `resumePhrases`. Present with `kind=backchannel` when you meant a new turn → remove the word from
 `backchannelWords` or turn `resumeOnBackchannel` off.
 
+## Tokens and cost
+
+Every reply records what it spent, and the console adds it up (the strip above the rows; click it for the
+split by model, by tool and by Claude Code session).
+
+- `turn.context` (start of a reply): the size of the prompt about to be sent, split into `stableChars`
+  (rules and tool guidance, cached), `liveChars` (clock, memory, what Claude Code is doing),
+  `historyChars` (the conversation) and the number of `tools`. Four characters is about a token.
+- `turn.usage` (one per model call; Verbose in the console): `inputTokens` (whole prompt),
+  `cacheReadTokens`, `cacheWriteTokens`, `outputTokens`, `reasoningTokens`, `costUsd`. A reply that calls
+  a tool makes two model calls, so its input is roughly double.
+- `turn.tool_end` carries `resultChars`: what the tool's result adds to the next prompt.
+- `turn.end` / `turn.cancel` `metrics` hold the totals for the reply, `costUsd` included.
+- `cc.status` carries a Claude Code session's `tokensIn`, `tokensOut` and `costUsd` so far.
+
+Prices live in `src/shared/pricing.ts` (list prices per million tokens). A model without an entry shows
+"no price" rather than a guess. `cacheReadTokens` near zero on every reply means the cached part of the
+prompt is changing between turns: compare `stableChars` across `turn.context` rows.
+
 ## Three complaints
 
 **"I said hello and nothing happened."** Look for the last `ear.*` events.

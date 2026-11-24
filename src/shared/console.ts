@@ -47,6 +47,8 @@ export interface ConsoleRow {
   turnStart?: boolean
 }
 
+import { fmtTokens, fmtUsd } from './pricing'
+
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === undefined || v === null ? '' : String(v))
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const ms = (v: unknown): string => {
@@ -60,6 +62,14 @@ const quote = (v: unknown, max = 160): string => {
 }
 const join = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' · ')
 const model = (v: unknown): string => str(v).replace(/^[a-z]+:/, '')
+
+/** "10.2k in (9.6k cached) / 23 out tokens · $0.0004" from a metrics or usage record. */
+function usageText(u: Record<string, unknown>): string {
+  const input = num(u.inputTokens) ?? 0
+  const read = num(u.cacheReadTokens) ?? 0
+  const cost = num(u.costUsd)
+  return join(`${fmtTokens(input)} in${read ? ` (${fmtTokens(read)} cached)` : ''} / ${fmtTokens(num(u.outputTokens) ?? 0)} out tokens`, cost !== undefined ? fmtUsd(cost) : '')
+}
 
 const END_REASON: Record<string, string> = { done: 'sounded finished', timeout: 'silence ran out', max: 'hit the length cap' }
 const CANCEL_REASON: Record<string, string> = {
@@ -147,7 +157,7 @@ export function describe(e: ConsoleEntry): ConsoleRow {
     case 'turn.tool_start':
       return row(`Tool: ${str(d.name)}`, str(d.summary), 'accent')
     case 'turn.tool_end':
-      return row(`Tool ${str(d.name)} ${d.ok ? 'finished' : 'failed'}`, join(ms(d.ms), str(d.detail)), d.ok ? 'plain' : 'bad')
+      return row(`Tool ${str(d.name)} ${d.ok ? 'finished' : 'failed'}`, join(ms(d.ms), str(d.detail), num(d.resultChars) ? `about ${fmtTokens(Math.ceil(num(d.resultChars)! / 4))} tokens of result` : ''), d.ok ? 'plain' : 'bad')
     case 'turn.filler':
       return row(`Filler: ${quote(d.text)}`, str(d.kind), 'dim')
     case 'turn.notice':
@@ -161,9 +171,25 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       const unspoken = str(d.unspokenText).trim()
       return row(`Reply cut off: ${CANCEL_REASON[reason] ?? reason}`, join(str(d.spokenText).trim() ? `said ${quote(d.spokenText, 140)}` : 'nothing was said yet', unspoken ? `never said ${quote(unspoken, 140)}` : ''), 'warn')
     }
+    case 'turn.context': {
+      const k = (chars: unknown): string => fmtTokens(Math.ceil((num(chars) ?? 0) / 4))
+      const tools = num(d.tools) ?? 0
+      return row(
+        `Sending about ${fmtTokens(num(d.estimateTokens) ?? 0)} tokens to the model`,
+        join(`rules ${k(d.stableChars)}`, `this turn's details and memory ${k(d.liveChars)}`, `conversation ${k(d.historyChars)} in ${str(d.messages)} messages`, tools ? `${tools} tools about ${fmtTokens(tools * 120)}` : ''),
+        'dim'
+      )
+    }
+    case 'turn.usage':
+      return row(`Model call ${str(d.step)}: ${usageText(d)}`, join(model(d.model), num(d.reasoningTokens) ? `${fmtTokens(num(d.reasoningTokens)!)} spent thinking` : '', d.finish === 'tool-calls' ? 'asked for a tool' : ''), 'dim', { noisy: true })
     case 'turn.end': {
       const m = (d.metrics ?? {}) as Record<string, unknown>
-      return row(d.interrupted ? 'Reply ended (interrupted)' : 'Reply finished', join(ms(d.totalMs), `${str(d.chars)} characters`, `${str(d.chunks)} sentences`, model(m.model), num(m.inputTokens) !== undefined ? `${str(m.inputTokens)} in / ${str(m.outputTokens)} out tokens` : '', m.fallbackUsed ? 'backup model' : ''), d.interrupted ? 'warn' : 'good')
+      const steps = num(m.steps) ?? 0
+      return row(
+        d.interrupted ? 'Reply ended (interrupted)' : 'Reply finished',
+        join(ms(d.totalMs), `${str(d.chars)} characters`, `${str(d.chunks)} sentences`, model(m.model), num(m.inputTokens) !== undefined ? usageText(m) : '', steps > 1 ? `${steps} model calls` : '', m.fallbackUsed ? 'backup model' : ''),
+        d.interrupted ? 'warn' : 'good'
+      )
     }
     case 'turn.error':
       return row(`Reply failed: ${str(d.message)}`, '', 'bad')
@@ -222,7 +248,7 @@ export function describe(e: ConsoleEntry): ConsoleRow {
 
     // ---- claude ----
     case 'cc.status':
-      return row(`${str(d.session)}: ${str(d.status).replace(/_/g, ' ')}`, join(num(d.queued) ? `${str(d.queued)} queued` : '', num(d.costUsd) ? `$${num(d.costUsd)!.toFixed(2)}` : ''), d.status === 'error' ? 'bad' : /needs/.test(str(d.status)) ? 'warn' : 'plain')
+      return row(`${str(d.session)}: ${str(d.status).replace(/_/g, ' ')}`, join(num(d.queued) ? `${str(d.queued)} queued` : '', num(d.tokensIn) ? `${fmtTokens(num(d.tokensIn)!)} in / ${fmtTokens(num(d.tokensOut) ?? 0)} out tokens so far` : '', num(d.costUsd) ? `${fmtUsd(num(d.costUsd)!)} at API prices` : ''), d.status === 'error' ? 'bad' : /needs/.test(str(d.status)) ? 'warn' : 'plain')
     case 'cc.needs_input':
       return row(`${str(d.session)} needs you: ${str(d.summary)}`, str(d.kind), 'warn')
     case 'cc.finished':

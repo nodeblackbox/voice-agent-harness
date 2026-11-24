@@ -1,3 +1,5 @@
+import { fmtUsd } from '@shared/pricing'
+
 export function formatElapsed(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '0.0s'
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
@@ -10,6 +12,14 @@ export function formatTokens(n: number): string {
   if (n < 1000) return String(n)
   if (n < 100_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`
   return `${Math.round(n / 1000)}k`
+}
+
+/** Tooltip for a reply's token readout: "10.2k tokens in (9.6k from cache), 23 out, 2 model calls, $0.0004 at list price". */
+export function usageTitle(m: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; costUsd?: number; steps?: number }): string {
+  const parts = [`${formatTokens(m.inputTokens ?? 0)} tokens in${m.cacheReadTokens ? ` (${formatTokens(m.cacheReadTokens)} from cache)` : ''}`, `${formatTokens(m.outputTokens ?? 0)} out`]
+  if ((m.steps ?? 0) > 1) parts.push(`${m.steps} model calls`)
+  if (m.costUsd !== undefined) parts.push(`${fmtUsd(m.costUsd)} at list price`)
+  return parts.join(', ')
 }
 
 export function hostOf(url: string): string {

@@ -5,7 +5,8 @@ import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { VoiceBars } from '../VoiceBars'
 import { ToolPill } from './ToolPill'
-import { formatTokens } from '../../lib/format'
+import { fmtUsd } from '@shared/pricing'
+import { formatTokens, usageTitle } from '../../lib/format'
 import { splitBySentences, splitInterrupted } from '../../lib/spoken'
 
 /**
@@ -224,8 +225,9 @@ const AssistantBubble = memo(function AssistantBubble({
           </span>
         )}
         {m.metrics?.inputTokens !== undefined && m.metrics?.outputTokens !== undefined && (
-          <span className="text-xs ml-1" style={{ color: T.text3, fontFamily: T.mono }} title="tokens in / out">
+          <span className="text-xs ml-1" style={{ color: T.text3, fontFamily: T.mono }} title={usageTitle(m.metrics)}>
             {formatTokens(m.metrics.inputTokens)}/{formatTokens(m.metrics.outputTokens)}
+            {m.metrics.costUsd !== undefined && ` · ${fmtUsd(m.metrics.costUsd)}`}
           </span>
         )}
       </div>

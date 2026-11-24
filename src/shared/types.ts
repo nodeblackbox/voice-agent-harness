@@ -105,8 +105,14 @@ export interface TurnMetrics {
   speechEndToAudioMs?: number
   totalMs?: number
   model?: string
+  /** The whole prompt across every model call of the turn, cached parts included. */
   inputTokens?: number
   outputTokens?: number
+  /** Of `inputTokens`: served from the prompt cache (about a tenth of the price) and written to it. */
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  /** List-price dollars for the turn; absent when a model without a known price took part. */
+  costUsd?: number
   steps?: number
   /** Why the ears closed the turn, and the Smart Turn score that did it. */
   endReason?: 'done' | 'timeout'

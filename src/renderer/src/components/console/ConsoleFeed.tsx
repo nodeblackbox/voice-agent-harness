@@ -8,6 +8,7 @@ import { ArrowDown, Check, Copy, Pause, Play, Search, Trash2, X } from 'lucide-r
 import { CONSOLE_CATEGORIES, describe, rowText, type ConsoleCategory, type ConsoleEntry, type ConsoleRow } from '@shared/console'
 import { T, alpha } from '../../theme'
 import { useConsole } from '../../state/console'
+import { UsageStrip } from './UsageStrip'
 
 const CAT_COLOR: Record<ConsoleCategory, string> = {
   you: T.cyan,
@@ -235,6 +236,8 @@ export function ConsoleFeed({ compact = false }: { compact?: boolean }) {
           </button>
         </div>
       </div>
+
+      <UsageStrip entries={entries} compact={compact} />
 
       <div className="relative flex-1 min-h-0">
         <div ref={scroller} onScroll={onScroll} className="va-scroll absolute inset-0 overflow-y-auto" style={{ padding: '6px 0 10px', background: T.bg }} role="log" aria-live="off" aria-label="Live console">

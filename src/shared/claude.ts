@@ -41,6 +41,9 @@ export interface CcEvent {
   durationMs?: number
   costUsd?: number
   turns?: number
+  /** result: tokens the run read (cached ones included) and wrote. */
+  tokensIn?: number
+  tokensOut?: number
 }
 
 /** A saved Claude Code session elsewhere on this machine (CLI, IDE, other apps). */
@@ -104,7 +107,11 @@ export interface CcSession {
   pending?: CcPending
   queued: string[]
   lastSummary: string
+  /** What the runs so far would cost at API prices (on a subscription this is plan usage, not a bill). */
   costUsd: number
+  /** Tokens read (cached ones included) and written across the session's runs. */
+  tokensIn?: number
+  tokensOut?: number
   turns: number
   createdAt: number
   updatedAt: number

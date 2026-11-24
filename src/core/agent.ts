@@ -150,6 +150,14 @@ export function wordOverlap(a: string, b: string): number {
   return wa.filter((w) => wb.has(w)).length / wa.length
 }
 
+/** Size of a tool result as the model will read it (it goes back into the prompt, so it costs input tokens). */
+const resultChars = (output: unknown): number => {
+  try {
+    return typeof output === 'string' ? output.length : (JSON.stringify(output)?.length ?? 0)
+  } catch {
+    return 0
+  }
+}
 const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s)
 
 /** A cut with an empty transcript resumes the reply at most this often per message (guards a self-cut loop). */
@@ -727,6 +735,7 @@ export class Agent {
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
       expressiveBlock: this.expressiveBlock(settings),
       voiceLine: this.voiceLine(settings),
+      setupLine: `chat model ${model.label} (${model.providerLabel})${fallbacks[0] && fallbacks[0].id !== model.id ? `, with ${fallbacks[0].label} as the backup if it fails` : ''}; speech recognition ${settings.stt.model}, running locally on this computer`,
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -835,7 +844,7 @@ export class Agent {
             const o = output as { before?: unknown; after?: unknown } | null
             if (o && typeof o.before === 'string' && typeof o.after === 'string') m.tool.diff = { before: o.before, after: o.after }
           } else m.tool.detail = error
-          this.tr('turn.tool_end', { id, name, ok, ms: m.tool.endedAt - m.tool.startedAt, detail: m.tool.detail })
+          this.tr('turn.tool_end', { id, name, ok, ms: m.tool.endedAt - m.tool.startedAt, detail: m.tool.detail, resultChars: ok ? resultChars(output) : undefined })
           this.upsert(m)
         }
         if ([...toolMessages.values()].every((x) => x.tool?.status !== 'running')) this.sm.tool(false)

@@ -2,6 +2,7 @@
 import { CircleCheck, CircleDot, Circle } from 'lucide-react'
 import type { CcEvent, CcSession } from '@shared/claude'
 import { T } from '../../theme'
+import { fmtTokens } from '@shared/pricing'
 import { costNote } from './Account'
 import { FAMILY } from './Activity'
 import { ago, latestTodos, toolStats, type Touched } from './feed'
@@ -27,6 +28,7 @@ export function Inspector({ session, events, touched, onOpenFile }: { session: C
       <div className="grid grid-cols-2 gap-2">
         {[
           [session.billing === 'api-key' ? 'Cost' : 'Usage', `$${session.costUsd.toFixed(2)}`, costNote(session)],
+          ['Tokens', `${fmtTokens(session.tokensIn ?? 0)} / ${fmtTokens(session.tokensOut ?? 0)}`, 'Tokens read (cached ones included) / written by this session so far'],
           ['Turns', String(session.turns)],
           ['Files', String(touched.length)],
           ['Tool calls', String(stats.reduce((n, s) => n + s.count, 0))]

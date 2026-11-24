@@ -70,6 +70,16 @@ this is the "why" and the bar each part has to meet.
 - Each run's trace (`%APPDATA%/Voice Agent/logs/sessions/<id>.jsonl`) is the record; `docs/DEBUGGING.md`
   lists the events.
 
+## Tokens and cost
+
+- The owner wants to see what a conversation uses and whether it is efficient: tokens in and out and the
+  list-price cost of every reply (next to the reply, and in the console), how much of the prompt came from
+  the cache, what each tool's result added to the prompt, and what each Claude Code session has used.
+- The console adds these up for the run and splits them by model, tool and session.
+- A model with no known price shows "no price", never a made-up number. Prices are in
+  `src/shared/pricing.ts`; update them there when a provider changes them.
+- The agent knows what it runs on (chat model, voice, speech recognition) and answers from that when asked.
+
 ## Claude Code sessions
 
 - More than a handful at once: the limit is on sessions that are open (idle, working, waiting), not on

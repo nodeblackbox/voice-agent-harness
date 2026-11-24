@@ -5,7 +5,7 @@ import { T } from '../../theme'
 import { selectActiveProject, selectActiveSession, useStore } from '../../state/store'
 import { IconBtn } from '../primitives'
 import { StateIndicator } from './StateIndicator'
-import { formatTokens } from '../../lib/format'
+import { formatTokens, usageTitle } from '../../lib/format'
 
 export function friendlyVoice(name: string | undefined): string {
   if (!name) return 'Ava'
@@ -78,7 +78,7 @@ export function ChatHeader() {
           </span>
         )}
         {tokens && (
-          <span className="text-xs mr-2" style={{ color: T.text3, fontFamily: T.mono }} title="tokens in / out for the last turn">
+          <span className="text-xs mr-2" style={{ color: T.text3, fontFamily: T.mono }} title={`Last reply: ${usageTitle(tokens)}`}>
             {formatTokens(tokens.inputTokens ?? 0)}/{formatTokens(tokens.outputTokens ?? 0)}
           </span>
         )}

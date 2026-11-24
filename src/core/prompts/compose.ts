@@ -19,6 +19,8 @@ export interface PromptContext {
   expressiveBlock?: string
   /** Which engine and voice speak this turn, e.g. `Inworld, voice "Hana" (inworld-tts-2-flash); delivery cues are on`. */
   voiceLine?: string
+  /** The chat model and speech recognition in use this turn, so the agent can say what it runs on. */
+  setupLine?: string
 }
 
 const PERSONA = `You are {agent_name}, a voice assistant talking with {user_name} out loud through a speaker. Everything you write is spoken by a text-to-speech engine the moment a sentence ends, so write the way a sharp, friendly person talks, not the way documents look.
@@ -81,6 +83,8 @@ const CONTEXT = `Context (injected by the app, always current)
 
 const VOICE_LINE = `- Your voice right now: {voice}. If asked which voice or engine you are, answer from this line.`
 
+const SETUP_LINE = `- What you run on right now: {setup}. If asked which model you are or what transcribes the user, answer from this line; both can be changed in Settings.`
+
 const ABOUT_USER = `- About {user_name}: {about_user}`
 
 const MEMORY = `What you remember about {user_name}
@@ -116,7 +120,7 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
   if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))
   // memory is picked per turn (what's relevant to what was just said), so it lives with the clock, not the cache
-  const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '')]
+  const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '') + (ctx.setupLine ? `\n${SETUP_LINE.replace('{setup}', ctx.setupLine)}` : '')]
   if (ctx.memoryBlock.trim()) live.push(fill(MEMORY))
   if (ctx.claudeBlock !== undefined) live.push(fill(CLAUDE_NOW))
   return { stable: parts.join('\n\n'), live: live.join('\n\n') }

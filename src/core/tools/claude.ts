@@ -30,7 +30,9 @@ function brief(s: CcSession, m: ClaudeSessionManager) {
     waiting_for_user: waiting(s.pending),
     queued_prompts: s.queued.length,
     what_just_happened: m.digest(s.id),
-    cost_usd: Number(s.costUsd.toFixed(3))
+    cost_usd: Number(s.costUsd.toFixed(3)),
+    tokens_in: s.tokensIn ?? 0,
+    tokens_out: s.tokensOut ?? 0
   }
 }
 

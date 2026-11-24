@@ -605,6 +605,12 @@ export class ClaudeSessionManager {
 
   private onResult(r: Rt, m: any): void {
     r.s.costUsd += Number(m.total_cost_usd) || 0
+    const u = (m.usage ?? {}) as Record<string, unknown>
+    const n = (v: unknown): number => Number(v) || 0
+    const tokensIn = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens)
+    const tokensOut = n(u.output_tokens)
+    r.s.tokensIn = (r.s.tokensIn ?? 0) + tokensIn
+    r.s.tokensOut = (r.s.tokensOut ?? 0) + tokensOut
     r.s.turns += Number(m.num_turns) || 0
     const aborted = String(m.terminal_reason ?? '').startsWith('aborted')
     if (aborted) {
@@ -617,7 +623,7 @@ export class ClaudeSessionManager {
     } else {
       r.s.status = 'idle'
       r.s.lastSummary = String(m.result ?? r.lastText ?? '')
-      this.log(r, 'result', r.s.lastSummary, { durationMs: Number(m.duration_ms) || undefined, costUsd: Number(m.total_cost_usd) || undefined, turns: Number(m.num_turns) || undefined })
+      this.log(r, 'result', r.s.lastSummary, { durationMs: Number(m.duration_ms) || undefined, costUsd: Number(m.total_cost_usd) || undefined, turns: Number(m.num_turns) || undefined, tokensIn: tokensIn || undefined, tokensOut: tokensOut || undefined })
     }
     this.changed(r)
     if (!aborted && !m.is_error) this.emit({ type: 'finished', id: r.s.id, name: r.s.name, summary: r.s.lastSummary })

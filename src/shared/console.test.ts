@@ -37,7 +37,7 @@ suite('console rows', () => {
   it('chatty events are marked noisy so they hide by default', () => {
     expect(describe(ev('ear.partial', { text: 'you are' })).noisy).toBe(true)
     expect(describe(ev('state', { from: 'idle', to: 'listening', event: 'mic_on' })).noisy).toBe(true)
-    expect(describe(ev('turn.end', { interrupted: false, totalMs: 11345, chars: 73, chunks: 2, metrics: { model: 'openai:gpt-4.1-mini', inputTokens: 2760, outputTokens: 18 } }))).toMatchObject({ noisy: false, tone: 'good', detail: '11 s · 73 characters · 2 sentences · gpt-4.1-mini · 2760 in / 18 out tokens' })
+    expect(describe(ev('turn.end', { interrupted: false, totalMs: 11345, chars: 73, chunks: 2, metrics: { model: 'openai:gpt-4.1-mini', inputTokens: 2760, outputTokens: 18 } }))).toMatchObject({ noisy: false, tone: 'good', detail: '11 s · 73 characters · 2 sentences · gpt-4.1-mini · 2.8k in / 18 out tokens' })
   })
 
   it('log lines keep their scope and level; categories follow the scope', () => {
@@ -53,5 +53,17 @@ suite('console rows', () => {
   it('rowText is what search and copy use', () => {
     const e = ev('playback.drained', { chunks: 2 })
     expect(rowText(e)).toMatch(/^\d\d:\d\d:\d\d\.\d{3} playback\.drained All audio played \(2 sentences\)$/)
+  })
+
+  it('shows what a reply cost and what it was made of', () => {
+    const t = (name: string, data: Record<string, unknown>) => describe({ id: 1, t: 0, kind: 'trace', level: 'info', name, msg: '', data })
+    expect(t('turn.end', { totalMs: 6300, chars: 60, chunks: 2, metrics: { model: 'anthropic:claude-haiku-5-5', inputTokens: 24_000, cacheReadTokens: 18_000, outputTokens: 148, costUsd: 0.00086, steps: 2 } }).detail).toBe(
+      '6.3 s · 60 characters · 2 sentences · claude-haiku-5-5 · 24k in (18k cached) / 148 out tokens · $0.0009 · 2 model calls'
+    )
+    const ctx = t('turn.context', { estimateTokens: 10_200, stableChars: 24_000, liveChars: 2_000, historyChars: 4_000, messages: 9, tools: 30 })
+    expect(ctx.title).toBe('Sending about 10.2k tokens to the model')
+    expect(ctx.detail).toBe("rules 6k · this turn's details and memory 500 · conversation 1k in 9 messages · 30 tools about 3.6k")
+    expect(t('turn.tool_end', { name: 'claude_details', ok: true, ms: 12, detail: 'idle', resultChars: 8_000 }).detail).toBe('12 ms · idle · about 2k tokens of result')
+    expect(t('turn.usage', { step: 1, model: 'anthropic:claude-haiku-5-5', inputTokens: 12_000, outputTokens: 40, finish: 'tool-calls' }).noisy).toBe(true)
   })
 })

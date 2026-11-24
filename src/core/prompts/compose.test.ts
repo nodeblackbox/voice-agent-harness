@@ -121,6 +121,13 @@ describe('mergeSkills', () => {
     expect(composeSystemParts(style('short'), ctx).live).not.toContain('Your voice right now')
   })
 
+  it('tells the model what it runs on, in the live part', () => {
+    const { live, stable } = composeSystemParts(style('short'), { ...ctx, setupLine: 'chat model Claude Haiku 5.5 (Anthropic); speech recognition nemo-parakeet-tdt-0.6b-v2, running locally' })
+    expect(live).toContain('What you run on right now: chat model Claude Haiku 5.5 (Anthropic); speech recognition nemo-parakeet-tdt-0.6b-v2, running locally.')
+    expect(stable).not.toContain('What you run on')
+    expect(composeSystemParts(style('short'), ctx).live).not.toContain('What you run on')
+  })
+
   it('puts the delivery-cue guide in the cached part, before the tool rules, only when given', () => {
     const { stable, live } = composeSystemParts(style('short'), { ...ctx, expressiveBlock: 'Delivery cues: [laughs] is fine.' })
     expect(stable.indexOf('Delivery cues:')).toBeGreaterThan(0)
