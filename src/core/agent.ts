@@ -54,6 +54,8 @@ import { buildModelMessages, compactToolResult } from './turn/history'
 import { splitSpoken, type CutPoint, type SpokenChunk } from './turn/spoken'
 import { mergeTexts, parseFillerWords, unfinishedReason } from './turn/continuation'
 import { Coalescer } from './turn/coalesce'
+import { PlaybookEngine } from './playbooks/engine'
+import type { Playbook } from './playbooks/schema'
 import { classifyAfterCut, resumeText } from './turn/resume'
 
 /** Why an interrupted reply is being replayed: asked for, acknowledged, or cut by a wordless interruption. */
@@ -74,6 +76,8 @@ export interface AgentDeps {
   keys: KeySource
   customStyles: () => PromptStyle[]
   skills: () => Skill[]
+  /** The loaded playbooks (docs/TRIGGERS.md); none when unset. */
+  playbooks?: () => Playbook[]
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
@@ -199,6 +203,9 @@ export class Agent {
   private sessionId = ''
   private messages: ChatMessage[] = []
   private turn: ActiveTurn | null = null
+  /** Its events are held until `turn.start` is traced, so they sit under that turn in the Console. */
+  private playbookEvents: Array<[string, Record<string, unknown>]> = []
+  private readonly playbookEngine = new PlaybookEngine((ev, data) => this.playbookEvents.push([ev, data]))
   /** The last cancelled turn, kept until the renderer reports where the cut landed. */
   private cancelled: { turn: ActiveTurn; assistant: ChatMessage } | null = null
   private readTurn: { id: string; controller: AbortController } | null = null
@@ -251,6 +258,7 @@ export class Agent {
     this.deps.store.createSession(s)
     this.sessionId = s.id
     this.messages = []
+    this.playbookEngine.resetSession()
     this.tr('session.start', { projectId: s.projectId })
     this.deps.emit({ type: 'sessions-changed' })
     return s
@@ -258,7 +266,10 @@ export class Agent {
 
   selectSession(id: string): ChatMessage[] {
     this.cancelTurn('session-switch')
-    if (id !== this.sessionId) this.closeSession()
+    if (id !== this.sessionId) {
+      this.closeSession()
+      this.playbookEngine.resetSession()
+    }
     this.sessionId = id
     this.messages = this.deps.store.messages(id)
     this.tr('session.select', { messages: this.messages.length })
@@ -743,6 +754,7 @@ export class Agent {
     const fallbacks = [...named, ...spareModels(this.deps.keys, [model.provider, ...named.map((m) => m.provider)])]
     const tools = this.tools(settings, model)
     const memory = this.memoryBlock(text, settings)
+    const playbooks = this.playbooksFor(text, via, settings)
     const system = composeSystemParts(style, {
       agentName: settings.agentName,
       userName: settings.userName,
@@ -757,6 +769,7 @@ export class Agent {
       expressiveBlock: this.expressiveBlock(settings),
       voiceLine: this.voiceLine(settings),
       diagramsBlock: this.deps.diagrams ? diagramContextBlock(this.deps.diagrams.library, this.sessionId) : undefined,
+      playbookBlock: playbooks.block,
       models: {
         chat: chatModelLabel(settings.modelId, model, resolved, fallbacks[0]),
         stt: `${settings.stt.model}, running locally on this computer`,
@@ -787,8 +800,10 @@ export class Agent {
       memoryProfile: memory.profile,
       memoryRelevant: memory.relevant,
       memoryHistory: memory.history,
+      playbooks: playbooks.fired.map((f) => f.id),
       systemChars: system.stable.length + system.live.length
     })
+    for (const [ev, data] of this.playbookEvents.splice(0)) this.tr(ev, data)
 
     const metrics: TurnMetrics = {}
     if (voiceMeta.asrMs !== undefined) metrics.asrMs = voiceMeta.asrMs
@@ -1296,6 +1311,32 @@ export class Agent {
   }
 
   /** The active project for the prompt, with its folder: the picked one, else this app's own code when it runs from source. */
+  /** Which playbooks fire on this message, and the instructions they add to the reply's prompt. */
+  private playbooksFor(text: string, via: string, s: Settings): ReturnType<PlaybookEngine['onUserTurn']> {
+    this.playbookEvents = []
+    try {
+      const list = this.deps.playbooks?.() ?? []
+      if (!list.length || s.playbooks.maxInjected <= 0) return { block: '', fired: [] }
+      const picked = this.pickedProject(s)
+      return this.playbookEngine.onUserTurn(
+        list,
+        {
+          text,
+          via: via === 'voice' ? 'voice' : 'typed',
+          project: picked?.name ?? '',
+          projectId: picked?.id ?? '',
+          turnIndex: Math.max(0, this.messages.filter((m) => m.role === 'user').length - 1),
+          fromSplit: false
+        },
+        { maxInjected: s.playbooks.maxInjected, injectMaxChars: s.playbooks.injectMaxChars, tuning: { ...s.playbooks } }
+      )
+    } catch (e) {
+      // a playbook must never cost the user a reply
+      this.deps.log(`playbooks failed: ${(e as Error).message}`)
+      return { block: '', fired: [] }
+    }
+  }
+
   private projectName(s: Settings): string {
     const picked = this.pickedProject(s)
     if (picked) return picked.path ? `${picked.name}, in the folder ${picked.path}` : picked.name

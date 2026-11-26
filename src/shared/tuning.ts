@@ -140,6 +140,11 @@ export const TUNING = {
     historyHits: n(3, 0, 10, 1, 'core', 'History hits', 'Past-session messages matching the utterance injected as hints.', { unit: 'messages', old: 3 }),
     hintMaxChars: n(200, 40, 1000, 20, 'core', 'Hint max chars', 'Each injected memory or history hint is truncated to this length.', { unit: 'chars', old: 200 })
   },
+  playbooks: {
+    longMessageChars: n(1200, 200, 10000, 100, 'core', 'Long message', 'A message longer than this counts as long; the "Break down long messages" playbook reads it as tuning.longMessageChars. About 1200 characters is a minute and a half of talking.', { unit: 'chars' }),
+    maxInjected: n(3, 0, 10, 1, 'core', 'Playbooks per reply', 'Most playbooks that may shape one reply. When more match, the highest priorities win and the rest are logged as held back. 0 switches playbooks off.', { unit: 'playbooks' }),
+    injectMaxChars: n(1200, 100, 4000, 100, 'core', 'Playbook instruction max', 'Each fired playbook adds its instruction to the prompt, cut to this many characters.', { unit: 'chars' })
+  },
   runtime: {
     idleShutdownMs: n(300000, 0, 3600000, 60000, 'main', 'Ear idle shutdown', 'Unload the ear models after the microphone has been off this long. 0 never unloads. A restart is a full cold load.', { unit: 'ms' }),
     levelEveryFrames: n(3, 1, 30, 1, 'ear', 'Level meter every', 'Frames between VAD level events for the meter (3 = about 10 Hz). Never written to logs.', { unit: 'frames' }),
@@ -162,6 +167,7 @@ export const TUNING_GROUP_INFO: Record<TuningGroup, { label: string; doc: string
   speech: { label: 'Speech: sentences and fillers', doc: 'Sentence chunking, filler phrases and Edge TTS resilience.' },
   playback: { label: 'Playback', doc: 'Renderer audio scheduling and ducking.' },
   memory: { label: 'Memory injection', doc: 'How much remembered context is put in front of the model each turn.' },
+  playbooks: { label: 'Playbooks', doc: 'Thresholds playbook conditions read, and how many playbooks may shape one reply. Applied on the next turn.' },
   runtime: { label: 'Runtime and logging', doc: 'Process lifecycle and what gets written to disk.' }
 }
 

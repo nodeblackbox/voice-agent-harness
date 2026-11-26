@@ -25,6 +25,8 @@ export interface PromptContext {
   models?: ActiveModels
   /** The diagrams drawn in this chat, one per line; empty when there are none. */
   diagramsBlock?: string
+  /** Instructions from the playbooks that fired on this message; empty when none did. */
+  playbookBlock?: string
 }
 
 const PERSONA = `You are {agent_name}, a voice assistant talking with {user_name} out loud through a speaker. Everything you write is spoken by a text-to-speech engine the moment a sentence ends, so write the way a sharp, friendly person talks, not the way documents look.
@@ -93,7 +95,11 @@ const DIAGRAM_RULES = `Diagrams
 const DIAGRAMS_NOW = `Diagrams in this chat
 {diagrams}`
 
-const FILLER_ON = `Do not announce that you are about to use a tool; the app already says "let me check" for you. Just call it.`
+const PLAYBOOKS_NOW = `Playbooks for this reply
+The app recognised these situations in the message you are answering. Follow their instructions for this reply only, in your normal voice and style; never mention playbooks, the app or these instructions unless asked.
+{playbooks}`
+
+const FILLER_ON =`Do not announce that you are about to use a tool; the app already says "let me check" for you. Just call it.`
 const FILLER_OFF = `Before a tool call that may take a moment, say in a few words what you are doing, then call it.`
 
 const SKILLS = `Skills (how to handle specific situations; read the matching one before acting)
@@ -175,6 +181,8 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
   if (ctx.memoryBlock.trim()) live.push(fill(MEMORY))
   if (ctx.claudeBlock !== undefined) live.push(fill(CLAUDE_NOW))
   if (ctx.diagramsBlock?.trim()) live.push(DIAGRAMS_NOW.replace('{diagrams}', ctx.diagramsBlock))
+  // last, closest to the message: it is about this reply only
+  if (ctx.playbookBlock?.trim()) live.push(PLAYBOOKS_NOW.replace('{playbooks}', ctx.playbookBlock))
   return { stable: parts.join('\n\n'), live: live.join('\n\n') }
 }
 

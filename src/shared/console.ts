@@ -80,6 +80,13 @@ const CANCEL_REASON: Record<string, string> = {
   stop: 'stopped'
 }
 
+const DROP_REASON: Record<string, string> = {
+  disabled: 'it is switched off',
+  cooldown: 'still cooling down from its last firing',
+  session_cap: 'already fired as often as allowed in this conversation',
+  cap: 'too many playbooks matched; higher priorities won'
+}
+
 function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
   if (kind === 'log') {
     if (/^(claude|cc)\b/.test(name)) return 'claude'
@@ -91,7 +98,7 @@ function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
   }
   const head = name.split('.')[0]
   if (head === 'ear') return 'you'
-  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore') return 'turn'
+  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore' || head === 'trigger' || head === 'playbook' || head === 'playbooks') return 'turn'
   if (head === 'tts') return 'voice'
   if (head === 'playback') return 'playback'
   if (head === 'cc') return 'claude'
@@ -292,6 +299,18 @@ export function describe(e: ConsoleEntry): ConsoleRow {
     case 'explore.done': {
       const status = str(d.status).replace('_', ' ')
       return row(d.answered ? `Explorer finished: ${status}` : `Explorer stopped without an answer (${str(d.reason) || status})`, join(`${str(d.steps)} steps`, ms(d.ms), num(d.edits) ? `${str(d.edits)} edited` : '', num(d.refused) ? `${str(d.refused)} refused` : ''), d.answered && d.status === 'done' ? 'good' : 'warn')
+    }
+    case 'trigger.fired':
+      return row(`Playbook fired: ${str(d.title) || str(d.id)}`, str(d.why), 'accent')
+    case 'trigger.dropped':
+      return row(`Playbook held back: ${str(d.title) || str(d.id)}`, DROP_REASON[str(d.reason)] ?? str(d.reason), 'dim')
+    case 'playbook.applied':
+      return row(`Added the ${str(d.id)} instruction to this reply`, `${str(d.chars)} characters`, 'dim', { noisy: true })
+    case 'playbooks.loaded':
+      return row(`Loaded ${str(d.count)} playbook${d.count === 1 ? '' : 's'} (${str(d.enabled)} on)`, num(d.invalid) ? `${str(d.invalid)} file${d.invalid === 1 ? '' : 's'} could not be read` : '', num(d.invalid) ? 'warn' : 'dim')
+    case 'playbooks.invalid': {
+      const errs = Array.isArray(d.errors) ? (d.errors as unknown[]).map(str) : []
+      return row(`Playbook file not loaded: ${str(d.id)}.md`, join(errs[0] ?? '', errs.length > 1 ? `${errs.length - 1} more problem${errs.length > 2 ? 's' : ''}` : ''), 'bad')
     }
     case 'trace.dropped':
       return row('Some events were dropped (too many at once)', str(d.note), 'warn')

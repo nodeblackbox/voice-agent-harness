@@ -10,7 +10,7 @@ Where values apply:
 | group | consumed by | takes effect |
 |---|---|---|
 | `endpoint`, `runtime.levelEveryFrames` | ear sidecar (`config.endpoint` message) | live |
-| `brain`, `speech`, `memory` | agent core | next turn (`ttsPoolSize`: next launch) |
+| `brain`, `speech`, `memory`, `playbooks` | agent core | next turn (`ttsPoolSize`: next launch) |
 | `playback` | renderer | live |
 | `runtime` (rest) | main process | live |
 
@@ -150,6 +150,16 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `relevantMinScore` | 0 | — | Floor on \|bm25\| for a hit to be injected; 0 = always inject the top hits. Raise (try 2-4) if unrelated memories keep appearing in `turn.start.memoryHints`. |
 | `historyHits` | 3 | 3 | Matching messages from *other* sessions injected as hints. |
 | `hintMaxChars` | 200 | 200 | Truncation per hint. |
+
+## Playbooks (`playbooks`)
+
+See [TRIGGERS.md](TRIGGERS.md). Conditions read these as `tuning.<key>`.
+
+| key | default | what it does |
+|---|---|---|
+| `longMessageChars` | 1200 | A message longer than this counts as long (about a minute and a half of talking). The "Break down long messages" playbook fires above it. |
+| `maxInjected` | 3 | Most playbooks that may shape one reply; the highest priorities win, the rest show as `trigger.dropped` with reason `cap`. 0 switches playbooks off. |
+| `injectMaxChars` | 1200 | Each fired playbook's instruction is cut to this many characters in the prompt. |
 
 ## Runtime and logging (`runtime`)
 

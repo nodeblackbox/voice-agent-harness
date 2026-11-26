@@ -66,4 +66,11 @@ suite('console rows', () => {
     expect(t('turn.tool_end', { name: 'claude_details', ok: true, ms: 12, detail: 'idle', resultChars: 8_000 }).detail).toBe('12 ms · idle · about 2k tokens of result')
     expect(t('turn.usage', { step: 1, model: 'anthropic:claude-haiku-5-5', inputTokens: 12_000, outputTokens: 40, finish: 'tool-calls' }).noisy).toBe(true)
   })
+
+  it('explains playbook firings, hold-backs and broken files', () => {
+    expect(describe(ev('trigger.fired', { id: 'long-message-breakdown', title: 'Break down long messages', why: 'when chars > 1200 (chars 1834)' }))).toMatchObject({ cat: 'turn', title: 'Playbook fired: Break down long messages', detail: 'when chars > 1200 (chars 1834)', tone: 'accent' })
+    expect(describe(ev('trigger.dropped', { id: 'x', title: 'X', reason: 'cooldown' })).detail).toBe('still cooling down from its last firing')
+    expect(describe(ev('playbooks.loaded', { count: 2, enabled: 1, invalid: 1 }))).toMatchObject({ title: 'Loaded 2 playbooks (1 on)', detail: '1 file could not be read', tone: 'warn' })
+    expect(describe(ev('playbooks.invalid', { id: 'broken', errors: ['line 4: unknown field "chance"', 'line 5: x'] }))).toMatchObject({ title: 'Playbook file not loaded: broken.md', detail: 'line 4: unknown field "chance" · 1 more problem', tone: 'bad' })
+  })
 })

@@ -165,6 +165,19 @@ this is the "why" and the bar each part has to meet.
   `src/shared/pricing.ts`; update them there when a provider changes them.
 - The agent knows what it runs on (chat model, voice, speech recognition) and answers from that when asked.
 
+## Playbooks and triggers
+
+- The owner wants to shape how the assistant responds in particular situations without editing prompts:
+  a **trigger** recognises the situation, a **playbook** says what to do about it. The plan and its phases
+  are in [TRIGGERS.md](TRIGGERS.md); ideas come from the owner's earlier co-host project (one Markdown file
+  per playbook, gates, authoring by voice) and Jev playground, with nothing game-specific and **no random
+  chance**: a playbook fires or it doesn't, and the Console says why, including when one matched but was held
+  back.
+- Playbooks are plain files in `<userData>/playbooks`, so they can be read, edited, diffed and (later) put in
+  git and written by voice. A broken file is skipped and its errors shown, never half-loaded.
+- Playbooks must never slow a reply down or cost one: phase 1 is code-only checks that take microseconds, and a
+  failure inside them is logged and the reply goes ahead.
+
 ## Claude Code sessions
 
 - More than a handful at once: the limit is on sessions that are open (idle, working, waiting), not on

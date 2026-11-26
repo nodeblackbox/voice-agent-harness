@@ -27,6 +27,7 @@ import { ClaudeService } from './services/claude'
 import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
+import { PlaybookService } from './services/playbooks'
 import { DiagramService } from './services/diagrams'
 import { firstRunRoots } from '@core/explore/roots'
 import { setupTraining } from './training'
@@ -339,6 +340,11 @@ ${fetchedList.text}`
   }
 
   const diagrams = new DiagramService(userData, send, (doc, id) => emit({ type: 'diagram', id, doc }))
+  // playbooks (docs/TRIGGERS.md): one .md file each in <userData>/playbooks, re-read when they change
+  const playbooks = new PlaybookService(join(userData, 'playbooks'), {
+    log: (level, m) => logAt(level, 'playbooks', m),
+    trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data })
+  })
 
   const agent = new Agent({
     store,
@@ -346,6 +352,7 @@ ${fetchedList.text}`
     keys: settings,
     customStyles: () => (training ? [...settings.styles(), ...training.styles] : settings.styles()),
     skills: () => settings.skills(),
+    playbooks: () => playbooks.playbooks(),
     mcp,
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
@@ -383,6 +390,12 @@ ${fetchedList.text}`
       if (rec.ev === 'tts.engine_down' && rec.engine === 'edge') edgeRoute.trouble(String(rec.reason ?? 'down'))
     }
   })
+
+  try {
+    playbooks.start()
+  } catch (e) {
+    logError('playbooks', 'could not set up the playbooks folder', e)
+  }
 
   // The chosen Edge voice keeps answering slowly: time the plain voice of the same name once the agent is
   // quiet, and offer it when it is clearly quicker. No route change fixes a slow voice (see voiceSpeed.ts).
@@ -577,6 +590,7 @@ ${fetchedList.text}`
 
   app.on('before-quit', () => {
     agent.shutdown()
+    playbooks.stop()
     training?.recorder.dispose()
     // VA_TRACE=1: print where this session's trace landed so scripted runs can pick it up
     if (process.env.VA_TRACE) console.log(`VA_TRACE ${tracePath() ?? 'none'}`)

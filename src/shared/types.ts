@@ -345,6 +345,7 @@ export type BrainSettings = TuningValues['brain']
 export type SpeechSettings = TuningValues['speech']
 export type PlaybackSettings = TuningValues['playback']
 export type MemorySettings = TuningValues['memory']
+export type PlaybookSettings = TuningValues['playbooks']
 export type RuntimeSettings = TuningValues['runtime']
 
 export interface SttSettings {
@@ -505,6 +506,7 @@ export interface Settings {
   speech: SpeechSettings
   playback: PlaybackSettings
   memory: MemorySettings
+  playbooks: PlaybookSettings
   runtime: RuntimeSettings
   stt: SttSettings
   behaviour: BehaviourSettings
