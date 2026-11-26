@@ -9,7 +9,7 @@ import { DiagramCard, InlineDiagram } from '../diagram/DiagramCard'
 import { splitFences } from '@shared/diagram'
 import { fmtUsd } from '@shared/pricing'
 import { formatTokens, usageTitle } from '../../lib/format'
-import { splitBySentences, splitInterrupted } from '../../lib/spoken'
+import { displayText, endsLine, splitBySentences, splitInterrupted } from '../../lib/spoken'
 
 /**
  * Only this many of the newest messages are mounted. A long session has hundreds of bubbles, and
@@ -167,20 +167,23 @@ function ReplyText({ m }: { m: ChatMessage }) {
     return <>{m.text}</>
   }
 
-  if (!spans || (spans.length === 1 && spans[0]!.state === 'plain')) return <>{m.text}</>
+  if (!spans || (spans.length === 1 && spans[0]!.state === 'plain')) return <>{displayText(m.text, true)}</>
+  let lineStart = true
   return (
     <>
       {spans.map((s, i) => {
+        const shown = displayText(s.text, lineStart)
+        lineStart = endsLine(s.text)
         if (s.state === 'current') {
           return (
             <span key={i} style={{ color: T.text, background: T.cyanTint, boxShadow: `inset 3px 0 0 ${T.cyan}`, paddingLeft: 4, marginLeft: -4, borderRadius: 3 }}>
-              {s.text}
+              {shown}
             </span>
           )
         }
         return (
           <span key={i} style={{ color: s.state === 'upcoming' ? T.text3 : T.text }}>
-            {s.text}
+            {shown}
           </span>
         )
       })}

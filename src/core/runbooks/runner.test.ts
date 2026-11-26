@@ -188,6 +188,7 @@ describe('RunbookRunner', () => {
 describe('fill and toList', () => {
   it('fills saved values and turns a model answer into items', () => {
     expect(fill('{{a}} / {{b}} / {{missing}} / {{n}}', { a: 'x', b: ['p', 'q'], n: 3 })).toBe('x / p; q /  / 3')
+    expect(fill('Tasks:\n{{b|lines}}', { b: ['p', 'q'] })).toBe('Tasks:\n- p\n- q')
     expect(toList('1. one\n- two\n\n* three\nNONE')).toEqual(['one', 'two', 'three'])
   })
 })

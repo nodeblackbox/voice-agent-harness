@@ -31,7 +31,8 @@ describe('composeSystemPrompt', () => {
   })
 
   it('uses plain speech rules for plain styles and markdown rules otherwise', () => {
-    expect(composeSystemPrompt(style('short'), ctx)).toContain('No markdown, no bullet points')
+    expect(composeSystemPrompt(style('short'), ctx)).toContain('the voice reads them as a list and never says the dash')
+    expect(composeSystemPrompt(style('short'), ctx)).toContain('Otherwise no markdown: no headings, bold, tables')
     expect(composeSystemPrompt(style('comprehensive'), ctx)).toContain('code blocks and tables are shown on screen only')
   })
 

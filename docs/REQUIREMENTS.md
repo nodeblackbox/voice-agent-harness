@@ -15,6 +15,10 @@ this is the "why" and the bar each part has to meet.
 - **Nothing the user says is lost.** No dropped words while a model reloads, no cut-off replies without
   a reason in the log.
 
+- Replies are written to be heard and laid out to be read: separate parts get their own paragraphs (also between
+  the steps of a reply that used tools), and three or more items become a short list in the chat that the voice
+  reads as a list without saying the dashes. No headings, bold or tables in the spoken styles.
+
 ## Switching voices (TTS engines)
 
 - Picking an engine in Settings takes effect, visibly. The status shows what is actually speaking now,

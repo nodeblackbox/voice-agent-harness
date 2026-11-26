@@ -156,7 +156,7 @@ describe('TurnRunner', () => {
     expect(vi.mocked(h.deps.onMetrics).mock.calls[0]![0]).toMatchObject({ inputTokens: 27, outputTokens: 5, steps: 2 })
   })
 
-  it('puts a space between what the model said before a tool call and after it', async () => {
+  it('starts a new paragraph for what the model says after a tool call', async () => {
     const save = tool({ description: 'save', inputSchema: z.object({}), execute: async () => ({ ok: true }) })
     const before: LanguageModelV4StreamPart[] = [
       { type: 'stream-start', warnings: [] },
@@ -167,7 +167,7 @@ describe('TurnRunner', () => {
       { type: 'finish', finishReason: { unified: 'tool-calls', raw: 'tool_use' }, usage: usage(7, 3) }
     ]
     const h = harness({ 'anthropic:claude-haiku-4-5': mockModel([before, textStream(['Saved it.'])]) }, { tools: { save }, fillerEnabled: false })
-    expect((await h.run()).text).toBe('Want me to save it? Saved it.')
+    expect((await h.run()).text).toBe('Want me to save it?\n\nSaved it.')
   })
 
   it('reports a failing tool as an error and keeps going', async () => {

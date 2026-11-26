@@ -237,7 +237,15 @@ Each phase ends with `pnpm check` passing, a screenshot check of any UI, and a c
 6. **Push after a session finishes** (runbook, phase 6): `cc.finished` → ask "push it?" → `claude` step.
 7. **Session check-up** (runbook, phase 6): `clock.every` → find stalled sessions → nudge or announce.
 
-More templates come after these are tested on real use.
+Added after the phases:
+
+8. **How-to as steps** (playbook): "how do I…" questions → a short numbered list of steps.
+9. **Plan bigger work first** (playbook, Jev): a long `task` → the plan as a short list and a yes before starting.
+10. **Evening to-do roundup** (runbook, clock, off by default): at 18:00 on weekdays, read out saved to-dos.
+11. **Afternoon push reminder** (runbook, clock, off by default): at 17:30 on weekdays, a nudge to commit and push.
+
+Templates are generic on purpose (they ship to everyone): personal ones, such as context for a named project,
+belong in the user's own playbooks folder, made by voice or in the Playbooks view.
 
 ## Not carried over
 

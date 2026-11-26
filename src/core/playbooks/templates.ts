@@ -110,7 +110,7 @@ steps:
     next: { yes: offer, no: end }
   - id: offer
     do: say
-    text: "From that last message I picked out {{tasks_count}} tasks: {{tasks}}. Want me to add them to your to-do list?"
+    text: "From that last message I picked out {{tasks_count}} tasks:\\n{{tasks|lines}}\\n\\nWant me to add them to your to-do list?"
   - id: reply
     do: wait
     expireS: 300
@@ -273,6 +273,115 @@ steps:
 ---
 Checks every ten minutes and speaks at most every 25 minutes (cooldownS). A session counts as waiting while
 it has a question, a permission or a plan for you.
+`
+  },
+  {
+    id: 'how-to-steps',
+    text: `---
+kind: playbook
+title: How-to as steps
+goal: Answer "how do I" questions as a short list of steps that is easy to follow by ear and by eye.
+enabled: true
+priority: normal
+triggers:
+  events: [turn.user]
+  when: 'any_of(lower(text), ["how do i", "how do you", "how can i", "how to ", "what are the steps", "walk me through"])'
+gates:
+  cooldownS: 0
+tags: [format]
+---
+They want to know how to do something. Give one short sentence that says what the steps get them to,
+then the steps, each on its own line starting with "1.", "2." and so on: at most six, a few words each,
+in the order they do them. If a step needs a command or code, describe it in words. End with one short
+sentence on what to check when it is done, or offer to go through it with them.
+`
+  },
+  {
+    id: 'plan-bigger-work',
+    text: `---
+kind: playbook
+title: Plan bigger work first
+goal: When asked for a sizeable piece of work, lay out the plan and get a yes before starting it.
+enabled: true
+priority: normal
+triggers:
+  events: [turn.user]
+  when: 'intent == "task" and words >= 40'
+gates:
+  cooldownS: 0
+tags: [jev, format]
+---
+This is a bigger request with several parts. Before doing anything, say in one sentence what you understood
+the goal to be, then the plan as a short list, each step on its own line starting with "- ", at most six.
+Say which step you would start with and ask whether that plan is right. Do not start the work, call tools
+that change things, or start a Claude Code session until they say yes.
+`
+  },
+  {
+    id: 'evening-todo-roundup',
+    text: `---
+kind: runbook
+title: Evening to-do roundup
+goal: At six on weekdays, read out the to-dos still saved, so nothing carries over by accident.
+enabled: false
+priority: low
+triggers:
+  events: [clock.tick]
+  when: 'time == "18:00" and not (weekday in ["saturday", "sunday"])'
+gates:
+  cooldownS: 3600
+budget:
+  maxSteps: 5
+  maxSeconds: 60
+steps:
+  - id: saved
+    do: tool
+    tool: recall
+    args: { query: "To do" }
+    save: saved
+  - id: open
+    do: model
+    prompt: |
+      These are entries from the user's memory. List the ones that are to-dos (kind todo), one per line, as a
+      short instruction of a few words, at most eight, most urgent first. If there are none, answer NONE.
+
+      {{saved}}
+    save: open
+    list: true
+  - id: any
+    do: check
+    if: "open_count > 0"
+    next: { yes: say, no: end }
+  - id: say
+    do: say
+    text: "It's six o'clock. Still on your list:\\n{{open|lines}}\\n\\nWant to go through any of them before you stop?"
+---
+Off by default: switch it on if you want a nudge at the end of the day. It only reads; it changes nothing.
+`
+  },
+  {
+    id: 'push-reminder',
+    text: `---
+kind: runbook
+title: Afternoon push reminder
+goal: Late on weekday afternoons, remind the user to commit and push their work before they stop.
+enabled: false
+priority: low
+triggers:
+  events: [clock.tick]
+  when: 'time == "17:30" and not (weekday in ["saturday", "sunday"])'
+gates:
+  cooldownS: 3600
+budget:
+  maxSteps: 3
+  maxSeconds: 10
+steps:
+  - id: remind
+    do: say
+    text: "It's half past five. Anything to commit and push before you finish for the day?"
+---
+Off by default: switch it on for a daily nudge to push. "Push after a session finishes" covers work that a
+Claude Code session did; this one is for everything else.
 `
   }
 ]

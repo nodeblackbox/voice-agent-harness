@@ -120,7 +120,7 @@ describe('runbooks in the engine', () => {
       ['plain', 'playbook']
     ])
     expect(events.find((e) => e.ev === 'trigger.dropped')!.data).toMatchObject({ id: 'low-job', reason: 'one_runbook' })
-    expect(out.block).toContain('"high-job" has started in the background for this message (its job: Does high-job). It is already handled: do not do that part yourself, and do not start, queue, save or set up anything for it. Mention it in a few words, in your own way, like: "on it"')
+    expect(out.block).toContain('"high-job" has started in the background for this message (its job: Does high-job). It is already handled: do not do that part yourself, do not start, queue, save or set up anything for it, and do not ask the user about it either (the job asks its own question). Mention it in a few words, in your own way, like: "on it"')
     expect(out.block).not.toContain('Notes')
   })
 })
@@ -150,6 +150,47 @@ describe('PlaybookEngine.onEvent', () => {
     const { engine, events } = setup()
     expect(engine.onEvent([{ ...rb('clock', '  events: [clock.tick]'), enabled: false }], 'clock.tick', { minute: 1 }, {})).toBeNull()
     expect(events).toEqual([])
+  })
+})
+
+describe('the shipped templates fire where they should', () => {
+  const tpl = (id: string) => {
+    const r = parsePlaybook(id, TEMPLATES.find((t) => t.id === id)!.text)
+    if (!r.ok) throw new Error(JSON.stringify(r.errors))
+    return { ...r.playbook, enabled: true }
+  }
+
+  it('how-to steps: on "how do I" questions, not on small talk', () => {
+    const { engine } = setup()
+    const p = tpl('how-to-steps')
+    expect(engine.onUserTurn([p], facts('How do I reset the voice settings?'), limits).fired).toHaveLength(1)
+    expect(engine.onUserTurn([p], facts('how are you doing today'), limits).fired).toHaveLength(0)
+  })
+
+  it('plan bigger work: a long task, not a short one or a long idea', () => {
+    const { engine } = setup()
+    const p = tpl('plan-bigger-work')
+    const long = 'Build a spend tab that shows tokens per session and per model, with a chart by day, totals for the voice side and Claude Code separately, a filter by project, an export to CSV, and make sure it works in both themes and on small windows too please'
+    expect(engine.onUserTurn([p], facts(long), limits, { intent: 'task', intentP: 0.9, asks: {} }).fired).toHaveLength(1)
+    expect(engine.onUserTurn([p], facts('add a spend tab'), limits, { intent: 'task', intentP: 0.9, asks: {} }).fired).toHaveLength(0)
+    expect(engine.onUserTurn([p], facts(long), limits, { intent: 'idea', intentP: 0.9, asks: {} }).fired).toHaveLength(0)
+  })
+
+  it('the clock runbooks: at their time on weekdays only', () => {
+    const { engine } = setup()
+    const evening = tpl('evening-todo-roundup')
+    const push = tpl('push-reminder')
+    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:00', weekday: 'tuesday' }, {})).toMatchObject({ id: 'evening-todo-roundup' })
+    expect(engine.onEvent([evening, push], 'clock.tick', { time: '17:30', weekday: 'friday' }, {})).toMatchObject({ id: 'push-reminder' })
+    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:00', weekday: 'sunday' }, {})).toBeNull()
+    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:01', weekday: 'monday' }, {})).toBeNull()
+  })
+
+  it('ships the clock runbooks switched off', () => {
+    for (const id of ['evening-todo-roundup', 'push-reminder']) {
+      const r = parsePlaybook(id, TEMPLATES.find((t) => t.id === id)!.text)
+      expect(r.ok && r.playbook.enabled).toBe(false)
+    }
   })
 })
 

@@ -1696,7 +1696,7 @@ export class Agent {
     if (this.announceTimer || !this.announceQueue.length) return
     const quiet = !this.turn && (this.sm.state === 'idle' || this.sm.state === 'listening')
     if (quiet) {
-      void this.speakAnnouncement(this.announceQueue.splice(0).join(' '))
+      void this.speakAnnouncement(this.announceQueue.splice(0).join('\n\n'))
       return
     }
     this.announceTimer = setTimeout(() => {

@@ -2,6 +2,7 @@ import type { AudioChunk, VoiceSettings } from '@shared/types'
 import { requestFields } from '@shared/tts'
 import { DEFAULT_TUNING } from '@shared/tuning'
 import { stripTags } from './tags'
+import { speakableLine } from '../prompts/speakable'
 import { isAbort, type TtsEngine, type TtsRequest } from './tts'
 
 export interface SpeakerDeps {
@@ -62,7 +63,7 @@ export class Speaker {
   ) {}
 
   say(text: string, kind: Kind = 'speech'): void {
-    const clean = text.trim()
+    const clean = speakableLine(text.trim()).trim()
     if (!clean || this.finished || this.signal.aborted || this.deps.silent) return
     const seq = this.seq++
     if (kind === 'filler') this.fillers++

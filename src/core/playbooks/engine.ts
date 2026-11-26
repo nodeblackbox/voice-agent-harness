@@ -160,7 +160,7 @@ export class PlaybookEngine {
       if (p.kind === 'runbook') {
         // the run itself starts in the agent; the reply only mentions it, and only when the runbook says what to say
         // either way the reply must not do the job's work too (start the same Claude Code session, save the same tasks)
-        lines.push(`- "${p.title}" has started in the background for this message (its job: ${p.goal.replace(/\.$/, '')}). It is already handled: do not do that part yourself, and do not start, queue, save or set up anything for it.${p.ack ? ` Mention it in a few words, in your own way, like: "${p.ack}"` : ''}`)
+        lines.push(`- "${p.title}" has started in the background for this message (its job: ${p.goal.replace(/\.$/, '')}). It is already handled: do not do that part yourself, do not start, queue, save or set up anything for it, and do not ask the user about it either (the job asks its own question).${p.ack ? ` Mention it in a few words, in your own way, like: "${p.ack}"` : ''}`)
       } else {
         const body = p.body.length > limits.injectMaxChars ? `${p.body.slice(0, limits.injectMaxChars - 1)}…` : p.body
         lines.push(`- ${p.title} (goal: ${p.goal})\n${body}`)

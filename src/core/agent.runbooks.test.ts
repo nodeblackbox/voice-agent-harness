@@ -92,7 +92,7 @@ describe('Agent: runbooks', () => {
     expect(prompts[0]!.live).toContain('"Brain dump to tasks" has started in the background')
     expect(prompts[0]!.live).toContain('It is already handled: do not do that part yourself')
     await vi.waitFor(() => expect(agent.runbooks.list()[0]?.status).toBe('waiting'))
-    expect(said).toHaveBeenCalledWith('From that last message I picked out 2 tasks: Add a spend tab; Push the branch. Want me to add them to your to-do list?')
+    expect(said).toHaveBeenCalledWith('From that last message I picked out 2 tasks:\n- Add a spend tab\n- Push the branch\n\nWant me to add them to your to-do list?')
     expect(generated[0]).toContain('that is the plan.')
 
     void agent.send('yes, add them')

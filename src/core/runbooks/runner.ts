@@ -34,12 +34,13 @@ const KEEP_FINISHED = 30
 
 const ACTIVE: RunbookRunStatus[] = ['running', 'waiting']
 
-/** {{name}} -> the saved value: lists joined with "; ", objects as JSON, missing as empty. */
+/** {{name}} -> the saved value: lists joined with "; " ({{name|lines}}: one "- item" per line), objects as JSON, missing as empty. */
 export function fill(template: string, scratch: Record<string, unknown>): string {
-  return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g, (_m, key: string) => {
+  return template.replace(/\{\{\s*([a-zA-Z_][\w-]*)\s*(\|\s*lines\s*)?\}\}/g, (_m, key: string, lines?: string) => {
     const v = scratch[key]
     if (v === undefined || v === null) return ''
-    if (Array.isArray(v)) return v.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('; ')
+    const item = (x: unknown): string => (typeof x === 'string' ? x : JSON.stringify(x))
+    if (Array.isArray(v)) return lines ? v.map((x) => `- ${item(x)}`).join('\n') : v.map(item).join('; ')
     if (typeof v === 'object') return JSON.stringify(v)
     return String(v)
   })

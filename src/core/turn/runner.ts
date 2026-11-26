@@ -372,7 +372,8 @@ export class TurnRunner {
                 break
               }
             }
-            if (afterTool && this.text && !/\s$/.test(this.text) && !/^\s/.test(delta)) delta = ` ${delta}`
+            // after a tool call the model starts a new thought: a new paragraph, not a run-on sentence
+            if (afterTool && this.text.trim() && !/\n\s*$/.test(this.text)) delta = `\n\n${delta.replace(/^\s+/, '')}`
             afterTool = false
             this.text += delta
             this.deps.onDelta(delta)
