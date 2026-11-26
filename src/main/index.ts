@@ -20,6 +20,7 @@ import { SettingsService } from './services/settings'
 import { SidecarService } from './services/sidecar'
 import { SearxngService } from './services/searxng'
 import { KokoroService } from './services/kokoro'
+import { PocketService } from './services/pocket'
 import { EdgeRouteService, ipCountries } from './services/edgeRoute'
 import { edgeProbe } from '@core/speech/proxyRank'
 import { SlowVoiceWatch, quickTwin } from '@core/speech/voiceSpeed'
@@ -251,6 +252,8 @@ app.whenReady().then(async () => {
 
   const searxng = new SearxngService({ projectRoot, url: () => settings.get().searxng.url, onStatus })
   const kokoro = new KokoroService({ projectRoot, python: () => sidecar.resolvePython(), voice: () => settings.get().voice.kokoroVoice })
+  // Pocket TTS: a local server, started when it is the chosen voice (the command or address comes from Settings or .env)
+  const pocket = new PocketService({ server: () => settings.get().voice.pocketServer ?? '', voice: () => settings.get().voice.pocketVoice?.trim() || 'cosette', env: { ...process.env, ...(settings.envVar('POCKET_TTS_COMMAND') ? { POCKET_TTS_COMMAND: settings.envVar('POCKET_TTS_COMMAND') } : {}) } })
   const mcp = new McpService({
     projectRoot,
     userData,
@@ -409,6 +412,7 @@ ${fetchedList.text}`
       restartStuck: () => sidecar.ready && sidecar.restart()
     },
     kokoro,
+    pocket,
     cloudTts,
     edgeAgent,
     emit,
@@ -465,6 +469,14 @@ ${fetchedList.text}`
     const noKey = isCloudTts(v.engine) && !settings.keysFor(v.engine).length
     const raw = requestFields(v, v.engine).voice
     const voice = v.engine === 'edge' ? raw.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '') : raw
+    if (v.engine === 'pocket') {
+      const p = pocket.state()
+      const who = `${TTS_ENGINE_LABELS.pocket} · ${v.pocketVoice?.trim() || 'cosette'}`
+      if (p.state === 'ready') return { name: 'tts', state: 'ready', detail: who }
+      if (p.state === 'loading') return { name: 'tts', state: 'starting', detail: `${TTS_ENGINE_LABELS.pocket}: loading… Edge speaks until it is ready` }
+      if (p.state === 'failed') return { name: 'tts', state: 'error', detail: `${TTS_ENGINE_LABELS.pocket} failed: ${p.error.slice(0, 120)}` }
+      return { name: 'tts', state: 'starting', detail: `${TTS_ENGINE_LABELS.pocket}: not started yet` }
+    }
     if (v.engine === 'kokoro') {
       const k = kokoro.state()
       const who = `${TTS_ENGINE_LABELS.kokoro} · ${v.kokoroVoice}`
@@ -507,6 +519,12 @@ ${fetchedList.text}`
     if (Object.keys(changed).some((k) => k.startsWith('voice.proxy'))) agent.resetTts()
     // picking Kokoro loads it now (30-60 s), not on the first sentence of the next reply
     if (changed['voice.engine'] === 'kokoro') void kokoro.start({ force: true })
+    // the same for Pocket TTS; a new command, address or default voice restarts its server
+    if (changed['voice.engine'] === 'pocket') void pocket.start({ force: true })
+    if (('voice.pocketServer' in changed || 'voice.pocketVoice' in changed) && s.voice.engine === 'pocket') {
+      pocket.stop()
+      void pocket.start({ force: true })
+    }
     // switched on: load the ears now; switched off: the idle timer applies from the next time the mic closes
     if (changed['behaviour.keepEarsLoaded'] === true) sidecar.start()
     // a new proxy list, or automatic routing switched on: test it (a full test when the list changed)
@@ -546,6 +564,7 @@ ${fetchedList.text}`
     services,
     edgeRoute,
     kokoro,
+    pocket,
     broadcastSettings: (s) => emit({ type: 'settings-changed', settings: s })
   })
 
@@ -558,6 +577,14 @@ ${fetchedList.text}`
     if (k.state === 'failed') emit({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'error', text: `Kokoro couldn't load (${k.error.slice(0, 100)}); Edge keeps speaking. Pick Kokoro again to retry.` } })
   })
   if (settings.get().voice.engine === 'kokoro') void kokoro.start()
+  pocket.onState((p) => {
+    onStatus(ttsStatus())
+    trace({ ev: 'tts.pocket_state', sid: agent.currentSessionId, state: p.state, ...(p.state === 'ready' ? { url: p.url } : {}), ...(p.state === 'failed' ? { error: p.error.slice(0, 200) } : {}) })
+    if (settings.get().voice.engine !== 'pocket') return
+    if (p.state === 'ready') emit({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'info', text: 'Pocket TTS is ready; replies use it from now on.' } })
+    if (p.state === 'failed') emit({ type: 'toast', toast: { id: crypto.randomUUID(), kind: 'error', text: `Pocket TTS couldn't start (${p.error.slice(0, 140)}); Edge keeps speaking.` } })
+  })
+  if (settings.get().voice.engine === 'pocket') void pocket.start()
   // pick Edge's route in the background; the first reply goes direct if this is still running
   if (settings.get().voice.proxy.auto !== false) void edgeRoute.start()
 
@@ -608,6 +635,12 @@ ${fetchedList.text}`
       void (async () => {
         for (const [i, line] of lines.entries()) {
           // "@wait-runbook": hold the next message until a runbook is waiting for a reply (up to five minutes)
+          // "@wait 20s": just wait, e.g. for a local voice to finish starting
+          const pause = /^@wait (\d+)s$/.exec(line)
+          if (pause) {
+            await new Promise((r) => setTimeout(r, Number(pause[1]) * 1000))
+            continue
+          }
           if (line === '@wait-runbook') {
             for (let w = 0; w < 600 && !agent.runbooks.list().some((r) => r.status === 'waiting'); w++) await new Promise((r) => setTimeout(r, 500))
             continue
@@ -694,6 +727,7 @@ ${fetchedList.text}`
     if (process.env.VA_TRACE) console.log(`VA_TRACE ${tracePath() ?? 'none'}`)
     sidecar.stop()
     kokoro.stop()
+    pocket.stop()
     searxng.stop()
     void mcp.stop()
     void claude.stop()

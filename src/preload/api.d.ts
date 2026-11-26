@@ -84,6 +84,8 @@ export interface VoiceAgentApi {
     speed(voice: string): Promise<number>
     /** Load Kokoro now (skips the back-off after a failed load); true once it is ready. */
     startKokoro(): Promise<boolean>
+    /** Start the local Pocket TTS server now (it otherwise starts on the first sentence). */
+    startPocket(): Promise<boolean>
     voices(): Promise<VoiceInfo[]>
   }
   playback: {

@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentName: 'Ava',
   userName: 'the user',
   aboutUser: '',
-  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false, list: '', auto: true } },
+  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', pocketVoice: 'cosette', pocketServer: '', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false, list: '', auto: true } },
   audio: {},
   ...defaultTuning(),
   stt: { model: 'nemo-parakeet-tdt-0.6b-v2', device: 'hybrid', pythonPath: '' },

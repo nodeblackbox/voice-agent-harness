@@ -136,9 +136,37 @@ export const isCloudTts = (engine: string): engine is CloudTtsProvider => engine
 export const QWEN_HOST_ENV = 'DASHSCOPE_HOST'
 export const QWEN_DEFAULT_HOST = 'dashscope-intl.aliyuncs.com'
 
+/** Built-in English voices (the pocket-tts README); cosette first. */
+export const POCKET_VOICES: Array<{ id: string; note: string }> = [
+  { id: 'cosette', note: 'female, expressive' },
+  { id: 'alba', note: 'female, casual' },
+  { id: 'anna', note: 'female' },
+  { id: 'azelma', note: 'female' },
+  { id: 'eponine', note: 'female' },
+  { id: 'eve', note: 'female' },
+  { id: 'fantine', note: 'female' },
+  { id: 'jane', note: 'female' },
+  { id: 'mary', note: 'female' },
+  { id: 'vera', note: 'female' },
+  { id: 'caro_davy', note: 'female' },
+  { id: 'marius', note: 'male' },
+  { id: 'javert', note: 'male' },
+  { id: 'jean', note: 'male' },
+  { id: 'charles', note: 'male' },
+  { id: 'george', note: 'male' },
+  { id: 'michael', note: 'male' },
+  { id: 'paul', note: 'male' },
+  { id: 'bill_boerst', note: 'male' },
+  { id: 'peter_yearsley', note: 'male' },
+  { id: 'stuart_bell', note: 'male' }
+]
+
+export const POCKET_DEFAULT_VOICE = 'cosette'
+
 export const TTS_ENGINE_LABELS: Record<TtsEngineId, string> = {
   edge: 'Edge TTS',
   kokoro: 'Kokoro (local)',
+  pocket: 'Pocket TTS (local)',
   system: 'Windows voice',
   elevenlabs: TTS_PROVIDERS.elevenlabs.label,
   fish: TTS_PROVIDERS.fish.label,
@@ -157,6 +185,7 @@ export function cloudChoice(voice: VoiceSettings, provider: CloudTtsProvider): {
 export function requestFields(voice: VoiceSettings, engine: TtsEngineId): { voice: string; model: string; instruction: string } {
   if (engine === 'edge') return { voice: voice.voice, model: '', instruction: '' }
   if (engine === 'kokoro') return { voice: voice.kokoroVoice, model: '', instruction: '' }
+  if (engine === 'pocket') return { voice: voice.pocketVoice?.trim() || POCKET_DEFAULT_VOICE, model: '', instruction: '' }
   if (engine === 'system') return { voice: '', model: '', instruction: '' }
   return cloudChoice(voice, engine)
 }

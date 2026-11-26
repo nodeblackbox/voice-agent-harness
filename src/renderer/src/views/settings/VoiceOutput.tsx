@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Check, Gauge, Headphones, Play, type LucideIcon } from 'lucide-react'
 import type { CloudTtsProvider, CloudVoiceChoice, ProxyRank, TtsCatalog, TtsEngineId, VoiceInfo } from '@shared/types'
-import { CLOUD_TTS_PROVIDERS, TTS_ENGINE_LABELS, TTS_PROVIDERS, cloudChoice, isCloudTts, modelTakesTags } from '@shared/tts'
+import { CLOUD_TTS_PROVIDERS, POCKET_VOICES, TTS_ENGINE_LABELS, TTS_PROVIDERS, cloudChoice, isCloudTts, modelTakesTags } from '@shared/tts'
 import { T, serviceColor, serviceLabel } from '../../theme'
 import { keyedProviders, useStore } from '../../state/store'
 import { Btn, Card, Dot, Row, Select, TextInput, Toggle } from '../../components/primitives'
@@ -9,6 +9,7 @@ import { Btn, Card, Dot, Row, Select, TextInput, Toggle } from '../../components
 const ENGINE_SUB: Record<TtsEngineId, string> = {
   edge: 'Free Microsoft voice, streamed sentence by sentence. If it is unreachable or rate-limited the local Kokoro voice takes over until it recovers.',
   kokoro: 'Runs on this machine (needs the sidecar Python). Slower to start, never rate-limited.',
+  pocket: 'Kyutai Pocket TTS, on this machine\u2019s CPU: one to two seconds to make a sentence, no key, never rate-limited; Edge speaks while it starts. Needs pocket-tts installed, or the address of a server you run.',
   system: 'The Windows voice, spoken by the renderer. Always available.',
   elevenlabs: 'Hosted. Needs an ElevenLabs key; the free tier covers about ten thousand characters a month.',
   fish: 'Hosted. The free tier model works without credit; your own clones are listed once the key is set.',
@@ -94,6 +95,7 @@ export function VoiceOutput() {
   /** Edge voices timed from here: ms until a new sentence is ready, 'timing' while measuring, 'failed' on error. */
   const [speeds, setSpeeds] = useState<Record<string, number | 'timing' | 'failed'>>({})
   const [proxyDraft, setProxyDraft] = useState<string | null>(null)
+  const [pocketDraft, setPocketDraft] = useState<string | null>(null)
   const [listDraft, setListDraft] = useState<string | null>(null)
   const [showRanking, setShowRanking] = useState(false)
   const route = useStore((s) => s.edgeRoute)
@@ -180,6 +182,7 @@ export function VoiceOutput() {
   const engineOptions = [
     { id: 'edge', label: TTS_ENGINE_LABELS.edge },
     { id: 'kokoro', label: TTS_ENGINE_LABELS.kokoro },
+    { id: 'pocket', label: TTS_ENGINE_LABELS.pocket },
     { id: 'system', label: TTS_ENGINE_LABELS.system },
     ...CLOUD_TTS_PROVIDERS.map((p) => {
       const locked = keyed !== null && !keyed.has(p)
@@ -213,6 +216,9 @@ export function VoiceOutput() {
       : route.proxies === 0
         ? 'No proxies yet: Edge goes direct.'
         : `${route.url ? `Now through ${route.label}${route.country ? ` (${route.country})` : ''}` : 'Now direct'}${route.firstMs != null ? ` · ${route.firstMs} ms` : ''}${route.url ? ` (direct ${route.directMs != null ? `${route.directMs} ms` : 'failed'})` : ''} · checked ${ago(route.checkedAt, now)} · ${route.proxies} proxies, all tested ${ago(route.rankedAt, now)}`
+  const pocketState = engine === 'pocket' ? tts?.state : undefined
+  const pocketLoading = pocketState === 'starting' && !!tts?.detail?.includes('loading')
+  const pocketVoice = v.pocketVoice?.trim() || 'cosette'
   const kokoroState = engine === 'kokoro' ? tts?.state : undefined
   const kokoroLoading = kokoroState === 'starting' && !!tts?.detail?.includes('loading')
   return (
@@ -223,7 +229,7 @@ export function VoiceOutput() {
             <span className="inline-flex items-center gap-2 text-xs" style={{ color: T.text2 }}>
               <Dot color={serviceColor(tts?.state)} />
               <span style={{ color: T.text3 }}>{tts?.detail ?? serviceLabel(tts?.state)}</span>
-              <Select value={engine} width={150} onChange={(id) => void updateSettings({ voice: { ...v, engine: id as TtsEngineId } })} options={engineOptions} />
+              <Select value={engine} width={180} onChange={(id) => void updateSettings({ voice: { ...v, engine: id as TtsEngineId } })} options={engineOptions} />
             </span>
           </Row>
           {cloud && info && choice && (
@@ -277,6 +283,66 @@ export function VoiceOutput() {
                 </Row>
               )}
             </>
+          )}
+          {engine === 'pocket' && (
+            <Row
+              label="Pocket TTS"
+              sub={
+                pocketState === 'ready'
+                  ? 'Running on this machine.'
+                  : pocketState === 'error'
+                    ? (tts?.detail ?? 'Failed to start.')
+                    : 'Starts in a few seconds (the first time it downloads the model once). Edge speaks until it is ready.'
+              }
+            >
+              <span className="inline-flex items-center gap-2 text-xs" style={{ color: pocketState === 'ready' ? T.green : pocketState === 'error' ? T.red : T.amber }}>
+                <Dot color={serviceColor(pocketState)} />
+                {pocketState === 'ready' ? 'Ready' : pocketState === 'error' ? 'Failed' : pocketLoading ? <span className="va-pulse">Starting…</span> : 'Not started'}
+                {pocketState !== 'ready' && !pocketLoading && (
+                  <Btn small onClick={() => void window.api.speak.startPocket()}>
+                    {pocketState === 'error' ? 'Retry' : 'Start now'}
+                  </Btn>
+                )}
+              </span>
+            </Row>
+          )}
+          {engine === 'pocket' && (
+            <Row label="Pocket voice" sub="A built-in voice. Changes restart the server and apply from the next sentence.">
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1 text-xs"
+                  style={{ color: previewing === pocketVoice ? T.cyan : T.text3, cursor: pocketState === 'ready' ? 'pointer' : 'default', opacity: pocketState === 'ready' ? 1 : 0.5 }}
+                  onClick={() => pocketState === 'ready' && void preview(pocketVoice, 'pocket')}
+                  role="button"
+                  aria-label="Preview Pocket voice"
+                  title={pocketState === 'ready' ? 'Hear this voice' : 'Available once Pocket TTS is running'}
+                >
+                  <Play size={11} /> preview
+                </span>
+                <Select
+                  value={pocketVoice}
+                  width={190}
+                  onChange={(id) => void updateSettings({ voice: { ...v, pocketVoice: id } })}
+                  options={(POCKET_VOICES.some((x) => x.id === pocketVoice) ? POCKET_VOICES : [{ id: pocketVoice, note: 'custom' }, ...POCKET_VOICES]).map((x) => ({ id: x.id, label: `${x.id[0]!.toUpperCase()}${x.id.slice(1).replace(/_/g, ' ')} · ${x.note}` }))}
+                />
+              </span>
+            </Row>
+          )}
+          {engine === 'pocket' && (
+            <Row label="Pocket server" sub="Empty: pocket-tts on the PATH (or POCKET_TTS_COMMAND in .env). Or the full path to pocket-tts, a command like uvx pocket-tts, or the address of a server you run (http://127.0.0.1:8000).">
+              <TextInput
+                mono
+                value={pocketDraft ?? v.pocketServer ?? ''}
+                onChange={setPocketDraft}
+                onBlur={() => {
+                  if (pocketDraft !== null && pocketDraft.trim() !== (v.pocketServer ?? '')) void updateSettings({ voice: { ...v, pocketServer: pocketDraft.trim() } })
+                  setPocketDraft(null)
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                placeholder="pocket-tts"
+                style={{ width: 300 }}
+              />
+            </Row>
           )}
           {engine === 'kokoro' && (
             <Row

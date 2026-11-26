@@ -252,6 +252,8 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return row(`${str(d.engine)} voice is down: ${str(d.reason)}`, join(`using ${str(d.fallback)}`, `retry in ${ms(d.retryInMs)}`), 'bad')
     case 'tts.engine_probe':
       return row(d.ok ? `${str(d.engine)} voice works again` : `${str(d.engine)} voice still failing`, str(d.reason), d.ok ? 'good' : 'warn')
+    case 'tts.pocket_state':
+      return row(d.state === 'ready' ? 'Pocket TTS is ready' : d.state === 'loading' ? 'Starting Pocket TTS' : d.state === 'failed' ? `Pocket TTS failed: ${str(d.error)}` : 'Pocket TTS stopped', str(d.url), d.state === 'ready' ? 'good' : d.state === 'failed' ? 'bad' : 'dim')
     case 'tts.kokoro_state':
       return row(`Kokoro: ${str(d.state)}`, str(d.error), d.state === 'ready' ? 'good' : d.state === 'failed' ? 'bad' : 'plain')
     case 'tts.route':

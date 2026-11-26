@@ -39,6 +39,7 @@ const api: VoiceAgentApi = {
     testRoutes: () => invoke(IPC.ttsRouteTest),
     speed: (voice) => invoke(IPC.ttsVoiceSpeed, voice),
     startKokoro: () => invoke(IPC.kokoroStart),
+    startPocket: () => invoke(IPC.pocketStart),
     voices: () => invoke(IPC.voicesList)
   },
   playback: {

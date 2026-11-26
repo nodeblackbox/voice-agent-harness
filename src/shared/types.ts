@@ -488,7 +488,7 @@ export type CloudTtsProvider = 'elevenlabs' | 'fish' | 'inworld' | 'qwen'
 export type ServiceKeyProvider = 'typesafe'
 /** Everything the key store holds a key for. */
 export type KeyName = Provider | CloudTtsProvider | ServiceKeyProvider
-export type TtsEngineId = 'edge' | 'kokoro' | 'system' | CloudTtsProvider
+export type TtsEngineId = 'edge' | 'kokoro' | 'pocket' | 'system' | CloudTtsProvider
 
 export interface CloudVoiceChoice {
   /** Voice id as the provider names it; empty = the provider's default (or the .env default). */
@@ -563,6 +563,10 @@ export interface VoiceSettings {
   voice: string
   /** Kokoro voice id (e.g. af_heart); used when Edge is unreachable or Kokoro is the engine. */
   kokoroVoice: string
+  /** Pocket TTS built-in voice (e.g. cosette), or a voice file URL. */
+  pocketVoice?: string
+  /** Pocket TTS server: the pocket-tts command or its path (empty: POCKET_TTS_COMMAND, else pocket-tts on the PATH), or the http address of a server you run. */
+  pocketServer?: string
   rate: number
   pitch: number
   /** Per hosted provider: the voice and model to use, kept so switching engines remembers choices. */

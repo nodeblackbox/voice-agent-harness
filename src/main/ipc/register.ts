@@ -44,6 +44,7 @@ export interface IpcDeps {
   services: () => ServiceStatus[]
   edgeRoute: EdgeRouteService
   kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
+  pocket: { start(opts?: { force?: boolean }): Promise<boolean> }
   broadcastSettings(s: Settings): void
 }
 
@@ -101,6 +102,7 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.ttsRouteTest, () => d.edgeRoute.retestAll())
   h(IPC.ttsVoiceSpeed, (_e, voice: string) => d.agent.voiceSpeed(String(voice)))
   h(IPC.kokoroStart, () => d.kokoro.start({ force: true }))
+  h(IPC.pocketStart, () => d.pocket.start({ force: true }))
   h(IPC.voicesList, () => d.agent.voices())
 
   ipcMain.on(IPC.playbackStarted, (_e, turnId: string, seq: number, emittedAt?: number) => d.agent.onPlaybackStarted(turnId, seq, typeof emittedAt === 'number' ? emittedAt : undefined))

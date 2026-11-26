@@ -26,6 +26,13 @@ this is the "why" and the bar each part has to meet.
 - **Kokoro (local) is loaded on demand**: picking it starts loading straight away (30-60 s), with a
   loading indicator and a Load/Retry button; replies keep using Edge until it is ready and then switch by
   themselves, with a toast. It must never look selected while something else silently speaks.
+- **Pocket TTS (local)**, Kyutai's small CPU model, with the cosette voice by default: picking it starts its
+  server (`pocket-tts serve` on a free local port, from the command in Settings, `POCKET_TTS_COMMAND`, or
+  `pocket-tts` on the PATH), or uses the address of a server the owner runs. Edge covers until it answers.
+  Measured on the owner's machine: 1.0-1.3 s for a sentence alone, about 1.8 s for a first sentence in the app
+  (first audio 2.8 s after the reply starts), so sentences are made one at a time: two at once on the CPU each
+  took twice as long. Its
+  first-audio speed while streaming (about 0.16 s) is not used yet: sentences play once complete.
 - A failed engine says why (no key, deleted voice, rate limit) instead of degrading without a word. A
   saved hosted voice that isn't on the key's account (cloned voices belong to one account) is flagged in
   Settings before it is used.

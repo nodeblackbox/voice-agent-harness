@@ -54,6 +54,7 @@ import { buildModelMessages, compactToolResult } from './turn/history'
 import { splitSpoken, type CutPoint, type SpokenChunk } from './turn/spoken'
 import { mergeTexts, parseFillerWords, unfinishedReason } from './turn/continuation'
 import { Coalescer } from './turn/coalesce'
+import { PocketTtsEngine, POCKET_DEFAULT_VOICE, type PocketBackend } from './speech/pocket'
 import { PlaybookEngine, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
 import { JevError, type JevClient } from './jev/client'
 import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
@@ -104,6 +105,8 @@ export interface AgentDeps {
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
+  /** Local Pocket TTS server (Kyutai), started when it is the chosen voice. */
+  pocket?: PocketBackend
   /** Hosted voices (ElevenLabs, Fish, Inworld, Qwen), built by the main process with its keys and proxy. */
   cloudTts?: Partial<Record<CloudTtsProvider, CloudTtsEngine>>
   /** Proxy agent for the Edge socket, when the user routes Edge through one. */
@@ -208,6 +211,7 @@ export class Agent {
   private edge: EdgeTtsEngine
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
+  private pocket: PocketTtsEngine | null = null
   /** Health per remote voice (Edge and the hosted ones): once one fails the local voice is kept until a background probe succeeds. */
   private ttsHealth = new Map<TtsEngineId, EdgeHealth>()
   /** Measured request -> first audio per engine; sizes the first chunk so a slow engine does not stutter. */
@@ -271,6 +275,7 @@ export class Agent {
     })
     this.edge = new EdgeTtsEngine(deps.settings().speech.ttsPoolSize, () => deps.settings().speech.ttsTimeoutMs, deps.edgeAgent)
     if (deps.kokoro) this.kokoro = new KokoroTtsEngine(deps.kokoro, () => deps.settings().voice.kokoroVoice, deps.log)
+    if (deps.pocket) this.pocket = new PocketTtsEngine(deps.pocket, () => deps.settings().voice.pocketVoice?.trim() || POCKET_DEFAULT_VOICE, deps.log)
     const sessions = deps.store.sessions()
     const latest = sessions[0]
     if (latest && latest.messageCount === 0) this.selectSession(latest.id)
@@ -735,6 +740,7 @@ export class Agent {
         else void this.deps.kokoro?.start()
       })
     } else if (speakThisTurn && engine === this.kokoro) void this.deps.kokoro?.start()
+    else if (speakThisTurn && engine === this.pocket) void this.deps.pocket?.start()
     const turn: ActiveTurn = {
       id: turnId,
       controller,
@@ -1145,7 +1151,9 @@ export class Agent {
       ? { ...s.voice, engine, cloud: { ...s.voice.cloud, [engine]: { ...s.voice.cloud?.[engine], voice } } }
       : engine === 'kokoro'
         ? { ...s.voice, engine, kokoroVoice: voice }
-        : { ...s.voice, engine, voice }
+        : engine === 'pocket'
+          ? { ...s.voice, engine, pocketVoice: voice }
+          : { ...s.voice, engine, voice }
     await this.readText(`Hi, I'm ${s.agentName}. This is how I sound with this voice.`, 'plain', v)
   }
 
@@ -1256,6 +1264,7 @@ export class Agent {
     const chosen = this.chosenEngine(s)
     if (chosen === this.system) return chosen
     if (chosen === this.kokoro) return this.kokoroCover() ?? chosen
+    if (chosen === this.pocket) return this.pocketCover() ?? chosen
     return this.health(chosen.name).down ? this.fallbackEngine() : chosen
   }
 
@@ -1270,10 +1279,18 @@ export class Agent {
     return this.health('edge').down ? null : this.edge
   }
 
+  /** Pocket TTS is picked but its server is still starting: Edge speaks until it answers, as for Kokoro. */
+  private pocketCover(): TtsEngine | null {
+    if (!this.deps.pocket || this.deps.pocket.ready()) return null
+    void this.deps.pocket.start()
+    return this.health('edge').down ? null : this.edge
+  }
+
   private chosenEngine(s: Settings): TtsEngine {
     const id = s.voice.engine
     if (id === 'system') return this.system
     if (id === 'kokoro') return this.kokoro ?? this.system
+    if (id === 'pocket') return this.pocket ?? this.edge
     if (isCloudTts(id)) return this.deps.cloudTts?.[id] ?? this.edge
     return this.edge
   }
@@ -1303,7 +1320,7 @@ export class Agent {
     let line = TTS_ENGINE_LABELS[engine.name]
     if (fields.voice && engine.name !== 'system') line += `, voice "${fields.voice.length > 40 ? `${fields.voice.slice(0, 38)}…` : fields.voice}"`
     if (fields.model) line += ` (${fields.model})`
-    if (engine !== chosen) line += chosen === this.kokoro ? `, covering while ${TTS_ENGINE_LABELS.kokoro} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    if (engine !== chosen) line += chosen === this.kokoro || chosen === this.pocket ? `, covering while ${TTS_ENGINE_LABELS[chosen.name]} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
     return line
   }
 
@@ -1329,7 +1346,7 @@ export class Agent {
   }
 
   private engineDegraded(name: TtsEngineId, reason: string): void {
-    if (name === 'system' || name === 'kokoro') return
+    if (name === 'system' || name === 'kokoro' || name === 'pocket') return
     const health = this.health(name)
     if (health.down) return // a turn that started on it just before a probe marked it down again
     const retryInMs = health.fail(reason)
@@ -1345,7 +1362,7 @@ export class Agent {
   /** Between turns: check quietly whether the chosen remote voice works again, and switch back for the NEXT reply if so. */
   private probeEngine(s: Settings): void {
     const chosen = this.chosenEngine(s)
-    if (chosen === this.system || chosen === this.kokoro) return
+    if (chosen === this.system || chosen === this.kokoro || chosen === this.pocket) return
     const health = this.health(chosen.name)
     if (!health.probeDue()) return
     const check = async () => {
