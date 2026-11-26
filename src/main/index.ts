@@ -28,6 +28,8 @@ import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { PlaybookService } from './services/playbooks'
+import { JevClient } from '@core/jev/client'
+import { usesJev } from '@core/playbooks/schema'
 import { DiagramService } from './services/diagrams'
 import { firstRunRoots } from '@core/explore/roots'
 import { setupTraining } from './training'
@@ -340,11 +342,14 @@ ${fetchedList.text}`
   }
 
   const diagrams = new DiagramService(userData, send, (doc, id) => emit({ type: 'diagram', id, doc }))
+  // Jev, the playbooks' decision model: TypeSafe's API, or another server speaking it (JEV_BASE_URL, e.g. a local jevos)
+  const jev = new JevClient({ key: () => settings.keysFor('typesafe')[0], baseUrl: () => settings.envVar('JEV_BASE_URL') ?? '', model: () => settings.envVar('JEV_MODEL') ?? '' })
   // playbooks (docs/TRIGGERS.md): one .md file each in <userData>/playbooks, re-read when they change
   const playbooks = new PlaybookService(join(userData, 'playbooks'), {
     log: (level, m) => logAt(level, 'playbooks', m),
     trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data }),
-    changed: () => emit({ type: 'playbooks-changed' })
+    changed: () => emit({ type: 'playbooks-changed' }),
+    jev: () => (!settings.get().playbooks.useJev ? 'off' : jev.configured() ? 'ready' : 'no_key')
   })
 
   const agent = new Agent({
@@ -354,6 +359,7 @@ ${fetchedList.text}`
     customStyles: () => (training ? [...settings.styles(), ...training.styles] : settings.styles()),
     skills: () => settings.skills(),
     playbooks: () => playbooks.playbooks(),
+    jev,
     mcp,
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
@@ -397,6 +403,10 @@ ${fetchedList.text}`
     playbooks.start()
   } catch (e) {
     logError('playbooks', 'could not set up the playbooks folder', e)
+  }
+  // the first Jev call of a run pays for the connection; pay it now, when some playbook will need Jev
+  if (settings.get().playbooks.useJev && playbooks.playbooks().some((p) => p.enabled && usesJev(p))) {
+    void jev.warm().then((ms) => ms !== null && trace({ ev: 'jev.warm', sid: agent.currentSessionId, ms }))
   }
 
   // The chosen Edge voice keeps answering slowly: time the plain voice of the same name once the agent is
@@ -498,6 +508,7 @@ ${fetchedList.text}`
     claude,
     diagrams,
     playbooks,
+    jev,
     services,
     edgeRoute,
     kokoro,
@@ -551,6 +562,15 @@ ${fetchedList.text}`
         .executeJavaScript(`(() => { const b = document.querySelector('button[aria-label="${process.env.VA_VIEW!.replace(/"/g, '')}"]'); if (!b) return 'no-button'; b.click(); return 'clicked' })()`)
         .then((r) => log('devtools', `view ${process.env.VA_VIEW}: ${String(r)}`))
     }, Number(process.env.VA_VIEW_DELAY ?? 12000))
+    // VA_SCROLL_TO="Providers": scroll the first element whose own text is exactly that into view, after the view opened
+    if (process.env.VA_SCROLL_TO) {
+      setTimeout(() => {
+        const want = JSON.stringify(process.env.VA_SCROLL_TO)
+        void win?.webContents
+          .executeJavaScript(`(() => { const el = [...document.querySelectorAll('body *')].find((e) => e.childElementCount === 0 && e.textContent.trim() === ${want}); if (!el) return 'not-found'; el.scrollIntoView({ block: 'start' }); return 'scrolled' })()`)
+          .then((r) => log('devtools', `scroll to ${process.env.VA_SCROLL_TO}: ${String(r)}`))
+      }, Number(process.env.VA_VIEW_DELAY ?? 12000) + 800)
+    }
   }
   if (isDev && process.env.VA_MIC) {
     // press the Voice button from outside to exercise the real getUserMedia -> worklet -> sidecar path

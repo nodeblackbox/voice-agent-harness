@@ -160,6 +160,15 @@ See [TRIGGERS.md](TRIGGERS.md). Conditions read these as `tuning.<key>`.
 | `longMessageChars` | 1200 | A message longer than this counts as long (about a minute and a half of talking). The "Break down long messages" playbook fires above it. |
 | `maxInjected` | 3 | Most playbooks that may shape one reply; the highest priorities win, the rest show as `trigger.dropped` with reason `cap`. 0 switches playbooks off. |
 | `injectMaxChars` | 1200 | Each fired playbook's instruction is cut to this many characters in the prompt. |
+| `useJev` | true | Let playbooks ask Jev (needs the TypeSafe key) for the message's `intent` or their own `ask` question. Jev is only called when an enabled playbook needs it. |
+| `jevTimeoutMs` | 600 | The longest a reply waits for Jev. The request starts when the message arrives, so it overlaps the rest of turn setup; past this the reply goes ahead (`jev.timeout`) and Jev-based playbooks do not fire. |
+| `intentMin` | 0.5 | Below this confidence `intent` is `unsure`. |
+
+Measured on 2026-11-26 from the owner's connection, root question only (`jev-1.14.0`, about 475 input tokens,
+roughly $0.00002 a call): the first call of a run 400-460 ms (connection setup, which `jev.warm` now pays at
+start), then 111-171 ms, also after 20 s idle. In the app the wait added about 150 ms before the reply on a
+typed message. All ten test messages were read as intended (idea, task, question, chat, feedback), most at
+0.94-1.00; "yo, thanks, that was great" was chat at 0.69. The 600 ms timeout leaves room for a slow call.
 
 ## Runtime and logging (`runtime`)
 

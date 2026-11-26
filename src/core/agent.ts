@@ -54,7 +54,9 @@ import { buildModelMessages, compactToolResult } from './turn/history'
 import { splitSpoken, type CutPoint, type SpokenChunk } from './turn/spoken'
 import { mergeTexts, parseFillerWords, unfinishedReason } from './turn/continuation'
 import { Coalescer } from './turn/coalesce'
-import { PlaybookEngine } from './playbooks/engine'
+import { PlaybookEngine, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
+import { JevError, type JevClient } from './jev/client'
+import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
 import type { Playbook } from './playbooks/schema'
 import { classifyAfterCut, resumeText } from './turn/resume'
 
@@ -78,6 +80,8 @@ export interface AgentDeps {
   skills: () => Skill[]
   /** The loaded playbooks (docs/TRIGGERS.md); none when unset. */
   playbooks?: () => Playbook[]
+  /** Jev, for playbooks that read the message's intent or ask their own question; none when unset. */
+  jev?: JevClient
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
@@ -678,6 +682,9 @@ export class Agent {
       ? { ...existing, turnId, text, timing, streaming: false }
       : { id: crypto.randomUUID(), turnId, sessionId: this.sessionId, role: 'user', text, via, timing, createdAt: Date.now() }
     this.upsert(user)
+    // Jev reads the message now, in parallel with the rest of the turn's setup; the playbooks wait for it later, capped
+    this.playbookEvents = []
+    const jevTurn = this.startJev(text, via, settings)
     if (this.messages.filter((m) => m.role === 'user').length === 1) {
       this.deps.store.renameSession(this.sessionId, text.split(/\s+/).slice(0, 7).join(' ').slice(0, 60))
       this.deps.emit({ type: 'sessions-changed' })
@@ -754,7 +761,8 @@ export class Agent {
     const fallbacks = [...named, ...spareModels(this.deps.keys, [model.provider, ...named.map((m) => m.provider)])]
     const tools = this.tools(settings, model)
     const memory = this.memoryBlock(text, settings)
-    const playbooks = this.playbooksFor(text, via, settings)
+    const playbooks = await this.playbooksFor(text, via, settings, jevTurn)
+    if (this.turn !== turn) return
     {
       // the chips under the message; cleared when a merged or retried message no longer fires anything
       const current = this.messages.find((m) => m.id === user.id) ?? user
@@ -1316,25 +1324,60 @@ export class Agent {
   }
 
   /** The active project for the prompt, with its folder: the picked one, else this app's own code when it runs from source. */
+  private turnFacts(text: string, via: string, s: Settings): TurnFacts {
+    const picked = this.pickedProject(s)
+    return {
+      text,
+      via: via === 'voice' ? 'voice' : 'typed',
+      project: picked?.name ?? '',
+      projectId: picked?.id ?? '',
+      turnIndex: Math.max(0, this.messages.filter((m) => m.role === 'user').length - 1),
+      fromSplit: false
+    }
+  }
+
+  /**
+   * Ask Jev what the playbooks need to know about this message, when any enabled playbook needs it and there is a
+   * key. One request; the answers, a timeout or an error are traced under the turn. Resolves to null without answers.
+   */
+  private startJev(text: string, via: string, s: Settings): Promise<JevFacts | null> | null {
+    try {
+      const jev = this.deps.jev
+      if (!jev || !s.playbooks.useJev || s.playbooks.maxInjected <= 0 || !jev.configured()) return null
+      const list = this.deps.playbooks?.() ?? []
+      const plan = planJev(list, this.turnFacts(text, via, s), { ...s.playbooks })
+      if (!plan.root && !plan.asks.length) return null
+      const questions = turnQuestions(plan)
+      // this turn's buffer: a late answer for a turn that was cancelled must not land under the next one
+      const buf = this.playbookEvents
+      const earlier = this.messages.slice(0, -1)
+      const timeoutMs = s.playbooks.jevTimeoutMs
+      return jev.ask(turnState(text, earlier), questions, { timeoutMs }).then(
+        (r) => {
+          buf.push(['jev.request', { questions: Object.keys(questions), ms: r.ms, inputTokens: r.inputTokens, costUsd: r.usd, model: r.model }])
+          for (const a of describeAnswers(r.answers)) buf.push(['jev.answer', a])
+          return readAnswers(r.answers, plan, s.playbooks.intentMin)
+        },
+        (e: unknown) => {
+          const err = e instanceof JevError ? e : new JevError((e as Error)?.message ?? String(e), 'network')
+          if (err.kind === 'timeout') buf.push(['jev.timeout', { ms: timeoutMs, questions: Object.keys(questions) }])
+          else buf.push(['jev.error', { kind: err.kind, status: err.status, message: err.message }])
+          return null
+        }
+      )
+    } catch (e) {
+      this.deps.log(`jev failed: ${(e as Error).message}`)
+      return null
+    }
+  }
+
   /** Which playbooks fire on this message, and the instructions they add to the reply's prompt. */
-  private playbooksFor(text: string, via: string, s: Settings): ReturnType<PlaybookEngine['onUserTurn']> {
-    this.playbookEvents = []
+  private async playbooksFor(text: string, via: string, s: Settings, jevTurn: Promise<JevFacts | null> | null): Promise<ReturnType<PlaybookEngine['onUserTurn']>> {
     try {
       const list = this.deps.playbooks?.() ?? []
       if (!list.length || s.playbooks.maxInjected <= 0) return { block: '', fired: [] }
-      const picked = this.pickedProject(s)
-      return this.playbookEngine.onUserTurn(
-        list,
-        {
-          text,
-          via: via === 'voice' ? 'voice' : 'typed',
-          project: picked?.name ?? '',
-          projectId: picked?.id ?? '',
-          turnIndex: Math.max(0, this.messages.filter((m) => m.role === 'user').length - 1),
-          fromSplit: false
-        },
-        { maxInjected: s.playbooks.maxInjected, injectMaxChars: s.playbooks.injectMaxChars, tuning: { ...s.playbooks } }
-      )
+      const jev = (await jevTurn) ?? undefined
+      return this.playbookEngine.onUserTurn(list, this.turnFacts(text, via, s), { maxInjected: s.playbooks.maxInjected, injectMaxChars: s.playbooks.injectMaxChars, tuning: { ...s.playbooks } }, jev)
     } catch (e) {
       // a playbook must never cost the user a reply
       this.deps.log(`playbooks failed: ${(e as Error).message}`)

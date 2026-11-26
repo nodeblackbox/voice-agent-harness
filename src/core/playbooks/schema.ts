@@ -21,8 +21,13 @@ export const CONTEXT_FIELDS: Record<string, string> = {
   projectId: 'the active project id, empty when none',
   turnIndex: 'how many user messages came before this one in the conversation',
   fromSplit: 'true when the message is a piece split out of a longer one',
-  tuning: 'the Playbooks tuning values, e.g. tuning.longMessageChars'
+  tuning: 'the Playbooks tuning values, e.g. tuning.longMessageChars',
+  intent: 'what kind of message Jev read it as: task, question, chat, idea, feedback, or unsure (empty without Jev)',
+  intentP: "Jev's confidence in that reading, 0 to 1"
 }
+
+/** Fields that only have a value when Jev answered this turn. */
+export const JEV_FIELDS = new Set(['intent', 'intentP'])
 
 export const PRIORITIES = ['low', 'normal', 'high', 'critical'] as const
 export type Priority = (typeof PRIORITIES)[number]
@@ -51,9 +56,18 @@ const Header = z.strictObject({
     .strictObject({
       events: z.array(z.string().regex(/^[a-z][a-z0-9_]*(\.[a-z0-9_]*)*$/, 'an event is a dotted name like turn.user, or a prefix ending in a dot like cc.')).min(1, 'list at least one event').default(['turn.user']),
       said: z.array(z.string().trim().min(1)).default([]),
-      when: z.string().trim().min(1).nullable().default(null)
+      when: z.string().trim().min(1).nullable().default(null),
+      ask: z
+        .strictObject({
+          question: z.string().trim().min(10, 'ask.question is too short to be a question').max(400, 'ask.question is longer than 400 characters'),
+          yes: z.string().trim().min(1).optional(),
+          no: z.string().trim().min(1).optional(),
+          min: z.number().min(0.5, 'ask.min is at least 0.5').max(0.99, 'ask.min is at most 0.99').default(0.7)
+        })
+        .nullable()
+        .default(null)
     })
-    .default({ events: ['turn.user'], said: [], when: null }),
+    .default({ events: ['turn.user'], said: [], when: null, ask: null }),
   gates: z
     .strictObject({
       cooldownS: z.number().min(0, 'cooldownS cannot be negative').default(0),
@@ -65,6 +79,11 @@ const Header = z.strictObject({
 })
 
 export type PlaybookHeader = z.infer<typeof Header>
+
+/** Whether a playbook needs Jev's answer: it asks a question, or its condition reads the intent. */
+export function usesJev(p: Pick<Playbook, 'triggers' | 'condition'>): boolean {
+  return !!p.triggers.ask || !!p.condition?.names.some((n) => JEV_FIELDS.has(n.split('.')[0]!))
+}
 
 export interface Playbook extends PlaybookHeader {
   id: string
@@ -158,7 +177,13 @@ export function parsePlaybook(id: string, text: string): ParseResult {
 
   const body = parts.body.trim()
   if (!body) errors.push({ line: 0, message: 'the instruction under the header is empty' })
-  if (!header.triggers.when && !phrases.length) warnings.push({ line: nodeLine(['triggers']), message: 'no when or said condition: this fires on every matching event' })
+  const ask = header.triggers.ask
+  if (ask && (ask.yes === undefined) !== (ask.no === undefined)) errors.push({ line: nodeLine(['triggers', 'ask']), message: 'triggers.ask: give both yes and no (what each answer means), or neither' })
+  if (ask && !/`latest`/.test(ask.question)) warnings.push({ line: nodeLine(['triggers', 'ask', 'question']), message: 'triggers.ask: refer to the message as `latest` (in backticks), which is how Jev sees it' })
+  if (!header.triggers.when && !phrases.length) {
+    if (ask) warnings.push({ line: nodeLine(['triggers', 'ask']), message: 'the question is asked on every message; a when or said condition asks it less often' })
+    else warnings.push({ line: nodeLine(['triggers']), message: 'no when or said condition: this fires on every matching event' })
+  }
 
   if (errors.length) return { ok: false, errors, warnings }
   return { ok: true, warnings, playbook: { ...header, id, body, phrases, condition, source: text } }

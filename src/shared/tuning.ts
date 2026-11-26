@@ -143,7 +143,10 @@ export const TUNING = {
   playbooks: {
     longMessageChars: n(1200, 200, 10000, 100, 'core', 'Long message', 'A message longer than this counts as long; the "Break down long messages" playbook reads it as tuning.longMessageChars. About 1200 characters is a minute and a half of talking.', { unit: 'chars' }),
     maxInjected: n(3, 0, 10, 1, 'core', 'Playbooks per reply', 'Most playbooks that may shape one reply. When more match, the highest priorities win and the rest are logged as held back. 0 switches playbooks off.', { unit: 'playbooks' }),
-    injectMaxChars: n(1200, 100, 4000, 100, 'core', 'Playbook instruction max', 'Each fired playbook adds its instruction to the prompt, cut to this many characters.', { unit: 'chars' })
+    injectMaxChars: n(1200, 100, 4000, 100, 'core', 'Playbook instruction max', 'Each fired playbook adds its instruction to the prompt, cut to this many characters.', { unit: 'chars' }),
+    useJev: { kind: 'boolean', default: true, scope: 'core', label: 'Ask Jev', doc: 'Let playbooks ask Jev (TypeSafe, needs its key) what kind of message this is, or their own yes/no question. It is only asked when an enabled playbook needs it.' },
+    jevTimeoutMs: n(600, 100, 3000, 50, 'core', 'Jev timeout', 'The longest a reply waits for Jev. The question goes out as soon as the message arrives, so most of this overlaps other work; when it runs out the reply goes ahead and Jev-based playbooks do not fire.', { unit: 'ms' }),
+    intentMin: n(0.5, 0, 0.95, 0.05, 'core', 'Intent confidence floor', 'Below this confidence the message reads as intent "unsure", which no shipped playbook acts on.', { unit: 'p' })
   },
   runtime: {
     idleShutdownMs: n(300000, 0, 3600000, 60000, 'main', 'Ear idle shutdown', 'Unload the ear models after the microphone has been off this long. 0 never unloads. A restart is a full cold load.', { unit: 'ms' }),

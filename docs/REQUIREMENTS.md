@@ -179,7 +179,11 @@ this is the "why" and the bar each part has to meet.
   them on and off, and edits the file itself with live checks (a file that would not load is not saved). It
   can replay recent messages to show which would have set a draft off. A message that fired playbooks shows a
   chip for each under it; clicking one opens that playbook.
-- Playbooks must never slow a reply down or cost one: phase 1 is code-only checks that take microseconds, and a
+- Playbooks can use **Jev** (TypeSafe's fast decision model) for what code cannot see: what kind of message it is
+  (task, question, chat, idea, feedback) and a playbook's own yes/no question. It is asked only when an enabled
+  playbook needs it, once per message, and the reply never waits longer than the Jev timeout. Thinking out loud
+  must not start work (the "Idea, not instruction" playbook). The TypeSafe key is the owner's to enter.
+ phase 1 is code-only checks that take microseconds, and a
   failure inside them is logged and the reply goes ahead.
 
 ## Claude Code sessions

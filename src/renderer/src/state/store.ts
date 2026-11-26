@@ -1,6 +1,5 @@
 import { useDiagrams } from './diagrams'
 import { create } from 'zustand'
-import { isCloudTts } from '@shared/tts'
 import type {
   EdgeRouteState,
   SlowVoiceNotice,
@@ -470,7 +469,9 @@ export const selectActiveStyle = (s: Store): PromptStyle | undefined =>
 export const keyedProviders = (keys: KeyStatus[]): Set<KeyStatus['provider']> | null =>
   keys.length ? new Set(keys.filter((k) => k.set).map((k) => k.provider)) : null
 /** false = loaded and no LLM provider has a key (the chat shows how to add one); null = not loaded yet. Voice keys don't count. */
-export const selectHasAnyKey = (s: Store): boolean | null => (s.keys.length ? s.keys.some((k) => k.set && !isCloudTts(k.provider)) : null)
+const CHAT_PROVIDERS = new Set<KeyStatus['provider']>(['anthropic', 'openai', 'groq', 'google', 'xai'])
+/** Voice keys and service keys (TypeSafe for playbooks) don't count: only a chat model can answer. */
+export const selectHasAnyKey = (s: Store): boolean | null => (s.keys.length ? s.keys.some((k) => k.set && CHAT_PROVIDERS.has(k.provider)) : null)
 export const selectActiveModel = (s: Store): ModelInfo | undefined =>
   s.models.find((m) => m.id === s.settings?.modelId)
 

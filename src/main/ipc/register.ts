@@ -2,7 +2,7 @@ import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { checkRoot } from '@core/explore/roots'
 import { generateText } from 'ai'
 import { IPC } from '@shared/ipc'
-import type { CloudTtsProvider, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
+import type { CloudTtsProvider, KeyName, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
@@ -19,6 +19,7 @@ import type { ClaudeService } from '../services/claude'
 import type { DiagramService } from '../services/diagrams'
 import type { PlaybookService } from '../services/playbooks'
 import { testPlaybook } from '@core/playbooks/test-run'
+import type { JevClient } from '@core/jev/client'
 import type { DiagramCheck } from '@shared/diagram'
 import { CC_MODES, type CcAnswer, type CcMode } from '@shared/claude'
 import { consoleHistory, log, logAt } from '../services/log'
@@ -37,6 +38,7 @@ export interface IpcDeps {
   claude: ClaudeService
   diagrams: DiagramService
   playbooks: PlaybookService
+  jev: JevClient
   services: () => ServiceStatus[]
   edgeRoute: EdgeRouteService
   kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
@@ -70,7 +72,7 @@ export function registerIpc(d: IpcDeps): void {
   })
   h(IPC.modelsList, () => MODELS)
   h(IPC.keysStatus, () => d.settings.keyStatus())
-  h(IPC.keysSet, (_e, provider: Provider | CloudTtsProvider, key: string) => d.settings.setKey(provider, key))
+  h(IPC.keysSet, (_e, provider: KeyName, key: string) => d.settings.setKey(provider, key))
 
   h(IPC.chatSend, (_e, text: string) => d.agent.send(text))
   h(IPC.chatCancel, () => d.agent.cancel())
@@ -133,7 +135,10 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.playbooksToggle, (_e, id: string, on: boolean) => d.playbooks.toggle(String(id), !!on))
   h(IPC.playbooksDelete, (_e, id: string) => d.playbooks.delete(String(id)))
   // the last 40 things the user said or typed, newest first, against the draft in the editor
-  h(IPC.playbooksTest, (_e, id: string, text: string) => testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...d.settings.get().playbooks }))
+  h(IPC.playbooksTest, (_e, id: string, text: string) => {
+    const t = d.settings.get().playbooks
+    return testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...t }, t.useJev ? { client: d.jev, timeoutMs: t.jevTimeoutMs, intentMin: t.intentMin } : undefined)
+  })
   h(IPC.playbooksOpenFolder, async () => {
     await shell.openPath(d.playbooks.dir)
   })

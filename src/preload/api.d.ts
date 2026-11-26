@@ -2,6 +2,7 @@ import type { DiagramCheck, DiagramDoc, DiagramSummary } from '@shared/diagram'
 import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
+  KeyName,
   PlaybookCheck,
   PlaybookIssue,
   PlaybookSaveResult,
@@ -47,7 +48,7 @@ export interface VoiceAgentApi {
   models: { list(): Promise<ModelInfo[]> }
   keys: {
     status(): Promise<KeyStatus[]>
-    set(provider: Provider | CloudTtsProvider, key: string): Promise<KeyStatus[]>
+    set(provider: KeyName, key: string): Promise<KeyStatus[]>
   }
   chat: {
     send(text: string): Promise<void>
@@ -113,7 +114,7 @@ export interface VoiceAgentApi {
     /** Moves the file to .trash in the playbooks folder. */
     delete(id: string): Promise<void>
     /** Replay recent user messages against a draft. */
-    test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[] }>
+    test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[]; jevNote?: string }>
     openFolder(): Promise<void>
   }
   memory: {

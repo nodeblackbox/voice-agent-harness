@@ -301,6 +301,10 @@ export interface PlaybookInfo {
   cooldownS?: number
   maxPerSession?: number | null
   tags?: string[]
+  /** The yes/no question it asks Jev, if any. */
+  ask?: string | null
+  /** It needs Jev's answer (its intent condition or its own question) to fire. */
+  usesJev?: boolean
   /** This app run. */
   firedCount: number
   lastFiredAt: number | null
@@ -310,6 +314,8 @@ export interface PlaybooksState {
   /** The folder the files live in, shown so the user can open it. */
   dir: string
   playbooks: PlaybookInfo[]
+  /** Whether playbooks that need Jev can fire: ready, no TypeSafe key, or switched off in Tuning. */
+  jev: 'ready' | 'no_key' | 'off'
 }
 
 export interface PlaybookCheck {
@@ -416,6 +422,10 @@ export interface SttSettings {
 
 /** Hosted voice APIs; each needs a key (Settings > Providers or .env). Metadata lives in ./tts. */
 export type CloudTtsProvider = 'elevenlabs' | 'fish' | 'inworld' | 'qwen'
+/** Keys for services that are not a chat model or a voice: TypeSafe runs Jev, the playbooks' decision model. */
+export type ServiceKeyProvider = 'typesafe'
+/** Everything the key store holds a key for. */
+export type KeyName = Provider | CloudTtsProvider | ServiceKeyProvider
 export type TtsEngineId = 'edge' | 'kokoro' | 'system' | CloudTtsProvider
 
 export interface CloudVoiceChoice {
@@ -578,7 +588,7 @@ export interface Settings {
 }
 
 export interface KeyStatus {
-  provider: Provider | CloudTtsProvider
+  provider: KeyName
   set: boolean
   hint?: string
 }

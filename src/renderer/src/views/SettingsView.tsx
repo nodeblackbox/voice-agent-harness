@@ -12,7 +12,7 @@ import {
   Clock,
   type LucideIcon
 } from 'lucide-react'
-import type { CloudTtsProvider, KeyStatus, Provider, ServiceStatus, ThemePref } from '@shared/types'
+import type { KeyName, KeyStatus, ServiceStatus, ThemePref } from '@shared/types'
 import { CLOUD_TTS_PROVIDERS, TTS_PROVIDERS } from '@shared/tts'
 import { T, serviceColor, serviceLabel } from '../theme'
 import { keyedProviders, useStore } from '../state/store'
@@ -35,13 +35,14 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
   )
 }
 
-const PROVIDERS: Array<{ id: Provider | CloudTtsProvider; label: string; voice?: boolean }> = [
+const PROVIDERS: Array<{ id: KeyName; label: string; voice?: boolean; sub?: string }> = [
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'groq', label: 'Groq' },
   { id: 'google', label: 'Google Gemini' },
   { id: 'xai', label: 'xAI Grok' },
-  ...CLOUD_TTS_PROVIDERS.map((id) => ({ id, label: TTS_PROVIDERS[id].label, voice: true }))
+  ...CLOUD_TTS_PROVIDERS.map((id) => ({ id, label: TTS_PROVIDERS[id].label, voice: true })),
+  { id: 'typesafe', label: 'TypeSafe (Jev)', sub: 'playbooks: reads what kind of message it is' }
 ]
 
 function VoiceInput() {
@@ -252,10 +253,10 @@ function Providers() {
   const reloadServices = useStore((s) => s.reloadServices)
   const keyed = useMemo(() => keyedProviders(keys), [keys])
   const pushToast = useStore((s) => s.pushToast)
-  const [editing, setEditing] = useState<Provider | CloudTtsProvider | null>(null)
+  const [editing, setEditing] = useState<KeyName | null>(null)
   const [value, setValue] = useState('')
 
-  const save = async (p: Provider | CloudTtsProvider) => {
+  const save = async (p: KeyName) => {
     try {
       await window.api.keys.set(p, value.trim())
       await reloadKeys()
@@ -267,7 +268,7 @@ function Providers() {
     }
   }
 
-  const status = (p: Provider | CloudTtsProvider): KeyStatus | undefined => keys.find((k) => k.provider === p)
+  const status = (p: KeyName): KeyStatus | undefined => keys.find((k) => k.provider === p)
 
   return (
     <Section icon={KeyRound} title="Providers">
@@ -277,7 +278,7 @@ function Providers() {
             const st = status(p.id)
             const isDefault = models.find((m) => m.id === settings?.modelId)?.provider === p.id
             return (
-              <Row key={p.id} label={p.label} sub={p.voice ? 'voice' : isDefault ? 'default' : p.id === 'groq' ? 'one key, or a JSON list of keys to rotate' : undefined}>
+              <Row key={p.id} label={p.label} sub={p.sub ?? (p.voice ? 'voice' : isDefault ? 'default' : p.id === 'groq' ? 'one key, or a JSON list of keys to rotate' : undefined)}>
                 {editing === p.id ? (
                   <span className="inline-flex items-center gap-2">
                     <TextInput type="password" value={value} onChange={setValue} placeholder="API key" autoFocus style={{ width: 260 }} onKeyDown={(e) => e.key === 'Enter' && void save(p.id)} />

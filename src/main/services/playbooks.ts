@@ -6,7 +6,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
-import { PLAYBOOK_ID, parsePlaybook, setHeaderField, type ParseIssue, type Playbook } from '@core/playbooks/schema'
+import { PLAYBOOK_ID, parsePlaybook, setHeaderField, usesJev, type ParseIssue, type Playbook } from '@core/playbooks/schema'
 import { GUIDE, TEMPLATES, type Template } from '@core/playbooks/templates'
 import type { PlaybookCheck, PlaybookInfo, PlaybookSaveResult, PlaybooksState } from '@shared/types'
 
@@ -27,6 +27,8 @@ export interface PlaybookServiceDeps {
   changed?(): void
   templates?: Template[]
   now?(): number
+  /** Whether Jev can answer: a key is set and it is switched on. */
+  jev?(): 'ready' | 'no_key' | 'off'
 }
 
 interface Loaded {
@@ -82,7 +84,7 @@ export class PlaybookService {
   }
 
   state(): PlaybooksState {
-    return { dir: this.dir, playbooks: this.files.map((f) => this.info(f)) }
+    return { dir: this.dir, playbooks: this.files.map((f) => this.info(f)), jev: this.deps.jev?.() ?? 'no_key' }
   }
 
   check(id: string, text: string): PlaybookCheck {
@@ -144,7 +146,9 @@ export class PlaybookService {
       said: p.triggers.said,
       cooldownS: p.gates.cooldownS,
       maxPerSession: p.gates.maxPerSession,
-      tags: p.tags
+      tags: p.tags,
+      ask: p.triggers.ask?.question ?? null,
+      usesJev: usesJev(p)
     }
   }
 

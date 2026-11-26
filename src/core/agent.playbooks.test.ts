@@ -23,6 +23,7 @@ import { Agent } from './agent'
 import { MemoryStore } from './memory/store'
 import { parsePlaybook, type Playbook } from './playbooks/schema'
 import { TEMPLATES } from './playbooks/templates'
+import { JevClient } from './jev/client'
 import type { Settings } from '@shared/types'
 
 let dir: string
@@ -34,7 +35,10 @@ beforeEach(() => {
   store = new MemoryStore(join(dir, 'm.sqlite'))
 })
 
+const agents: Agent[] = []
 afterEach(() => {
+  // stop each agent's timers (the chat flush) before the database they write to goes away
+  for (const a of agents.splice(0)) a.shutdown()
   store.close()
   rmSync(dir, { recursive: true, force: true })
 })
@@ -45,7 +49,7 @@ const template = (): Playbook => {
   return r.playbook
 }
 
-const make = (settings: Settings, playbooks: () => Playbook[]) => {
+const make = (settings: Settings, playbooks: () => Playbook[], jev?: JevClient) => {
   const traces: Array<Record<string, unknown>> = []
   const agent = new Agent({
     store,
@@ -54,6 +58,7 @@ const make = (settings: Settings, playbooks: () => Playbook[]) => {
     customStyles: () => [],
     skills: () => [],
     playbooks,
+    jev,
     mcp: { enabled: () => false, tools: () => ({}) } as never,
     search: { configured: () => false } as never,
     ears: { agentSpeaking: () => undefined, agentThinking: () => undefined, restartStuck: () => undefined },
@@ -63,6 +68,7 @@ const make = (settings: Settings, playbooks: () => Playbook[]) => {
     log: () => undefined,
     trace: (e) => traces.push(e)
   })
+  agents.push(agent)
   const turn = async (text: string): Promise<void> => {
     const before = prompts.length
     void agent.send(text)
@@ -109,4 +115,61 @@ describe('Agent: playbooks', () => {
     await broken.turn('x'.repeat(400))
     expect(prompts[1]!.live).not.toContain('Playbooks for this reply')
   })
+
+  describe('with Jev', () => {
+    const idea = (): Playbook => {
+      const t = TEMPLATES.find((x) => x.id === 'idea-not-instruction')!
+      const r = parsePlaybook(t.id, t.text)
+      if (!r.ok) throw new Error('template does not parse')
+      return r.playbook
+    }
+    const answer = (choice: string, confidence = 0.82) => ({
+      model: 'jev-1.14.0',
+      answers: { intent: { type: 'choice', choice, confidence, probabilities: { task: 0, question: 0, chat: 0, idea: 0, feedback: 0, [choice]: confidence, ...(choice === 'chat' ? {} : { chat: 1 - confidence }) } } },
+      usage: { input_tokens: 400, output_tokens: 2 }
+    })
+    const client = (fetch: typeof globalThis.fetch) => new JevClient({ key: () => 'test-key', fetch })
+
+    it('asks what kind of message it is, fires the idea playbook on "idea", and traces the request and answer', async () => {
+      const fetch = vi.fn(async () => new Response(JSON.stringify(answer('idea'))))
+      const { traces, turn } = make(settings, () => [idea(), template()], client(fetch as never))
+      await turn('maybe we could have a spend tab one day')
+      expect(fetch).toHaveBeenCalledTimes(1)
+      const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
+      expect(Object.keys(body.questions)).toEqual(['intent'])
+      expect(body.state).toEqual({ latest: 'maybe we could have a spend tab one day' })
+      expect(prompts[0]!.live).toContain('- Idea, not instruction (goal:')
+      const evs = traces.map((t) => t.ev)
+      expect(evs.indexOf('jev.request')).toBeGreaterThan(evs.indexOf('turn.start'))
+      expect(traces.find((t) => t.ev === 'jev.answer')).toMatchObject({ name: 'intent', answer: 'idea', p: 0.82 })
+      expect(traces.find((t) => t.ev === 'trigger.fired')).toMatchObject({ id: 'idea-not-instruction', why: 'when intent == "idea" (intent "idea" at 0.82)' })
+    })
+
+    it('does not fire on another reading, or below the confidence floor', async () => {
+      const fetch = vi.fn(async () => new Response(JSON.stringify(answer('task'))))
+      const { turn } = make(settings, () => [idea()], client(fetch as never))
+      await turn('add a spend tab')
+      expect(prompts[0]!.live).not.toContain('Playbooks for this reply')
+      fetch.mockImplementation(async () => new Response(JSON.stringify(answer('idea', 0.45))))
+      await turn('hmm, a spend tab?')
+      expect(prompts[1]!.live).not.toContain('Playbooks for this reply')
+    })
+
+    it('lets the reply go ahead without it when Jev is slow, and says so', async () => {
+      const slow = vi.fn((_u: string, init: RequestInit) => new Promise<Response>((_r, reject) => init.signal!.addEventListener('abort', () => reject(new Error('aborted')))))
+      const { traces, turn } = make({ ...settings, playbooks: { ...settings.playbooks, jevTimeoutMs: 100 } }, () => [idea()], client(slow as never))
+      await turn('maybe a spend tab')
+      expect(prompts[0]!.live).not.toContain('Playbooks for this reply')
+      expect(traces.find((t) => t.ev === 'jev.timeout')).toMatchObject({ ms: 100, questions: ['intent'] })
+    })
+
+    it('asks nothing when no playbook needs Jev, when it is switched off, or without a key', async () => {
+      const fetch = vi.fn(async () => new Response(JSON.stringify(answer('idea'))))
+      await make(settings, () => [template()], client(fetch as never)).turn('hello')
+      await make({ ...settings, playbooks: { ...settings.playbooks, useJev: false } }, () => [idea()], client(fetch as never)).turn('maybe x')
+      await make(settings, () => [idea()], new JevClient({ key: () => '', fetch: fetch as never })).turn('maybe y')
+      expect(fetch).not.toHaveBeenCalled()
+    })
+  })
 })
+

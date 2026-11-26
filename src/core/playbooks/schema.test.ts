@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePlaybook } from './schema'
+import { parsePlaybook, usesJev } from './schema'
 import { TEMPLATES } from './templates'
 
 const file = (header: string, body = 'Do the thing.'): string => `---\n${header}\n---\n${body}\n`
@@ -75,4 +75,24 @@ describe('parsePlaybook', () => {
   it('accepts Windows line endings', () => {
     expect(parsePlaybook('x', '---\r\ntitle: X\r\ngoal: Test.\r\n---\r\nDo it.\r\n').ok).toBe(true)
   })
+
+  it('checks ask questions: both meanings or neither, a sane threshold, and a nudge to say `latest`', () => {
+    const ok = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  said: ["push changes"]\n  ask:\n    question: "Is `latest` asking to push now?"\n    yes: "Asks to push"\n    no: "Anything else"'))
+    expect(ok.ok && ok.playbook.triggers.ask).toEqual({ question: 'Is `latest` asking to push now?', yes: 'Asks to push', no: 'Anything else', min: 0.7 })
+    expect(ok.warnings).toEqual([])
+    const half = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  ask:\n    question: "Is `latest` asking to push now?"\n    yes: "Asks to push"'))
+    expect(!half.ok && half.errors[0]!.message).toMatch(/both yes and no/)
+    expect(parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  ask:\n    question: "Is it asking to push now?"\n    min: 0.3')).ok).toBe(false)
+    const vague = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  ask:\n    question: "Is it asking to push now?"'))
+    expect(vague.warnings.map((w) => w.message).join('\n')).toMatch(/`latest`[\s\S]*asked on every message/)
+  })
+
+  it('knows intent and intentP as fields, and which playbooks need Jev', () => {
+    const r = parsePlaybook('x', file(`title: X\ngoal: Test.\ntriggers:\n  when: 'intent == "idea" and intentP > 0.6'`))
+    expect(r.warnings).toEqual([])
+    expect(r.ok && usesJev(r.playbook)).toBe(true)
+    const plain = parsePlaybook('y', file('title: Y\ngoal: Test.\ntriggers:\n  when: "chars > 9"'))
+    expect(plain.ok && usesJev(plain.playbook)).toBe(false)
+  })
 })
+

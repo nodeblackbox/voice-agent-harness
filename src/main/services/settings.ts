@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
-import type { ClaudeSettings, CloudTtsProvider, KeyStatus, PromptStyle, Provider, Settings, Skill, VoiceSettings } from '@shared/types'
+import type { ClaudeSettings, KeyName, KeyStatus, PromptStyle, Provider, Settings, Skill, VoiceSettings } from '@shared/types'
 import { CC_MODES } from '@shared/claude'
 import { CLOUD_TTS_PROVIDERS, QWEN_DEFAULT_HOST, QWEN_HOST_ENV, TTS_PROVIDERS } from '@shared/tts'
 import { defaultTuning, sanitizeTuning, stripTuningDefaults, type TuningMigration } from '@shared/tuning'
@@ -39,7 +39,7 @@ export interface SettingsOptions {
   defaultWorkspaceRoot?: string
 }
 
-export type KeyedProvider = Provider | CloudTtsProvider
+export type KeyedProvider = KeyName
 
 const ENV_KEYS: Record<KeyedProvider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
@@ -50,7 +50,8 @@ const ENV_KEYS: Record<KeyedProvider, string[]> = {
   elevenlabs: TTS_PROVIDERS.elevenlabs.envKeys,
   fish: TTS_PROVIDERS.fish.envKeys,
   inworld: TTS_PROVIDERS.inworld.envKeys,
-  qwen: TTS_PROVIDERS.qwen.envKeys
+  qwen: TTS_PROVIDERS.qwen.envKeys,
+  typesafe: ['TYPESAFE_API_KEY']
 }
 
 function deepMerge<T>(base: T, patch: Partial<T>): T {

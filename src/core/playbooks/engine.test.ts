@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PlaybookEngine, type EngineLimits, type TurnFacts } from './engine'
+import { PlaybookEngine, planJev, type EngineLimits, type TurnFacts } from './engine'
 import { parsePlaybook, type Playbook } from './schema'
 import { TEMPLATES } from './templates'
 
@@ -90,4 +90,37 @@ describe('PlaybookEngine', () => {
     const p = pb('prefix', 'triggers:\n  events: [turn.]\n  when: "chars > 0"')
     expect(setup().engine.onUserTurn([p], facts('hi'), limits).fired).toHaveLength(1)
   })
+
+  it('matches intent conditions and ask questions only with Jev answers, and says how sure Jev was', () => {
+    const idea = pb('idea', `triggers:\n  when: 'intent == "idea"'`)
+    const push = pb('push', 'triggers:\n  said: ["push changes"]\n  ask:\n    question: "Is `latest` asking to push changes now?"\n    min: 0.8')
+    const { engine } = setup()
+    expect(engine.onUserTurn([idea, push], facts('push changes'), limits).fired).toEqual([])
+    const out = engine.onUserTurn([idea, push], facts('push changes'), limits, { intent: 'idea', intentP: 0.74, asks: { push: 0.91 } })
+    expect(out.fired.map((f) => [f.id, f.why])).toEqual([
+      ['idea', 'when intent == "idea" (intent "idea" at 0.74)'],
+      ['push', 'said "push changes" and Jev: yes to "Is `latest` asking to push changes now?" (0.91)']
+    ])
+    expect(engine.onUserTurn([push], facts('push changes'), limits, { intent: null, intentP: null, asks: { push: 0.79 } }).fired).toEqual([])
+  })
 })
+
+describe('planJev', () => {
+  const idea = pb('idea', `triggers:\n  when: 'intent == "idea"'`)
+  const push = pb('push', 'triggers:\n  said: ["push changes"]\n  ask:\n    question: "Is `latest` asking to push changes now?"')
+  const longAsk = pb('long-ask', 'triggers:\n  when: "chars > 20"\n  ask:\n    question: "Is `latest` a list of several unrelated topics?"')
+  const plain = pb('plain', 'triggers:\n  when: "chars > 0"')
+
+  it('asks nothing when no enabled playbook needs Jev', () => {
+    expect(planJev([plain, { ...idea, enabled: false }], facts('hello'), {})).toEqual({ root: false, asks: [] })
+  })
+
+  it('asks the root question for intent conditions, and a playbook question only when the rest of it matched', () => {
+    const plan = planJev([idea, push, longAsk, plain], facts('hello there'), {})
+    expect(plan.root).toBe(true)
+    expect(plan.asks).toEqual([])
+    const plan2 = planJev([idea, push, longAsk], facts('please push changes, all of them, right now'), {})
+    expect(plan2.asks.map((p) => p.id)).toEqual(['push', 'long-ask'])
+  })
+})
+

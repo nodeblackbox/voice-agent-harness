@@ -100,7 +100,7 @@ function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
   }
   const head = name.split('.')[0]
   if (head === 'ear') return 'you'
-  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore' || head === 'trigger' || head === 'playbook' || head === 'playbooks') return 'turn'
+  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore' || head === 'trigger' || head === 'playbook' || head === 'playbooks' || head === 'jev') return 'turn'
   if (head === 'tts') return 'voice'
   if (head === 'playback') return 'playback'
   if (head === 'cc') return 'claude'
@@ -310,6 +310,16 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return row(`Added the ${str(d.id)} instruction to this reply`, `${str(d.chars)} characters`, 'dim', { noisy: true })
     case 'playbooks.loaded':
       return row(`Loaded ${str(d.count)} playbook${d.count === 1 ? '' : 's'} (${str(d.enabled)} on)`, num(d.invalid) ? `${str(d.invalid)} file${d.invalid === 1 ? '' : 's'} could not be read` : '', num(d.invalid) ? 'warn' : 'dim')
+    case 'jev.request':
+      return row(`Asked Jev ${Array.isArray(d.questions) ? (d.questions as unknown[]).length : ''} question${Array.isArray(d.questions) && (d.questions as unknown[]).length === 1 ? '' : 's'}`.replace('  ', ' '), join(ms(d.ms), num(d.inputTokens) !== undefined ? `${fmtTokens(num(d.inputTokens)!)} tokens` : '', num(d.costUsd) !== undefined ? fmtUsd(num(d.costUsd)!) : ''), 'dim')
+    case 'jev.answer':
+      return row(d.name === 'intent' ? `Jev read it as: ${str(d.answer)}` : `Jev on ${str(d.name).replace(/^pb_/, '')}: ${str(d.answer)}`, num(d.p) !== undefined ? `${Math.round(num(d.p)! * 100)}% sure` : '', 'accent')
+    case 'jev.warm':
+      return row('Opened the connection to Jev', ms(d.ms), 'dim', { noisy: true })
+    case 'jev.timeout':
+      return row('Jev did not answer in time; the reply went ahead without it', `waited ${ms(d.ms)}`, 'warn')
+    case 'jev.error':
+      return row(`Jev failed: ${str(d.message)}`, str(d.kind), d.kind === 'no_key' ? 'dim' : 'warn')
     case 'playbooks.changed':
       return row(`Playbook ${CHANGE[str(d.action)] ?? str(d.action)}: ${str(d.id)}`, d.by === 'ui' ? 'from the Playbooks view' : str(d.by), 'plain')
     case 'playbooks.invalid': {

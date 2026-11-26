@@ -19,7 +19,7 @@ const good: PlaybookInfo = {
 const broken: PlaybookInfo = { id: 'broken', source: 'no header', ok: false, errors: [{ line: 1, message: 'the file must start with a header between two --- lines' }], warnings: [], firedCount: 0, lastFiredAt: null }
 
 const playbooks = {
-  list: vi.fn(async (): Promise<PlaybooksState> => ({ dir: '/data/playbooks', playbooks: [good, broken] })),
+  list: vi.fn(async (): Promise<PlaybooksState> => ({ dir: '/data/playbooks', playbooks: [good, broken], jev: 'no_key' })),
   check: vi.fn(async (): Promise<PlaybookCheck> => ({ errors: [], warnings: [] })),
   save: vi.fn(async (id: string) => ({ ok: true as const, id })),
   toggle: vi.fn(async (id: string) => ({ ok: true as const, id })),
@@ -128,6 +128,29 @@ describe('PlaybooksView', () => {
     await wait(250)
     await click(button('Save'))
     expect(playbooks.save).toHaveBeenCalledWith('new-playbook', expect.stringContaining('title: New playbook'), undefined)
+  })
+})
+
+describe('PlaybooksView with Jev playbooks', () => {
+  it('says when Jev playbooks cannot fire for want of a key, and shows what they ask', async () => {
+    const jevBook: PlaybookInfo = { ...good, id: 'idea', title: 'Idea, not instruction', when: 'intent == "idea"', usesJev: true, ask: null, firedCount: 0, lastFiredAt: null }
+    const asker: PlaybookInfo = { ...good, id: 'push', title: 'Push', when: null, said: ['push changes'], ask: 'Is `latest` asking to push now?', usesJev: true, firedCount: 0, lastFiredAt: null }
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [jevBook, asker], jev: 'no_key' })
+    await render()
+    expect(host.textContent).toContain('2 playbooks need Jev to fire, and there is no TypeSafe key yet')
+    expect(host.textContent).toContain('Jev: Is `latest` asking to push now?')
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [jevBook], jev: 'ready' })
+    await act(async () => useStore.setState({ playbooksVersion: 1 }))
+    await wait(0)
+    expect(host.textContent).not.toContain('need Jev to fire')
+  })
+
+  it('shows how Jev took part in a test run', async () => {
+    playbooks.test.mockResolvedValueOnce({ errors: [], rows: [{ text: 'maybe a spend tab', createdAt: 1, why: 'when intent == "idea" (intent "idea" at 0.82)' }], jevNote: 'Jev read your last 1 messages one by one, without the conversation around them, about $0.0000.' } as never)
+    await render()
+    await click(button('Test on recent messages'))
+    expect(host.textContent).toContain('Jev read your last 1 messages one by one')
+    expect(host.textContent).toContain('(intent "idea" at 0.82)')
   })
 })
 
