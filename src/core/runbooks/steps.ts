@@ -6,7 +6,8 @@ import { z } from 'zod'
 import { compile, ExprError, type Compiled } from '../playbooks/expr'
 
 /** Tools a `tool` step may call: they look things up, remember or draw, and cannot change the user's files or start work. */
-export const RUNBOOK_TOOLS = ['remember', 'update_memory', 'recall', 'web_search', 'read_page', 'current_time', 'diagram_create'] as const
+export { RUNBOOK_TOOLS } from '@shared/playbookFile'
+import { RUNBOOK_TOOLS } from '@shared/playbookFile'
 
 const ID = /^[a-z][a-z0-9_-]{0,30}$/
 const name = z.string().regex(ID, 'a step id is lowercase letters, digits, - or _, starting with a letter')

@@ -81,45 +81,92 @@ afterEach(async () => {
   host.remove()
 })
 
+const tab = (name: string) => [...host.querySelectorAll('button[role="tab"]')].find((b) => b.textContent?.startsWith(name)) as HTMLButtonElement
+const editor = () => host.querySelector('textarea[aria-label="editor"]') as HTMLTextAreaElement
+const titleInput = () => host.querySelector('input[aria-label="Title"]') as HTMLInputElement
+const RB_SOURCE = '---\nkind: runbook\ntitle: Brain dump to tasks\ngoal: x\ntriggers:\n  said: ["brain dump"]\nsteps:\n  - id: tasks\n    do: model\n    prompt: "List the tasks in {{text}}"\n    save: tasks\n---\nNotes.\n'
+
 describe('PlaybooksView', () => {
-  it('lists playbooks with their triggers and firings, and a broken file with its error', async () => {
+  it('lists playbooks in groups with their triggers and firings, and a broken file with its error', async () => {
     await render()
-    expect(host.textContent).toContain('1 playbook, 1 on')
-    expect(host.textContent).toContain('1 could not be read')
+    expect(host.textContent).toContain('1 loaded · 1 on')
+    expect(host.textContent).toContain('1 broken')
+    expect(host.textContent).toContain('Can’t be read')
     expect(host.textContent).toContain('chars > tuning.longMessageChars')
-    expect(host.textContent).toContain('fired 2× · 2 min ago')
-    expect(host.textContent).toContain('Not loaded: line 1: the file must start with a header')
-    // the first one is open in the editor
-    expect((host.querySelector('textarea[aria-label="editor"]') as HTMLTextAreaElement).value).toBe(SOURCE)
+    expect(host.textContent).toContain('fired 2×')
+    expect(host.textContent).toContain('line 1: the file must start with a header')
+    // the first one is open, on the Setup form, with its title in the header
+    expect(titleInput().value).toBe('Break down long messages')
+    expect(host.querySelector('[data-testid="trigger-summary"]')!.textContent).toContain('It fires when you say something, on every message')
     expect(host.textContent).toContain('saved')
   })
 
   it('switches a playbook off from the list', async () => {
     await render()
-    await click(host.querySelector('button[aria-pressed="true"]')!)
+    await click(host.querySelector('aside button[aria-pressed="true"]')!)
     expect(playbooks.toggle).toHaveBeenCalledWith('long-message-breakdown', false)
   })
 
-  it('checks edits as you type and only offers Save when the file loads', async () => {
+  it('searches and filters the list', async () => {
     await render()
-    const editor = host.querySelector('textarea[aria-label="editor"]') as HTMLTextAreaElement
+    await type(host.querySelector('input[aria-label="Search playbooks"]') as HTMLInputElement, 'zebra')
+    expect(host.textContent).toContain('Nothing matches “zebra”')
+    await click(button('Show everything'))
+    await click([...host.querySelectorAll('aside button[role="tab"]')].find((b) => b.textContent?.startsWith('Problems')))
+    expect(host.querySelector('[data-playbook="long-message-breakdown"]')).toBeNull()
+    expect(host.querySelector('[data-playbook="broken"]')).toBeTruthy()
+  })
+
+  it('edits the trigger through the form, which rewrites the file, and saves it', async () => {
+    await render()
+    const phrase = host.querySelector('input[aria-label="Add a phrase"]') as HTMLInputElement
+    await type(phrase, 'break it down')
+    await act(async () => phrase.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(host.querySelector('[data-testid="trigger-summary"]')!.textContent).toContain('you use every word of “break it down”')
+    expect(host.textContent).toContain('Unsaved changes')
+    await click(tab('File'))
+    expect(editor().value).toContain('said:')
+    expect(editor().value).toContain('break it down')
+    await wait(250)
+    await click(button('Save'))
+    expect(playbooks.save).toHaveBeenCalledWith('long-message-breakdown', expect.stringContaining('break it down'), 'long-message-breakdown')
+  })
+
+  it('checks edits as you type and will not save a file with problems', async () => {
+    await render()
+    await click(tab('File'))
     playbooks.check.mockResolvedValueOnce({ errors: [{ line: 4, message: 'unknown field "chance"' }], warnings: [] })
-    await type(editor, `${SOURCE}x`)
+    await type(editor(), `${SOURCE}x`)
     await wait(250)
     expect(host.textContent).toContain('line 4unknown field "chance"')
+    expect(host.textContent).toContain('1 problem to fix first')
     expect(button('Save')!.disabled).toBe(true)
 
-    await type(editor, `${SOURCE}y`)
+    await type(editor(), `${SOURCE}y`)
     await wait(250)
-    expect(host.textContent).toContain('unsaved changes')
     expect(button('Save')!.disabled).toBe(false)
     await click(button('Save'))
     expect(playbooks.save).toHaveBeenCalledWith('long-message-breakdown', `${SOURCE}y`, 'long-message-breakdown')
   })
 
+  it('keeps unsaved edits when you look at another one, and reverts them', async () => {
+    const other: PlaybookInfo = { ...good, id: 'another', title: 'Zed one', source: SOURCE.replace('Break down long messages', 'Zed one'), firedCount: 0, lastFiredAt: null }
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [good, other], jev: 'ready' })
+    await render()
+    await type(titleInput(), 'Break it up')
+    await click(host.querySelector('[data-playbook="another"]')!)
+    expect(titleInput().value).toBe('Zed one')
+    expect(host.querySelector('[data-playbook="long-message-breakdown"] [title="Unsaved changes"]')).toBeTruthy()
+    await click(host.querySelector('[data-playbook="long-message-breakdown"]')!)
+    expect(titleInput().value).toBe('Break it up')
+    await click(button('Revert'))
+    expect(titleInput().value).toBe('Break down long messages')
+  })
+
   it('tests a draft against recent messages and shows why each matched', async () => {
     await render()
-    await click(button('Test on recent messages'))
+    await click(tab('Check'))
+    await click(button('Run test'))
     expect(host.textContent).toContain('1 of your last 2 messages would have set it off')
     expect(host.textContent).toContain('when chars > 1200 (chars 1500)')
     expect(host.textContent).not.toContain('just saying hello there')
@@ -137,12 +184,20 @@ describe('PlaybooksView', () => {
 
   it('starts a new playbook from the skeleton with a free name, saved as a new file', async () => {
     await render()
-    await click(button('New playbook'))
+    await click([...host.querySelectorAll('aside button')].find((b) => b.textContent === 'Playbook'))
     expect((host.querySelector('input[aria-label="File name"]') as HTMLInputElement).value).toBe('new-playbook')
-    expect(host.textContent).toContain('New, not saved yet')
+    expect(host.textContent).toContain('New playbook, not saved yet')
     await wait(250)
     await click(button('Save'))
     expect(playbooks.save).toHaveBeenCalledWith('new-playbook', expect.stringContaining('title: New playbook'), undefined)
+  })
+
+  it('welcomes you when there are none yet', async () => {
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [], jev: 'ready' })
+    await render()
+    expect(host.textContent).toContain('Teach the assistant how to handle things')
+    await click(button('New runbook'))
+    expect((host.querySelector('input[aria-label="File name"]') as HTMLInputElement).value).toBe('new-runbook')
   })
 })
 
@@ -152,7 +207,7 @@ describe('PlaybooksView with Jev playbooks', () => {
     const asker: PlaybookInfo = { ...good, id: 'push', title: 'Push', when: null, said: ['push changes'], ask: 'Is `latest` asking to push now?', usesJev: true, firedCount: 0, lastFiredAt: null }
     playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [jevBook, asker], jev: 'no_key' })
     await render()
-    expect(host.textContent).toContain('2 playbooks need Jev to fire, and there is no TypeSafe key yet')
+    expect(host.textContent).toContain('2 need Jev to fire, and there is no TypeSafe key yet')
     expect(host.textContent).toContain('Jev: Is `latest` asking to push now?')
     playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [jevBook], jev: 'ready' })
     await act(async () => useStore.setState({ playbooksVersion: 1 }))
@@ -163,39 +218,67 @@ describe('PlaybooksView with Jev playbooks', () => {
   it('shows how Jev took part in a test run', async () => {
     playbooks.test.mockResolvedValueOnce({ errors: [], rows: [{ text: 'maybe a spend tab', createdAt: 1, why: 'when intent == "idea" (intent "idea" at 0.82)' }], jevNote: 'Jev read your last 1 messages one by one, without the conversation around them, about $0.0000.' } as never)
     await render()
-    await click(button('Test on recent messages'))
+    await click(tab('Check'))
+    await click(button('Run test'))
     expect(host.textContent).toContain('Jev read your last 1 messages one by one')
     expect(host.textContent).toContain('(intent "idea" at 0.82)')
   })
 })
 
 describe('PlaybooksView with runbooks', () => {
-  const rb: PlaybookInfo = { ...good, id: 'brain-dump-to-tasks', title: 'Brain dump to tasks', kind: 'runbook', stepCount: 6, diagram: 'flowchart TD\n  start((start))', firedCount: 1, lastFiredAt: Date.now() }
+  const rb: PlaybookInfo = { ...good, id: 'brain-dump-to-tasks', source: RB_SOURCE, title: 'Brain dump to tasks', kind: 'runbook', stepCount: 1, diagram: 'flowchart TD\n  start((start))', firedCount: 1, lastFiredAt: Date.now() }
   const run = (over: Partial<RunbookRun>): RunbookRun => ({ runId: 'r1', runbookId: 'brain-dump-to-tasks', title: 'Brain dump to tasks', status: 'waiting', step: 'reply', scratch: {}, log: [{ step: 'tasks', kind: 'model', outcome: 'ok', ms: 1400, note: '2 items', at: 1 }], startedAt: Date.now() - 30_000, updatedAt: Date.now(), activeMs: 1500, steps: 3, consented: false, waiting: { since: Date.now(), expiresAt: Date.now() + 60_000, save: 'reply', question: 'Add the 2 tasks?' }, ...over })
 
-  it('marks runbooks, draws their steps, lists their runs and cancels a waiting one', async () => {
+  it('shows what is running in the sidebar, lists the runs and cancels a waiting one', async () => {
     playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [rb], jev: 'ready' })
     runbooks.runs.mockResolvedValue([run({}), run({ runId: 'r0', status: 'done', waiting: undefined, startedAt: Date.now() - 3_600_000 })])
     await render()
     await wait(200)
-    expect(host.textContent).toContain('runbook · 6 steps')
-    expect(host.querySelector('[data-testid="diagram"]')!.textContent).toContain('flowchart TD')
     expect(host.textContent).toContain('Running now')
-    expect(host.textContent).toContain('waiting for your reply')
+    expect(host.textContent).toContain('waiting for your reply · step 3')
+    await click(button('Brain dump to taskswaiting'))
+    expect(tab('Activity').getAttribute('aria-selected')).toBe('true')
     expect(host.textContent).toContain('Asked: “Add the 2 tasks?”')
-    expect(host.textContent).toContain('done')
-    await click(button('Steps'))
+    expect(host.textContent).toContain('1 of 2')
+    await click([...host.querySelectorAll('button')].find((b) => b.textContent === 'Steps'))
     expect(host.textContent).toContain('tasks (model): 2 items')
     await click(button('Cancel'))
     expect(runbooks.cancel).toHaveBeenCalledWith('r1')
     runbooks.runs.mockResolvedValue([])
   })
+
+  it('builds steps with a live flowchart, and renames a step everywhere it is used', async () => {
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [rb], jev: 'ready' })
+    playbooks.check.mockResolvedValue({ errors: [], warnings: [], diagram: 'flowchart TD\n  tasks' })
+    await render()
+    await click(tab('Steps'))
+    await wait(250)
+    expect(host.querySelector('[data-testid="diagram"]')!.textContent).toContain('flowchart TD')
+    expect((host.querySelector('textarea[aria-label="tasks prompt"]') as HTMLTextAreaElement).value).toBe('List the tasks in {{text}}')
+    await click(button('CheckBranch on a condition'))
+    expect(host.querySelector('[data-step="check"]')).toBeTruthy()
+    // point the check's yes branch at the first step, then rename that step
+    const yes = host.querySelector('select[aria-label="check yes"]') as HTMLSelectElement
+    await act(async () => {
+      yes.value = 'tasks'
+      yes.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    const id = host.querySelector('[data-step="tasks"] input[aria-label="Step id"]') as HTMLInputElement
+    await type(id, 'pull')
+    await act(async () => id.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
+    await click(tab('File'))
+    expect(editor().value).toContain('id: pull')
+    expect(editor().value).toContain('yes: pull')
+    expect(editor().value).not.toContain('id: tasks')
+    playbooks.check.mockImplementation(async () => ({ errors: [], warnings: [] }))
+  })
 })
 
 describe('PlaybooksView review', () => {
-  it('reviews the trigger, shows only the problems, takes marks, and drafts a tighter trigger into the editor', async () => {
+  it('reviews the trigger, shows only the problems, takes marks, and drafts a tighter trigger', async () => {
     await render()
-    await click(button('Review'))
+    await click(tab('Check'))
+    await click([...host.querySelectorAll('button')].find((b) => b.textContent === 'Review'))
     expect(playbooks.evaluate).toHaveBeenCalledWith('long-message-breakdown', SOURCE)
     expect(host.textContent).toContain('Of your last 3 messages it fires on 1. Right on 1, missed 1, fired wrongly on 1.')
     expect(host.textContent).toContain('ship it to github')
@@ -210,8 +293,9 @@ describe('PlaybooksView review', () => {
 
     await click(button('Suggest a tighter trigger'))
     expect(playbooks.suggest).toHaveBeenCalledWith('long-message-breakdown', SOURCE)
-    expect((host.querySelector('textarea[aria-label="editor"]') as HTMLTextAreaElement).value).toBe(`${SOURCE}# tighter\n`)
-    expect(host.textContent).toContain('unsaved changes')
+    expect(host.textContent).toContain('Unsaved changes')
+    await click(tab('File'))
+    expect(editor().value).toBe(`${SOURCE}# tighter\n`)
   })
 })
 

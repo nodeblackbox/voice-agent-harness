@@ -328,6 +328,8 @@ export interface PlaybooksState {
 export interface PlaybookCheck {
   errors: PlaybookIssue[]
   warnings: PlaybookIssue[]
+  /** Runbooks that load: their steps as a Mermaid flowchart, for the live view while editing. */
+  diagram?: string
 }
 
 /** One recent user message replayed against a playbook draft. */

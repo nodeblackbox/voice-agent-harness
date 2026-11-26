@@ -111,7 +111,7 @@ export class PlaybookService {
 
   check(id: string, text: string): PlaybookCheck {
     const r = parsePlaybook(id, text)
-    return { errors: r.ok ? [] : r.errors, warnings: r.warnings }
+    return { errors: r.ok ? [] : r.errors, warnings: r.warnings, ...(r.ok && r.playbook.runbook ? { diagram: runbookMermaid(r.playbook.runbook.steps) } : {}) }
   }
 
   /** Write a playbook. Nothing is written when it does not parse; a new id with `previousId` renames. */

@@ -9,53 +9,8 @@ import { Budget, checkSteps, type CheckedSteps } from '../runbooks/steps'
 
 export const PLAYBOOK_ID = /^[a-z0-9][a-z0-9_-]{0,40}$/
 
-/** Events this version can react to. Others are accepted with a warning, since they never fire yet. */
-export const KNOWN_EVENTS = ['turn.user', 'cc.finished', 'cc.needs_input', 'clock.tick'] as const
-export type KnownEvent = (typeof KNOWN_EVENTS)[number]
-
-/** What the events other than a user message carry. Only runbooks react to them: there is no reply to shape. */
-export const EVENT_FIELDS: Record<Exclude<KnownEvent, 'turn.user'>, Record<string, string>> = {
-  'cc.finished': {
-    session: "the Claude Code session's name",
-    sessionId: 'its id (a claude step can message it with session: "{{sessionId}}")',
-    summary: 'what it said it did',
-    folder: 'the folder it works in',
-    mode: 'its mode: plan, ask, auto or bypass',
-    changedFiles: 'files changed and not yet committed there, by git status (empty when the folder is not a git repository)',
-    changes: 'the same in words: "1 changed file", "3 changed files"'
-  },
-  'cc.needs_input': {
-    session: "the Claude Code session's name",
-    sessionId: 'its id',
-    kind: 'what it needs: question, permission or plan',
-    summary: 'what it is asking'
-  },
-  'clock.tick': {
-    time: 'the local time as "HH:MM", once a minute',
-    hour: 'the hour, 0 to 23',
-    minute: 'the minute, 0 to 59 (minute % 10 == 0 is every ten minutes)',
-    weekday: 'monday, tuesday, ... sunday',
-    sessionsWaiting: 'Claude Code sessions waiting on the user (a question, a permission or a plan)',
-    waitingNames: 'their names, joined with "and"',
-    oldestWaitMinutes: 'how long the longest of them has been waiting, in minutes',
-    sessionsWorking: 'Claude Code sessions working right now'
-  }
-}
-
-/** Fields a `when:` expression can read on a `turn.user` event. */
-export const CONTEXT_FIELDS: Record<string, string> = {
-  text: 'what the user said or typed',
-  chars: 'its length in characters',
-  words: 'its length in words',
-  via: '"voice" or "typed"',
-  project: 'the active project name, empty when none',
-  projectId: 'the active project id, empty when none',
-  turnIndex: 'how many user messages came before this one in the conversation',
-  fromSplit: 'true when the message is a piece split out of a longer one',
-  tuning: 'the Playbooks tuning values, e.g. tuning.longMessageChars',
-  intent: 'what kind of message Jev read it as: task, question, chat, idea, feedback, or unsure (empty without Jev)',
-  intentP: "Jev's confidence in that reading, 0 to 1"
-}
+import { CONTEXT_FIELDS, EVENT_FIELDS, KNOWN_EVENTS, type KnownEvent } from '@shared/playbookFile'
+export { CONTEXT_FIELDS, EVENT_FIELDS, KNOWN_EVENTS, type KnownEvent }
 
 /** Fields that only have a value when Jev answered this turn. */
 export const JEV_FIELDS = new Set(['intent', 'intentP'])

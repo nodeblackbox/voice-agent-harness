@@ -661,14 +661,19 @@ ${fetchedList.text}`
         .executeJavaScript(`(() => { const b = document.querySelector('button[aria-label="${process.env.VA_VIEW!.replace(/"/g, '')}"]'); if (!b) return 'no-button'; b.click(); return 'clicked' })()`)
         .then((r) => log('devtools', `view ${process.env.VA_VIEW}: ${String(r)}`))
     }, Number(process.env.VA_VIEW_DELAY ?? 12000))
-    // VA_CLICK="Review": press the first button whose text is exactly that, after the view opened
+    // VA_CLICK="Review": press the first button (or role=button/tab) whose text is exactly that, else starts with it,
+    // after the view opened. "A >> B" presses several, 700 ms apart.
     if (process.env.VA_CLICK) {
-      setTimeout(() => {
-        const want = JSON.stringify(process.env.VA_CLICK)
-        void win?.webContents
-          .executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((e) => e.textContent.trim() === ${want}); if (!b) return 'not-found'; b.click(); return 'clicked' })()`)
-          .then((r) => log('devtools', `click ${process.env.VA_CLICK}: ${String(r)}`))
-      }, Number(process.env.VA_VIEW_DELAY ?? 12000) + 500)
+      process.env.VA_CLICK.split('>>').forEach((label, i) => {
+        setTimeout(() => {
+          const want = JSON.stringify(label.trim())
+          void win?.webContents
+            .executeJavaScript(
+              `(() => { const all = [...document.querySelectorAll('button, [role="button"], [role="tab"]')]; const t = (e) => e.textContent.trim(); const b = all.find((e) => t(e) === ${want}) ?? all.find((e) => t(e).startsWith(${want})); if (!b) return 'not-found'; b.click(); return 'clicked' })()`
+            )
+            .then((r) => log('devtools', `click ${label.trim()}: ${String(r)}`))
+        }, Number(process.env.VA_VIEW_DELAY ?? 12000) + 500 + i * 700)
+      })
     }
     // VA_SCROLL_TO="Providers": scroll the first element whose own text is exactly that into view, after the view opened
     if (process.env.VA_SCROLL_TO) {
