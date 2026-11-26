@@ -5,6 +5,7 @@
 import { LineCounter, parseDocument, isMap, isScalar, type Node as YamlNode } from 'yaml'
 import { z } from 'zod'
 import { compile, ExprError, type Compiled } from './expr'
+import { Budget, checkSteps, type CheckedSteps } from '../runbooks/steps'
 
 export const PLAYBOOK_ID = /^[a-z0-9][a-z0-9_-]{0,40}$/
 
@@ -47,7 +48,7 @@ export function contentWords(text: string): string[] {
 }
 
 const Header = z.strictObject({
-  kind: z.literal('playbook', { error: 'kind must be "playbook" (runbooks come in a later version)' }).default('playbook'),
+  kind: z.enum(['playbook', 'runbook'], { error: 'kind must be "playbook" or "runbook"' }).default('playbook'),
   title: z.string().trim().min(1, 'title is empty').max(80, 'title is longer than 80 characters'),
   goal: z.string().trim().min(1, 'goal is empty').max(300, 'goal is longer than 300 characters'),
   enabled: z.boolean().default(true),
@@ -75,7 +76,13 @@ const Header = z.strictObject({
     })
     .default({ cooldownS: 0, maxPerSession: null }),
   mode: z.literal('inject', { error: 'mode must be "inject" (canned and hybrid come in a later version)' }).default('inject'),
-  tags: z.array(z.string()).default([])
+  tags: z.array(z.string()).default([]),
+  /** Runbooks: a few words the reply says when it starts ("on it, pulling the tasks out"); none = it starts silently. */
+  ack: z.string().trim().min(1).max(200).nullable().default(null),
+  /** Runbooks: the caps on one run. */
+  budget: Budget.default({ maxSteps: 15, maxSeconds: 120 }),
+  /** Runbooks: the steps, checked by checkSteps. */
+  steps: z.array(z.unknown()).default([])
 })
 
 export type PlaybookHeader = z.infer<typeof Header>
@@ -85,10 +92,12 @@ export function usesJev(p: Pick<Playbook, 'triggers' | 'condition'>): boolean {
   return !!p.triggers.ask || !!p.condition?.names.some((n) => JEV_FIELDS.has(n.split('.')[0]!))
 }
 
-export interface Playbook extends PlaybookHeader {
+export interface Playbook extends Omit<PlaybookHeader, 'steps'> {
   id: string
-  /** The instruction given to the assistant when it fires. */
+  /** Playbook: the instruction given to the assistant when it fires. Runbook: notes on what it is for (not sent anywhere). */
   body: string
+  /** Runbooks only: the checked steps and their compiled conditions. */
+  runbook: CheckedSteps | null
   /** Phrases as content-word sets; a phrase matches when every one of its words was said. */
   phrases: Array<{ text: string; words: string[] }>
   condition: Compiled | null
@@ -176,7 +185,19 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   })
 
   const body = parts.body.trim()
-  if (!body) errors.push({ line: 0, message: 'the instruction under the header is empty' })
+  let runbook: CheckedSteps | null = null
+  if (header.kind === 'runbook') {
+    const r = checkSteps(header.steps)
+    if (!r.ok) for (const e of r.errors) errors.push({ line: nodeLine(e.path), message: e.message })
+    else {
+      runbook = r.value
+      for (const w of r.warnings) warnings.push({ line: nodeLine(w.path), message: w.message })
+    }
+  } else {
+    if (!body) errors.push({ line: 0, message: 'the instruction under the header is empty' })
+    if (header.steps.length) errors.push({ line: nodeLine(['steps']), message: 'steps belong to a runbook: set kind: runbook' })
+    if (header.ack) warnings.push({ line: nodeLine(['ack']), message: 'ack is only used by runbooks' })
+  }
   const ask = header.triggers.ask
   if (ask && (ask.yes === undefined) !== (ask.no === undefined)) errors.push({ line: nodeLine(['triggers', 'ask']), message: 'triggers.ask: give both yes and no (what each answer means), or neither' })
   if (ask && !/`latest`/.test(ask.question)) warnings.push({ line: nodeLine(['triggers', 'ask', 'question']), message: 'triggers.ask: refer to the message as `latest` (in backticks), which is how Jev sees it' })
@@ -186,7 +207,8 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   }
 
   if (errors.length) return { ok: false, errors, warnings }
-  return { ok: true, warnings, playbook: { ...header, id, body, phrases, condition, source: text } }
+  const { steps: _steps, ...rest } = header
+  return { ok: true, warnings, playbook: { ...rest, id, body, phrases, condition, runbook, source: text } }
 }
 
 /**

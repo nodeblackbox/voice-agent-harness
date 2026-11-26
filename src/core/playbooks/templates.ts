@@ -70,10 +70,150 @@ If it is a complaint, acknowledge it in one short sentence without apologising a
 you will do differently, and do it from this reply on. If it sounds like something they will want every time,
 offer to remember it as a preference. If it is praise, take it in a few words and carry on.
 `
+  },
+  {
+    id: 'brain-dump-to-tasks',
+    text: `---
+kind: runbook
+title: Brain dump to tasks
+goal: Pull the concrete tasks out of a long message and offer to save them, so nothing said gets lost.
+enabled: true
+priority: normal
+triggers:
+  events: [turn.user]
+  when: "chars > tuning.longMessageChars and not fromSplit"
+gates:
+  cooldownS: 300
+ack: "I'll pull the tasks out of that in the background."
+budget:
+  maxSteps: 10
+  maxSeconds: 90
+steps:
+  - id: tasks
+    do: model
+    prompt: |
+      Below is something the user said out loud, transcribed. List every concrete task in it: a thing they
+      want done, as a short instruction of under twelve words ("Add a spend tab to the left bar"). Leave out
+      ideas they were only musing about, opinions and questions. One task per line, no numbering. If there
+      are none, answer NONE.
+
+      What came just before, for context:
+      {{recent}}
+
+      What they said:
+      {{text}}
+    save: tasks
+    list: true
+  - id: any
+    do: check
+    if: "tasks_count > 0"
+    next: { yes: offer, no: end }
+  - id: offer
+    do: say
+    text: "From that last message I picked out {{tasks_count}} tasks: {{tasks}}. Want me to add them to your to-do list?"
+  - id: reply
+    do: wait
+    expireS: 300
+  - id: agree
+    do: ask
+    question: "Is \`latest\` agreeing to add the tasks (yes, sure, go ahead, add them)?"
+    next: { no: end }
+  - id: add
+    do: tool
+    tool: remember
+    each: tasks
+    args: { key: "To do: {{item}}", value: "{{item}}", kind: todo }
+---
+Runs after a long message: the reply answers it as usual (the "Break down long messages" playbook shapes
+that), and this pulls the tasks out in the background, says them at the next pause, and adds them to memory
+as to-dos if the answer is yes. Asking again within five minutes is skipped (cooldownS).
+`
+  },
+  {
+    id: 'app-change-request',
+    text: `---
+kind: runbook
+title: Change request for this app
+goal: Turn a request to change this voice app into a brief for Claude Code, then start it or save it for later.
+enabled: true
+priority: high
+triggers:
+  events: [turn.user]
+  when: 'intent == "task"'
+  ask:
+    question: "Is \`latest\` asking to change this voice assistant app itself: its features, screens, settings or how it behaves?"
+    yes: "Asks for a change to the assistant app itself"
+    no: "Asks about something else: another project, a fact, or a task that is not changing the app"
+    min: 0.8
+gates:
+  cooldownS: 60
+ack: "I'll write that up as a job for Claude Code."
+budget:
+  maxSteps: 10
+  maxSeconds: 120
+steps:
+  - id: brief
+    do: model
+    prompt: |
+      Write a brief for a Claude Code session that will change a voice assistant app (Electron and
+      TypeScript; it should read AGENTS.md in its folder first). Say what to change and why, in the user's
+      terms, with every detail they gave, and ask it to plan first. Under 150 words, no preamble.
+
+      What came just before:
+      {{recent}}
+
+      The request:
+      {{text}}
+    save: brief
+  - id: title
+    do: model
+    prompt: "A title of at most six words for this change, nothing else: {{brief}}"
+    save: title
+  - id: offer
+    do: say
+    text: "I've written that up as a job for Claude Code: {{title}}. Should I start a session on it now, or add it to your list for later?"
+  - id: reply
+    do: wait
+    expireS: 600
+  - id: when
+    do: ask
+    question: "What does \`latest\` want done with the job?"
+    options:
+      now: "Start it now"
+      later: "Add it to the list for later"
+      drop: "Neither: drop it"
+    min: 0.6
+    next: { now: start, later: note, drop: dropped, unsure: note }
+  - id: start
+    do: claude
+    name: "{{title}}"
+    prompt: "{{brief}}"
+    folder: app
+  - id: started
+    do: say
+    text: "Started a Claude Code session on it. It will show you a plan before it changes anything."
+    next: end
+  - id: note
+    do: tool
+    tool: remember
+    args: { key: "App change: {{title}}", value: "{{brief}}", kind: todo }
+  - id: noted
+    do: say
+    text: "Added it to your to-do list as {{title}}. Say start it whenever you want a session on it."
+    next: end
+  - id: dropped
+    do: say
+    text: "Okay, dropped it."
+---
+Needs Jev (a TypeSafe key). The session starts in plan mode in this app's own folder, so it changes nothing
+until you approve its plan. An answer that is neither clearly now nor clearly drop keeps the job on the
+to-do list, the safe choice, and says so.
+`
   }
 ]
 
 /** The guide at the top of the folder: what a playbook file is. Not loaded as a playbook (it starts with _). */
+/** The runbook part of the guide, also given to the drafter. */
 export const GUIDE = `# Playbooks
 
 Each .md file in this folder is a playbook: when its trigger matches what you say, its instruction is added
@@ -116,4 +256,51 @@ You can also ask the assistant to make or change one by voice ("from now on, whe
 delete one, or undo the last change: the folder keeps its own git history.
 
 Every firing, and every playbook that matched but was held back, shows in the Console.
+
+## Runbooks
+
+A runbook is a playbook with kind: runbook and a list of steps. When it fires it runs those steps in the
+background, one after another, while the conversation carries on. The text under the header is only notes.
+
+---
+kind: runbook
+title: Short name
+goal: One sentence on what it is for.
+triggers: { events: [turn.user], when: "chars > 1200" }   # the same triggers as a playbook
+ack: "On it, in the background."   # optional: the reply mentions the job in a few words like this
+budget: { maxSteps: 15, maxSeconds: 120 }   # the run stops at whichever comes first (waiting not counted)
+steps:
+  - id: tasks                 # every step has an id; by default the next step in the list follows
+    do: model                 # ask the background model; {{text}} is the message, {{recent}} what came before
+    prompt: "List the tasks in {{text}}. One per line, or NONE."
+    save: tasks               # later steps read it as {{tasks}}
+    list: true                # one item per line; also saves {{tasks_count}}
+  - id: any
+    do: check                 # a condition over what was saved (same language as when:)
+    if: "tasks_count > 0"
+    next: { yes: offer, no: end }   # "end" stops
+  - id: offer
+    do: say                   # spoken at the next pause in the conversation
+    text: "I found {{tasks_count}} tasks: {{tasks}}. Add them?"
+  - id: reply
+    do: wait                  # wait for the user's next message (saved as {{reply}}); gives up after expireS
+    expireS: 300
+  - id: agree
+    do: ask                   # a question about \`latest\` (the reply, or about: <a saved value>); Jev answers
+    question: "Is \`latest\` agreeing to go ahead?"   # it when it can, the model otherwise
+    next: { no: end }         # yes/no, or options: { key: meaning } for a choice; unsure stops
+  - id: add
+    do: tool                  # remember, update_memory, recall, web_search, read_page, current_time, diagram_create
+    tool: remember
+    each: tasks               # once per item, with {{item}}
+    args: { key: "To do: {{item}}", value: "{{item}}", kind: todo }
+  - id: start
+    do: claude                # start a Claude Code session in plan mode (only after a wait step: the user says yes first)
+    name: "fix it"
+    prompt: "{{brief}}"
+    folder: app               # app = this app's own folder, sandbox = a new folder of its own
+---
+Notes on what it is for.
+
+Runs, their steps and anything they are waiting on show on the Playbooks page and in the Console.
 `

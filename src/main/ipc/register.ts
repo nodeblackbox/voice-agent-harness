@@ -139,6 +139,8 @@ export function registerIpc(d: IpcDeps): void {
     const t = d.settings.get().playbooks
     return testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...t }, t.useJev ? { client: d.jev, timeoutMs: t.jevTimeoutMs, intentMin: t.intentMin } : undefined)
   })
+  h(IPC.runbooksRuns, () => d.agent.runbooks.list())
+  h(IPC.runbooksCancel, (_e, runId: string) => d.agent.runbooks.cancel(String(runId)))
   h(IPC.playbooksOpenFolder, async () => {
     await shell.openPath(d.playbooks.dir)
   })

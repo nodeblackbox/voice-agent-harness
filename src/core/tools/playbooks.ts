@@ -73,7 +73,7 @@ export function playbookTools(deps: PlaybookToolDeps): ToolSet {
 
     playbook_write: tool({
       description:
-        'Create a playbook, or change one, from a brief. A playbook makes you handle a recurring situation a set way: "whenever I ramble, break it down", "when I say push the changes, offer to push", "stop asking me follow-up questions after short answers". The drafter writes and checks the file; it is saved and active at once. Then say in one sentence what it reacts to and what it makes you do.',
+        'Create a playbook or runbook, or change one, from a brief. A playbook makes you handle a recurring situation a set way: "whenever I ramble, break it down", "when I say push the changes, offer to push", "stop asking me follow-up questions after short answers". A runbook does several steps in the background when the situation comes up: "when I mention a bug, write it up and ask if I want a Claude Code session on it". The drafter picks which, writes and checks the file; it is saved and active at once. Then say in one sentence what it reacts to and what it makes you do.',
       inputSchema: z.object({
         brief: z
           .string()

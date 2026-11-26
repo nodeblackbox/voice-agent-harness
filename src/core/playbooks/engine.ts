@@ -37,9 +37,11 @@ export interface Firing {
   id: string
   title: string
   why: string
+  /** A runbook starts a background run; a playbook adds its instruction to the reply. */
+  kind: 'playbook' | 'runbook'
 }
 
-export type DropReason = 'disabled' | 'cooldown' | 'session_cap' | 'cap'
+export type DropReason = 'disabled' | 'cooldown' | 'session_cap' | 'cap' | 'one_runbook'
 
 export type EngineTrace = (ev: string, data: Record<string, unknown>) => void
 
@@ -142,19 +144,29 @@ export class PlaybookEngine {
     }
 
     passed.sort((a, b) => rank(b.p) - rank(a.p) || a.p.id.localeCompare(b.p.id))
-    const chosen = passed.slice(0, Math.max(0, limits.maxInjected))
-    for (const m of passed.slice(chosen.length)) this.trace('trigger.dropped', { id: m.p.id, reason: 'cap' satisfies DropReason, title: m.p.title })
+    // one runbook per message: two background jobs asking questions at once would talk over each other
+    const firstRunbook = passed.find((m) => m.p.kind === 'runbook')
+    for (const m of passed.filter((x) => x.p.kind === 'runbook' && x !== firstRunbook)) this.trace('trigger.dropped', { id: m.p.id, reason: 'one_runbook' satisfies DropReason, title: m.p.title })
+    const eligible = passed.filter((m) => m.p.kind !== 'runbook' || m === firstRunbook)
+    const chosen = eligible.slice(0, Math.max(0, limits.maxInjected))
+    for (const m of eligible.slice(chosen.length)) this.trace('trigger.dropped', { id: m.p.id, reason: 'cap' satisfies DropReason, title: m.p.title })
 
     const fired: Firing[] = []
     const lines: string[] = []
     for (const { p, why } of chosen) {
       this.lastFired.set(p.id, now)
       this.firedCount.set(p.id, (this.firedCount.get(p.id) ?? 0) + 1)
-      this.trace('trigger.fired', { id: p.id, title: p.title, by: EVENT, why, priority: p.priority })
-      const body = p.body.length > limits.injectMaxChars ? `${p.body.slice(0, limits.injectMaxChars - 1)}…` : p.body
-      lines.push(`- ${p.title} (goal: ${p.goal})\n${body}`)
-      this.trace('playbook.applied', { id: p.id, mode: p.mode, chars: body.length })
-      fired.push({ id: p.id, title: p.title, why })
+      this.trace('trigger.fired', { id: p.id, title: p.title, by: EVENT, why, priority: p.priority, kind: p.kind })
+      if (p.kind === 'runbook') {
+        // the run itself starts in the agent; the reply only mentions it, and only when the runbook says what to say
+        // either way the reply must not do the job's work too (start the same Claude Code session, save the same tasks)
+        lines.push(`- "${p.title}" has started in the background for this message (its job: ${p.goal.replace(/\.$/, '')}). It is already handled: do not do that part yourself, and do not start, queue, save or set up anything for it.${p.ack ? ` Mention it in a few words, in your own way, like: "${p.ack}"` : ''}`)
+      } else {
+        const body = p.body.length > limits.injectMaxChars ? `${p.body.slice(0, limits.injectMaxChars - 1)}…` : p.body
+        lines.push(`- ${p.title} (goal: ${p.goal})\n${body}`)
+        this.trace('playbook.applied', { id: p.id, mode: p.mode, chars: body.length })
+      }
+      fired.push({ id: p.id, title: p.title, why, kind: p.kind })
     }
     return { block: lines.join('\n\n'), fired }
   }

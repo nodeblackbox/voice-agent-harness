@@ -103,7 +103,7 @@ describe('Agent: playbooks', () => {
     // the user's message carries the firing, for the chip under it, and it is saved with the conversation
     const saved = store.messages(agent.currentSessionId).filter((m) => m.role === 'user')
     expect(saved[0]!.playbooks).toBeUndefined()
-    expect(saved[1]!.playbooks).toEqual([{ id: 'long-message-breakdown', title: 'Break down long messages', why: expect.stringContaining('chars > tuning.longMessageChars') }])
+    expect(saved[1]!.playbooks).toEqual([{ id: 'long-message-breakdown', title: 'Break down long messages', kind: 'playbook', why: expect.stringContaining('chars > tuning.longMessageChars') }])
   })
 
   it('uses none when maxInjected is 0, and a throwing source never costs the reply', async () => {

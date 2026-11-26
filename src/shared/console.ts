@@ -82,11 +82,21 @@ const CANCEL_REASON: Record<string, string> = {
 
 const CHANGE: Record<string, string> = { save: 'saved', rename: 'renamed', delete: 'deleted (moved to .trash)', on: 'switched on', off: 'switched off' }
 
+const RUN_END: Record<string, string> = {
+  done: 'finished',
+  blocked: 'stopped by an error',
+  out_of_budget: 'hit its limit',
+  cancelled: 'cancelled',
+  expired: 'gave up waiting',
+  interrupted: 'cut off'
+}
+
 const DROP_REASON: Record<string, string> = {
   disabled: 'it is switched off',
   cooldown: 'still cooling down from its last firing',
   session_cap: 'already fired as often as allowed in this conversation',
-  cap: 'too many playbooks matched; higher priorities won'
+  cap: 'too many playbooks matched; higher priorities won',
+  one_runbook: 'another runbook started on this message'
 }
 
 function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
@@ -100,7 +110,7 @@ function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {
   }
   const head = name.split('.')[0]
   if (head === 'ear') return 'you'
-  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore' || head === 'trigger' || head === 'playbook' || head === 'playbooks' || head === 'jev') return 'turn'
+  if (head === 'turn' || head === 'state' || head === 'announce' || head === 'tuning' || head === 'explore' || head === 'trigger' || head === 'playbook' || head === 'playbooks' || head === 'jev' || head === 'runbook') return 'turn'
   if (head === 'tts') return 'voice'
   if (head === 'playback') return 'playback'
   if (head === 'cc') return 'claude'
@@ -327,6 +337,22 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return d.ok
         ? row(`Drafted the playbook ${str(d.id)}`, join(ms(d.ms), d.repaired ? 'needed one fix' : ''), 'plain')
         : row('Could not draft a playbook that loads; nothing saved', join(Array.isArray(d.errors) ? (d.errors as unknown[]).map(str)[0] ?? '' : str(d.error), ms(d.ms)), 'warn')
+    case 'runbook.start':
+      return row(`Runbook started: ${str(d.title) || str(d.id)}`, 'runs in the background', 'accent')
+    case 'runbook.step':
+      return row(`${str(d.id)}: ${str(d.step)} (${str(d.kind)})${d.note ? `: ${str(d.note)}` : ''}`, ms(d.ms), d.outcome === 'ok' ? 'dim' : 'bad', { noisy: d.outcome === 'ok' && d.kind !== 'wait' })
+    case 'runbook.wait':
+      return row(`${str(d.id)} is waiting for your reply`, `gives up after ${str(d.expireS)} s`, 'warn')
+    case 'runbook.reply':
+      return row(`${str(d.id)} got your reply`, `after ${ms(d.waitedMs)}`, 'plain')
+    case 'runbook.done':
+      return row(`Runbook ${RUN_END[str(d.status)] ?? str(d.status)}: ${str(d.id)}`, join(`${str(d.steps)} steps`, ms(d.ms), d.status === 'done' ? '' : str(d.reason)), d.status === 'done' ? 'good' : d.status === 'blocked' ? 'bad' : 'warn')
+    case 'runbook.skipped':
+      return row(`Runbook not started: ${str(d.id)}`, d.reason === 'already_running' ? 'it is already running' : d.reason === 'waiting_for_reply' ? 'another one is waiting for your reply' : 'too many runbooks are running', 'dim')
+    case 'runbook.withheld':
+      return row('Left out of this reply, a background job does it', Array.isArray(d.tools) ? (d.tools as unknown[]).map(str).join(', ') : '', 'dim', { noisy: true })
+    case 'runbook.usage':
+      return row('Runbook model token use', `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens`, 'dim', { noisy: true })
     case 'playbook.usage':
       return row('Playbook drafter token use', `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens`, 'dim', { noisy: true })
     case 'playbooks.invalid': {

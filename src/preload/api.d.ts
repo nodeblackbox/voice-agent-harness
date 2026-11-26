@@ -3,6 +3,7 @@ import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
   KeyName,
+  RunbookRun,
   PlaybookCheck,
   PlaybookIssue,
   PlaybookSaveResult,
@@ -116,6 +117,11 @@ export interface VoiceAgentApi {
     /** Replay recent user messages against a draft. */
     test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[]; jevNote?: string }>
     openFolder(): Promise<void>
+  }
+  runbooks: {
+    /** Recent runs, newest first: working, waiting for a reply, and finished. */
+    runs(): Promise<RunbookRun[]>
+    cancel(runId: string): Promise<boolean>
   }
   memory: {
     scopes(): Promise<MemoryScope[]>

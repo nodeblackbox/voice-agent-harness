@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSyn
 import { join } from 'node:path'
 import { PLAYBOOK_ID, parsePlaybook, setHeaderField, usesJev, type ParseIssue, type Playbook } from '@core/playbooks/schema'
 import { GUIDE, TEMPLATES, type Template } from '@core/playbooks/templates'
+import { runbookMermaid } from '@core/runbooks/steps'
 import type { PlaybookCheck, PlaybookInfo, PlaybookSaveResult, PlaybooksState } from '@shared/types'
 
 const SEEDED = '_seeded.json'
@@ -258,7 +259,10 @@ export class PlaybookService {
       maxPerSession: p.gates.maxPerSession,
       tags: p.tags,
       ask: p.triggers.ask?.question ?? null,
-      usesJev: usesJev(p)
+      usesJev: usesJev(p),
+      kind: p.kind,
+      diagram: p.runbook ? runbookMermaid(p.runbook.steps) : undefined,
+      stepCount: p.runbook?.steps.length
     }
   }
 

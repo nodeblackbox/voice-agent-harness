@@ -28,6 +28,7 @@ import { announcement } from '@core/claude/announce'
 import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { PlaybookService } from './services/playbooks'
+import { RunbookRunStore } from './services/runbookRuns'
 import { JevClient } from '@core/jev/client'
 import { testPlaybook } from '@core/playbooks/test-run'
 import { usesJev } from '@core/playbooks/schema'
@@ -343,6 +344,8 @@ ${fetchedList.text}`
   }
 
   const diagrams = new DiagramService(userData, send, (doc, id) => emit({ type: 'diagram', id, doc }))
+  // runbook runs, one JSON file each, so a run waiting for the user's reply survives a restart
+  const runbookRuns = new RunbookRunStore(join(userData, 'runbooks', 'runs'), (m) => logAt('warn', 'runbooks', m))
   // Jev, the playbooks' decision model: TypeSafe's API, or another server speaking it (JEV_BASE_URL, e.g. a local jevos)
   const jev = new JevClient({ key: () => settings.keysFor('typesafe')[0], baseUrl: () => settings.envVar('JEV_BASE_URL') ?? '', model: () => settings.envVar('JEV_MODEL') ?? '' })
   // playbooks (docs/TRIGGERS.md): one .md file each in <userData>/playbooks, re-read when they change
@@ -370,6 +373,7 @@ ${fetchedList.text}`
       undo: () => playbooks.undo('voice'),
       replay: async (id, text) => (await testPlaybook(id, text, store.recentUserMessages(40), { ...settings.get().playbooks })).rows
     },
+    runbookStore: runbookRuns,
     mcp,
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
@@ -411,6 +415,7 @@ ${fetchedList.text}`
 
   try {
     playbooks.start()
+    agent.resumeRunbooks()
   } catch (e) {
     logError('playbooks', 'could not set up the playbooks folder', e)
   }

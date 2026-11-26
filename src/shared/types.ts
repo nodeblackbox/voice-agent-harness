@@ -273,6 +273,8 @@ export interface ChatMessage {
 export interface PlaybookFiring {
   id: string
   title: string
+  /** A runbook started a background run (absent on messages saved before runbooks). */
+  kind?: 'playbook' | 'runbook'
   /** The condition and the numbers it read, or the phrase that matched. */
   why: string
 }
@@ -305,6 +307,11 @@ export interface PlaybookInfo {
   ask?: string | null
   /** It needs Jev's answer (its intent condition or its own question) to fire. */
   usesJev?: boolean
+  /** A runbook runs steps in the background; a playbook shapes the reply. */
+  kind?: 'playbook' | 'runbook'
+  /** Runbooks: the steps as a Mermaid flowchart, and how many there are. */
+  diagram?: string
+  stepCount?: number
   /** This app run. */
   firedCount: number
   lastFiredAt: number | null
@@ -330,6 +337,33 @@ export interface PlaybookTestRow {
   via?: 'voice' | 'text'
   /** Why it would match, or null. Gates (cooldown, caps) are not applied. */
   why: string | null
+}
+
+export type RunbookRunStatus = 'running' | 'waiting' | 'done' | 'blocked' | 'out_of_budget' | 'cancelled' | 'expired' | 'interrupted'
+
+/** One run of a runbook (docs/TRIGGERS.md), saved after every step. */
+export interface RunbookRun {
+  runId: string
+  runbookId: string
+  title: string
+  status: RunbookRunStatus
+  /** The step it is on (running, waiting) or stopped at. */
+  step: string | null
+  /** What the steps saved, plus text (the message that started it) and recent (the messages before it). */
+  scratch: Record<string, unknown>
+  log: Array<{ step: string; kind: string; outcome: 'ok' | 'error' | 'refused'; ms: number; note?: string; at: number }>
+  startedAt: number
+  updatedAt: number
+  /** Working time, waits for the user not counted. */
+  activeMs: number
+  /** Steps run so far. */
+  steps: number
+  /** Set when it is waiting for the user's reply. */
+  waiting?: { since: number; expiresAt: number; save: string; question?: string }
+  /** The user has replied to it (a claude step needs this). */
+  consented: boolean
+  /** Why it stopped, when it did not finish normally. */
+  reason?: string
 }
 
 export type PlaybookSaveResult = { ok: true; id: string } | { ok: false; errors: PlaybookIssue[] }
@@ -681,6 +715,7 @@ export type AgentEvent =
   | { type: 'context'; snapshot: ContextSnapshot }
   | { type: 'skills-changed' }
   | { type: 'playbooks-changed' }
+  | { type: 'runbooks-changed' }
   | { type: 'mcp-changed' }
   | { type: 'claude'; event: CcManagerEvent }
   /** A diagram was drawn, changed or (doc null) deleted. */

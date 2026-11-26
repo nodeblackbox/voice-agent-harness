@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, Zap } from 'lucide-react'
+import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, ListChecks, Zap } from 'lucide-react'
 import type { ChatMessage, PlaybookFiring, UserTiming } from '@shared/types'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
@@ -37,11 +37,11 @@ function PlaybookChips({ firings }: { firings: PlaybookFiring[] }) {
           key={f.id}
           type="button"
           onClick={() => openPlaybook(f.id)}
-          title={`Playbook fired: ${f.why}. Click to open it.`}
+          title={`${f.kind === 'runbook' ? 'Runbook started' : 'Playbook fired'}: ${f.why}. Click to open it.`}
           className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5"
           style={{ background: T.violetTint, color: T.violet, border: `1px solid ${T.violetBorder}`, cursor: 'pointer' }}
         >
-          <Workflow size={11} />
+          {f.kind === 'runbook' ? <ListChecks size={11} /> : <Workflow size={11} />}
           {f.title}
         </button>
       ))}

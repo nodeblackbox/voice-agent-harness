@@ -103,6 +103,8 @@ interface Store {
   mcpVersion: number
   /** Bumped when the playbooks folder changes; the Playbooks view re-reads on it. */
   playbooksVersion: number
+  /** Bumped whenever a runbook run moves on; the Playbooks view re-reads the runs on it. */
+  runbooksVersion: number
   /** The playbook to show when the Playbooks view opens (a chip under a message was clicked). */
   playbookFocus: string | null
   /** Claude Code sessions managed by voice, with their recent output. */
@@ -175,6 +177,7 @@ export const useStore = create<Store>((set, get) => ({
   memoryVersion: 0,
   mcpVersion: 0,
   playbooksVersion: 0,
+  runbooksVersion: 0,
   playbookFocus: null,
   claudeSessions: [],
   claudeOutput: {},
@@ -279,6 +282,9 @@ export const useStore = create<Store>((set, get) => ({
           break
         case 'playbooks-changed':
           set({ playbooksVersion: get().playbooksVersion + 1 })
+          break
+        case 'runbooks-changed':
+          set({ runbooksVersion: get().runbooksVersion + 1 })
           break
         case 'skills-changed':
           void get().reloadSkills()

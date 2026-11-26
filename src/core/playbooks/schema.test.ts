@@ -56,12 +56,12 @@ describe('parsePlaybook', () => {
     expect(bare.warnings[0]!.message).toMatch(/fires on every/)
   })
 
-  it('needs the header, an instruction and a valid id; runbooks and canned mode are not in this version', () => {
+  it('needs the header, an instruction and a valid id; a runbook needs steps; canned mode is not in this version', () => {
     expect(parsePlaybook('x', 'no header').ok).toBe(false)
     expect(parsePlaybook('x', file('title: X\ngoal: Test.', '')).ok).toBe(false)
     expect(parsePlaybook('Bad Id', file('title: X\ngoal: Test.')).ok).toBe(false)
     const rb = parsePlaybook('x', file('kind: runbook\ntitle: X\ngoal: Test.'))
-    expect(!rb.ok && rb.errors[0]!.message).toMatch(/later version/)
+    expect(!rb.ok && rb.errors[0]!.message).toMatch(/needs a list of steps/)
     expect(parsePlaybook('x', file('title: X\ngoal: Test.\nmode: canned')).ok).toBe(false)
   })
 

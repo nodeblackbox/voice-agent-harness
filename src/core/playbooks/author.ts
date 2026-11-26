@@ -35,7 +35,7 @@ function spec(jev: boolean): string {
   const intents = Object.entries(INTENTS)
     .map(([k, v]) => `- ${k}: ${v}`)
     .join('\n')
-  return `You write playbook files for a personal voice assistant. A playbook recognises a situation in what the user says and adds an instruction to the assistant's next reply. You get a brief, and sometimes the current file to change; you answer with the complete file.
+  return `You write playbook and runbook files for a personal voice assistant. A playbook recognises a situation in what the user says and adds an instruction to the assistant's next reply. A runbook recognises a situation and runs steps in the background (look something up, ask the user, then save or start work). You get a brief, and sometimes the current file to change; you answer with the complete file.
 
 ${GUIDE}
 
@@ -58,6 +58,7 @@ Jev (intent and ask) is not available here: use when: and said: only.`
 }
 
 Rules:
+- Write a playbook when the brief is about how to answer. Write a runbook only when it needs steps after the reply: finding or writing something in the background, asking the user, then saving it or starting a Claude Code session. A runbook that asks before acting has a say step, then a wait step, then an ask step.
 - Fire narrowly. A playbook that fires on the wrong messages is worse than none. Prefer said: phrases of two or more words and specific conditions.
 - The body is an instruction to the assistant for that one reply, in plain words, second person, three to six short sentences. It is spoken aloud, so no markdown in what it asks for unless the user wants it.
 - The goal is one sentence on what it is for. The title is two to five words.

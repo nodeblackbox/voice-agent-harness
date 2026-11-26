@@ -105,6 +105,26 @@ describe('PlaybookEngine', () => {
   })
 })
 
+describe('runbooks in the engine', () => {
+  const rb = (id: string, priority: string) => {
+    const r = parsePlaybook(id, `---\nkind: runbook\ntitle: ${id}\ngoal: Does ${id}.\npriority: ${priority}\nack: on it\ntriggers:\n  when: "chars > 0"\nsteps:\n  - id: hi\n    do: say\n    text: hi\n---\n`)
+    if (!r.ok) throw new Error(JSON.stringify(r.errors))
+    return r.playbook
+  }
+
+  it('starts one runbook per message, the highest priority, and the reply only mentions it', () => {
+    const { engine, events } = setup()
+    const out = engine.onUserTurn([rb('low-job', 'low'), rb('high-job', 'high'), pb('plain', 'triggers:\n  when: "chars > 0"')], facts('hello'), limits)
+    expect(out.fired.map((f) => [f.id, f.kind])).toEqual([
+      ['high-job', 'runbook'],
+      ['plain', 'playbook']
+    ])
+    expect(events.find((e) => e.ev === 'trigger.dropped')!.data).toMatchObject({ id: 'low-job', reason: 'one_runbook' })
+    expect(out.block).toContain('"high-job" has started in the background for this message (its job: Does high-job). It is already handled: do not do that part yourself, and do not start, queue, save or set up anything for it. Mention it in a few words, in your own way, like: "on it"')
+    expect(out.block).not.toContain('Notes')
+  })
+})
+
 describe('planJev', () => {
   const idea = pb('idea', `triggers:\n  when: 'intent == "idea"'`)
   const push = pb('push', 'triggers:\n  said: ["push changes"]\n  ask:\n    question: "Is `latest` asking to push changes now?"')

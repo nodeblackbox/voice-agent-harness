@@ -59,7 +59,9 @@ import { JevError, type JevClient } from './jev/client'
 import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
 import { playbookTools, type PlaybookAdmin } from './tools/playbooks'
 import { draftPlaybook, type DraftResult } from './playbooks/author'
-import type { PlaybookTestRow } from '@shared/types'
+import type { PlaybookTestRow, RunbookRun } from '@shared/types'
+import { RunbookRunner } from './runbooks/runner'
+import { RUNBOOK_TOOLS, toolsDoneBy } from './runbooks/steps'
 import type { Playbook } from './playbooks/schema'
 import { classifyAfterCut, resumeText } from './turn/resume'
 
@@ -87,6 +89,8 @@ export interface AgentDeps {
   jev?: JevClient
   /** Creating, changing and deleting playbooks by voice (the playbook_* tools); none when unset. */
   playbookAdmin?: PlaybookAdmin & { replay?(id: string, text: string): Promise<PlaybookTestRow[] | null> }
+  /** Where runbook runs are kept between steps and across restarts; runs are not saved when unset. */
+  runbookStore?: { save(run: RunbookRun): void; load(): RunbookRun[] }
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
@@ -217,6 +221,8 @@ export class Agent {
   private readonly playbookEngine = new PlaybookEngine((ev, data) => this.playbookEvents.push([ev, data]))
   /** playbook_delete's "asked, waiting for a yes", kept across turns (the tools themselves are rebuilt each turn). */
   private readonly playbookDeletes = new Map<string, number>()
+  /** Runbooks fired by a message run here, in the background. */
+  readonly runbooks: RunbookRunner
   /** The last cancelled turn, kept until the renderer reports where the cut landed. */
   private cancelled: { turn: ActiveTurn; assistant: ChatMessage } | null = null
   private readTurn: { id: string; controller: AbortController } | null = null
@@ -250,6 +256,19 @@ export class Agent {
       deps.emit({ type: 'state', state })
     })
     this.factory = new ModelFactory(deps.keys)
+    this.runbooks = new RunbookRunner({
+      generate: (prompt, signal) => this.backgroundGenerate(prompt, signal),
+      jev: () => {
+        const s = this.deps.settings()
+        return this.deps.jev && s.playbooks.useJev ? { client: this.deps.jev, timeoutMs: s.playbooks.jevTimeoutMs } : null
+      },
+      say: (text) => this.announce(text),
+      tool: (name, args, signal) => this.runbookTool(name, args, signal),
+      claude: (name, prompt, folder) => this.runbookClaude(name, prompt, folder),
+      save: (run) => this.deps.runbookStore?.save(run),
+      trace: (ev, data) => this.tr(ev, data),
+      changed: () => this.deps.emit({ type: 'runbooks-changed' })
+    })
     this.edge = new EdgeTtsEngine(deps.settings().speech.ttsPoolSize, () => deps.settings().speech.ttsTimeoutMs, deps.edgeAgent)
     if (deps.kokoro) this.kokoro = new KokoroTtsEngine(deps.kokoro, () => deps.settings().voice.kokoroVoice, deps.log)
     const sessions = deps.store.sessions()
@@ -299,6 +318,7 @@ export class Agent {
 
   /** Called on quit: cancel what is running and write the session summary. */
   shutdown(): void {
+    this.runbooks.dispose()
     this.clearFinalWatch()
     this.cancel()
     this.closeSession()
@@ -691,6 +711,9 @@ export class Agent {
     this.upsert(user)
     // Jev reads the message now, in parallel with the rest of the turn's setup; the playbooks wait for it later, capped
     this.playbookEvents = []
+    const recentText = this.recentText()
+    // a background run waiting for an answer takes this message as its reply (the reply below still answers it normally)
+    const runReply = this.runbooks.deliverReply(text)
     const jevTurn = this.startJev(text, via, settings)
     if (this.messages.filter((m) => m.role === 'user').length === 1) {
       this.deps.store.renameSession(this.sessionId, text.split(/\s+/).slice(0, 7).join(' ').slice(0, 60))
@@ -770,6 +793,18 @@ export class Agent {
     const memory = this.memoryBlock(text, settings)
     const playbooks = await this.playbooksFor(text, via, settings, jevTurn)
     if (this.turn !== turn) return
+    // the reply must not do a background job's work a second time: leave out the tools its steps use
+    const jobs = [...playbooks.fired.filter((f) => f.kind === 'runbook').map((f) => f.id), ...(runReply ? [runReply.runbookId] : [])]
+    const withheld = new Set(jobs.flatMap((id) => toolsDoneBy(this.deps.playbooks?.().find((p) => p.id === id)?.runbook?.steps ?? [])))
+    // seen live: told a job had started, the reply tried to rewrite the runbook itself. Editing playbooks on such a
+    // turn only happens when the user actually talked about playbooks.
+    if (jobs.length && !/\b(play|run)\s?books?\b/i.test(text)) for (const n of ['playbook_write', 'playbook_switch', 'playbook_delete', 'playbook_undo']) if (n in tools) withheld.add(n)
+    for (const name of withheld) delete tools[name]
+    if (withheld.size) this.playbookEvents.push(['runbook.withheld', { tools: [...withheld], jobs }])
+    if (runReply) {
+      const note = `- This message may be the answer to a question from the background job "${runReply.title}"${runReply.question ? `, which asked: "${runReply.question}"` : ''}. The job has their answer and carries on by itself, and follows up itself if the answer is unclear. If it is an answer, acknowledge it in a few words ("got it") without asking that question again and without doing the job's work; if it is about something else, answer it normally.`
+      playbooks.block = playbooks.block ? `${note}\n\n${playbooks.block}` : note
+    }
     {
       // the chips under the message; cleared when a merged or retried message no longer fires anything
       const current = this.messages.find((m) => m.id === user.id) ?? user
@@ -824,6 +859,12 @@ export class Agent {
       systemChars: system.stable.length + system.live.length
     })
     for (const [ev, data] of this.playbookEvents.splice(0)) this.tr(ev, data)
+    // runbooks that fired start now, in the background (after turn.start, so their trace sits under this turn)
+    for (const f of playbooks.fired) {
+      if (f.kind !== 'runbook') continue
+      const rb = this.deps.playbooks?.().find((p) => p.id === f.id)
+      if (rb) this.runbooks.start(rb, { text, recent: recentText })
+    }
 
     const metrics: TurnMetrics = {}
     if (voiceMeta.asrMs !== undefined) metrics.asrMs = voiceMeta.asrMs
@@ -1331,6 +1372,51 @@ export class Agent {
   }
 
   /** The active project for the prompt, with its folder: the picked one, else this app's own code when it runs from source. */
+  /** The last few messages before the current one, for runbooks that need "that thing" filled in. */
+  private recentText(): string {
+    return this.messages
+      .slice(0, -1)
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.text.trim())
+      .slice(-3)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text.replace(/\s+/g, ' ').slice(0, 400)}`)
+      .join('\n')
+  }
+
+  /** Runs saved on disk pick up again: one waiting for a reply waits on, one cut off mid-step is marked so. */
+  resumeRunbooks(): void {
+    const saved = this.deps.runbookStore?.load() ?? []
+    if (saved.length) this.runbooks.resume(saved, (id) => this.deps.playbooks?.().find((p) => p.id === id))
+  }
+
+  /** The background model for runbook steps: the chat model when its provider has a key, else any keyed one. */
+  private async backgroundGenerate(prompt: string, signal: AbortSignal): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+    const s = this.deps.settings()
+    const model = resolveModel(s.modelId, this.deps.keys)?.model ?? findModel(DEFAULT_FALLBACK_MODEL_ID)
+    if (!model) throw new Error('no chat model has a key')
+    const r = await generateText({ model: this.factory.create(model).model, prompt, maxOutputTokens: 800, temperature: 0.2, abortSignal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]) })
+    return { text: r.text, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens }
+  }
+
+  /** A runbook's tool step: only the allowed tools, run the way a turn runs them. */
+  private async runbookTool(name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+    if (!(RUNBOOK_TOOLS as readonly string[]).includes(name)) throw new Error(`${name} is not allowed in a runbook`)
+    const s = this.deps.settings()
+    const model = resolveModel(s.modelId, this.deps.keys)?.model ?? findModel(DEFAULT_FALLBACK_MODEL_ID)!
+    const t = this.tools(s, model)[name] as unknown as { execute?: (a: unknown, o: unknown) => Promise<unknown> } | undefined
+    if (!t?.execute) throw new Error(`${name} is not available right now`)
+    return t.execute(args, { toolCallId: `runbook-${crypto.randomUUID()}`, messages: [], abortSignal: signal })
+  }
+
+  /** A runbook's claude step: a new session in plan mode, so it changes nothing until its plan is approved. */
+  private runbookClaude(name: string, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string } {
+    const s = this.deps.settings()
+    if (!this.claudeOn(s)) return { ok: false, note: 'Claude Code sessions are switched off in Settings' }
+    const appDir = folder === 'app' ? (this.deps.appDir?.() ?? null) : null
+    if (folder === 'app' && !appDir) return { ok: false, note: "this app's own folder is not known (it is not running from source)" }
+    const r = this.deps.claude!.start(name, prompt, { folder: appDir ?? undefined, mode: 'plan' })
+    return r.ok ? { ok: true, note: `started "${r.session.name}" in plan mode` } : { ok: false, note: r.error }
+  }
+
   private turnFacts(text: string, via: string, s: Settings): TurnFacts {
     const picked = this.pickedProject(s)
     return {

@@ -38,6 +38,8 @@ export const IPC = {
   playbooksDelete: 'playbooks:delete',
   playbooksTest: 'playbooks:test',
   playbooksOpenFolder: 'playbooks:open-folder',
+  runbooksRuns: 'runbooks:runs',
+  runbooksCancel: 'runbooks:cancel',
   mcpConfig: 'mcp:config',
   mcpSetConfig: 'mcp:set-config',
   memoryScopes: 'memory:scopes',

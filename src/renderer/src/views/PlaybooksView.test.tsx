@@ -1,11 +1,13 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ChatMessage, PlaybookCheck, PlaybookInfo, PlaybooksState } from '@shared/types'
+import type { ChatMessage, PlaybookCheck, PlaybookInfo, PlaybooksState, RunbookRun } from '@shared/types'
 
 vi.mock('../audio/playback', () => ({ playback: { subscribe: vi.fn(), setMuted: vi.fn(), setDuck: vi.fn(), configure: vi.fn(), setOutput: vi.fn(), cancel: vi.fn(), onSpeaking: vi.fn(), onChunk: vi.fn(), playing: false } }))
 vi.mock('../audio/cue', () => ({ cue: { start: vi.fn(), stop: vi.fn() } }))
 vi.mock('../audio/devices', () => ({ listDevices: vi.fn(), pickDefaults: vi.fn() }))
+// Mermaid needs layout jsdom does not have; the diagram's code stands in for it
+vi.mock('../components/diagram/DiagramCard', () => ({ InlineDiagram: ({ code }: { code: string }) => <pre data-testid="diagram">{code}</pre> }))
 // CodeMirror needs layout jsdom does not have; a textarea stands in for it
 vi.mock('./claude/CodeEditor', () => ({
   default: ({ value, onChange }: { value: string; onChange?: (t: string) => void }) => <textarea aria-label="editor" value={value} onChange={(e) => onChange?.(e.target.value)} />
@@ -27,7 +29,8 @@ const playbooks = {
   test: vi.fn(async () => ({ errors: [], rows: [{ text: 'a very long ramble', createdAt: 1, why: 'when chars > 1200 (chars 1500)' }, { text: 'just saying hello there', createdAt: 2, why: null }] })),
   openFolder: vi.fn(async () => undefined)
 }
-;(globalThis as { window: { api?: unknown } }).window.api = { playbooks }
+;const runbooks = { runs: vi.fn(async (): Promise<RunbookRun[]> => []), cancel: vi.fn(async () => true) }
+;(globalThis as { window: { api?: unknown } }).window.api = { playbooks, runbooks }
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const { useStore } = await import('../state/store')
@@ -151,6 +154,29 @@ describe('PlaybooksView with Jev playbooks', () => {
     await click(button('Test on recent messages'))
     expect(host.textContent).toContain('Jev read your last 1 messages one by one')
     expect(host.textContent).toContain('(intent "idea" at 0.82)')
+  })
+})
+
+describe('PlaybooksView with runbooks', () => {
+  const rb: PlaybookInfo = { ...good, id: 'brain-dump-to-tasks', title: 'Brain dump to tasks', kind: 'runbook', stepCount: 6, diagram: 'flowchart TD\n  start((start))', firedCount: 1, lastFiredAt: Date.now() }
+  const run = (over: Partial<RunbookRun>): RunbookRun => ({ runId: 'r1', runbookId: 'brain-dump-to-tasks', title: 'Brain dump to tasks', status: 'waiting', step: 'reply', scratch: {}, log: [{ step: 'tasks', kind: 'model', outcome: 'ok', ms: 1400, note: '2 items', at: 1 }], startedAt: Date.now() - 30_000, updatedAt: Date.now(), activeMs: 1500, steps: 3, consented: false, waiting: { since: Date.now(), expiresAt: Date.now() + 60_000, save: 'reply', question: 'Add the 2 tasks?' }, ...over })
+
+  it('marks runbooks, draws their steps, lists their runs and cancels a waiting one', async () => {
+    playbooks.list.mockResolvedValueOnce({ dir: '/d', playbooks: [rb], jev: 'ready' })
+    runbooks.runs.mockResolvedValue([run({}), run({ runId: 'r0', status: 'done', waiting: undefined, startedAt: Date.now() - 3_600_000 })])
+    await render()
+    await wait(200)
+    expect(host.textContent).toContain('runbook · 6 steps')
+    expect(host.querySelector('[data-testid="diagram"]')!.textContent).toContain('flowchart TD')
+    expect(host.textContent).toContain('Running now')
+    expect(host.textContent).toContain('waiting for your reply')
+    expect(host.textContent).toContain('Asked: “Add the 2 tasks?”')
+    expect(host.textContent).toContain('done')
+    await click(button('Steps'))
+    expect(host.textContent).toContain('tasks (model): 2 items')
+    await click(button('Cancel'))
+    expect(runbooks.cancel).toHaveBeenCalledWith('r1')
+    runbooks.runs.mockResolvedValue([])
   })
 })
 

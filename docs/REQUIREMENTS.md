@@ -187,6 +187,11 @@ this is the "why" and the bar each part has to meet.
   push", "stop breaking my messages down", "undo that". The assistant drafts the file, checks it, saves it, and
   says in a sentence what it reacts to; deleting needs a yes. Every change can be undone (the folder keeps its
   own git history).
+- **Runbooks** do several steps in the background when their trigger fires, while the conversation carries on:
+  pull the tasks out of a brain dump and offer to save them, or turn a request to change this app into a brief
+  and ask whether to start a Claude Code session now or later. What they say waits for a pause; the next thing
+  said is their reply. They never start work without that reply (a Claude Code session starts in plan mode),
+  they stop at their step and time limits, and a run waiting for an answer survives a restart.
 - Playbooks must never slow a reply down or cost one: code checks take microseconds, Jev is capped by its
   timeout, and a failure inside either is logged and the reply goes ahead.
 

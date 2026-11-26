@@ -6,8 +6,9 @@
  * have set it off.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, CircleAlert, Copy, FlaskConical, FolderOpen, Plus, RotateCcw, Save, Trash2, Workflow } from 'lucide-react'
-import type { PlaybookCheck, PlaybookInfo, PlaybookIssue, PlaybooksState, PlaybookTestRow } from '@shared/types'
+import { AlertTriangle, Check, CircleAlert, Copy, FlaskConical, FolderOpen, ListChecks, Plus, RotateCcw, Save, Square, Trash2, Workflow } from 'lucide-react'
+import type { PlaybookCheck, PlaybookInfo, PlaybookIssue, PlaybooksState, PlaybookTestRow, RunbookRun, RunbookRunStatus } from '@shared/types'
+import { InlineDiagram } from '../components/diagram/DiagramCard'
 import { T, alpha } from '../theme'
 import { useStore } from '../state/store'
 import { Btn, Card, Empty, Page, Tag, Toggle } from '../components/primitives'
@@ -76,7 +77,13 @@ function ListItem({ p, active, onSelect, onToggle }: { p: PlaybookInfo; active: 
     <Card pad={12} active={active} onClick={onSelect} className="va-fade">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          {p.ok ? <Workflow size={14} style={{ color: on ? T.violet : T.text3, flexShrink: 0 }} /> : <CircleAlert size={14} style={{ color: T.red, flexShrink: 0 }} />}
+          {!p.ok ? (
+            <CircleAlert size={14} style={{ color: T.red, flexShrink: 0 }} />
+          ) : p.kind === 'runbook' ? (
+            <ListChecks size={14} style={{ color: on ? T.cyan : T.text3, flexShrink: 0 }} />
+          ) : (
+            <Workflow size={14} style={{ color: on ? T.violet : T.text3, flexShrink: 0 }} />
+          )}
           <span className="text-sm font-medium truncate" style={{ color: on ? T.text : T.text2 }}>
             {p.title ?? `${p.id}.md`}
           </span>
@@ -91,6 +98,11 @@ function ListItem({ p, active, onSelect, onToggle }: { p: PlaybookInfo; active: 
         <div className="mt-2 flex flex-col gap-1.5">
           <TriggerChips p={p} />
           <div className="flex items-center gap-1.5 text-xs" style={{ color: T.text3 }}>
+            {p.kind === 'runbook' && (
+              <span className="text-[11px] rounded px-1.5 py-0.5" style={{ background: T.cyanTint, color: T.cyan }} title="Runs its steps in the background when it fires">
+                runbook · {p.stepCount} steps
+              </span>
+            )}
             {p.usesJev && (
               <span className="text-[11px] rounded px-1.5 py-0.5" style={{ background: T.violetTint, color: T.violet }} title="Needs Jev's answer to fire">
                 Jev
@@ -180,6 +192,68 @@ function TestResults({ rows, note, onClose }: { rows: PlaybookTestRow[]; note?: 
   )
 }
 
+const STATUS: Record<RunbookRunStatus, { label: string; color: string }> = {
+  running: { label: 'working', color: T.cyan },
+  waiting: { label: 'waiting for your reply', color: T.amber },
+  done: { label: 'done', color: T.green },
+  blocked: { label: 'stopped by an error', color: T.red },
+  out_of_budget: { label: 'hit its limit', color: T.amber },
+  cancelled: { label: 'cancelled', color: T.text3 },
+  expired: { label: 'no reply in time', color: T.text3 },
+  interrupted: { label: 'cut off when the app closed', color: T.text3 }
+}
+
+function RunRow({ run, onCancel, showTitle }: { run: RunbookRun; onCancel: () => void; showTitle?: boolean }) {
+  const [open, setOpen] = useState(false)
+  const st = STATUS[run.status]
+  const active = run.status === 'running' || run.status === 'waiting'
+  return (
+    <div className="rounded-lg px-3 py-2 flex flex-col gap-1.5" style={{ background: T.bg, border: `1px solid ${T.border}` }}>
+      <div className="flex items-center gap-2 text-xs">
+        <span className={`rounded-full shrink-0 ${run.status === 'running' ? 'va-pulse' : ''}`} style={{ width: 7, height: 7, background: st.color }} />
+        {showTitle && <span style={{ color: T.text, fontWeight: 500 }}>{run.title}</span>}
+        <span style={{ color: st.color }}>{st.label}</span>
+        <span style={{ color: T.text3 }}>
+          · {run.steps} step{run.steps === 1 ? '' : 's'} · {ago(run.startedAt)}
+        </span>
+        <div className="flex-1" />
+        {run.log.length > 0 && (
+          <button type="button" onClick={() => setOpen(!open)} className="text-xs" style={{ color: T.text2, background: 'none', border: 'none', cursor: 'pointer' }}>
+            {open ? 'Hide steps' : 'Steps'}
+          </button>
+        )}
+        {active && (
+          <Btn small icon={Square} onClick={onCancel}>
+            Cancel
+          </Btn>
+        )}
+      </div>
+      {run.waiting?.question && (
+        <span className="text-xs" style={{ color: T.text2, lineHeight: 1.45 }}>
+          Asked: “{run.waiting.question}”
+        </span>
+      )}
+      {run.reason && run.status !== 'done' && (
+        <span className="text-xs" style={{ color: T.text3, lineHeight: 1.45 }}>
+          {run.reason}
+        </span>
+      )}
+      {open && (
+        <div className="flex flex-col gap-0.5">
+          {run.log.map((l, i) => (
+            <div key={i} className="flex gap-2 text-[11px]" style={{ fontFamily: T.mono, color: l.outcome === 'ok' ? T.text2 : T.red }}>
+              <span style={{ color: T.text3, minWidth: 52 }}>{l.ms >= 1000 ? `${(l.ms / 1000).toFixed(1)} s` : `${l.ms} ms`}</span>
+              <span>
+                {l.step} ({l.kind}){l.note ? `: ${l.note}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PlaybooksView() {
   const version = useStore((s) => s.playbooksVersion)
   const focus = useStore((s) => s.playbookFocus)
@@ -192,6 +266,20 @@ export function PlaybooksView() {
   const [check, setCheck] = useState<PlaybookCheck | null>(null)
   const [test, setTest] = useState<{ rows: PlaybookTestRow[]; note?: string } | null>(null)
   const [testing, setTesting] = useState(false)
+  const runsVersion = useStore((s) => s.runbooksVersion)
+  const [runs, setRuns] = useState<RunbookRun[]>([])
+  useEffect(() => {
+    let live = true
+    // a run moving on pushes an event per step; one read per burst is plenty
+    const t = setTimeout(() => {
+      window.api.runbooks?.runs().then((r) => live && setRuns(r), () => undefined)
+    }, 150)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [runsVersion])
+  const cancelRun = (runId: string) => void window.api.runbooks.cancel(runId).then(() => window.api.runbooks.runs().then(setRuns))
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -353,6 +441,22 @@ export function PlaybooksView() {
         )}
       </div>
 
+      {runs.some((r) => r.status === 'running' || r.status === 'waiting') && (
+        <Card pad={12} style={{ borderColor: T.cyanBorder }}>
+          <div className="flex items-center gap-2 mb-2">
+            <ListChecks size={14} style={{ color: T.cyan }} />
+            <span className="text-sm font-medium">Running now</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {runs
+              .filter((r) => r.status === 'running' || r.status === 'waiting')
+              .map((r) => (
+                <RunRow key={r.runId} run={r} showTitle onCancel={() => cancelRun(r.runId)} />
+              ))}
+          </div>
+        </Card>
+      )}
+
       {needJev > 0 && data && data.jev !== 'ready' && (
         <div className="flex items-start gap-2 text-xs rounded-lg px-3 py-2" style={{ background: T.amberTint, color: T.text, lineHeight: 1.5 }}>
           <AlertTriangle size={13} style={{ color: T.amber, flexShrink: 0, marginTop: 2 }} />
@@ -418,6 +522,32 @@ export function PlaybooksView() {
 
             <Issues check={check} />
             {test && <TestResults rows={test.rows} note={test.note} onClose={() => setTest(null)} />}
+
+            {current?.kind === 'runbook' && current.diagram && (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-medium" style={{ color: T.text3 }}>
+                  Its steps (as saved)
+                </span>
+                <InlineDiagram code={current.diagram} />
+              </div>
+            )}
+            {current?.kind === 'runbook' && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium" style={{ color: T.text3 }}>
+                  Recent runs
+                </span>
+                {runs.filter((r) => r.runbookId === current.id).length ? (
+                  runs
+                    .filter((r) => r.runbookId === current.id)
+                    .slice(0, 6)
+                    .map((r) => <RunRow key={r.runId} run={r} onCancel={() => cancelRun(r.runId)} />)
+                ) : (
+                  <span className="text-xs" style={{ color: T.text3 }}>
+                    It has not run yet.
+                  </span>
+                )}
+              </div>
+            )}
 
             <div className="text-xs" style={{ color: T.text3, lineHeight: 1.5 }}>
               Ctrl+S saves. A file with problems is not saved, so what is on disk always loads. The format is in _guide.md in the playbooks folder.
