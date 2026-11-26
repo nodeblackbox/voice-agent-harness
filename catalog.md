@@ -1,0 +1,1075 @@
+# Models and voices available to your keys
+
+## groq (11)
+
+- allam-2-7b
+- canopylabs/orpheus-arabic-saudi
+- canopylabs/orpheus-v1-english
+- meta-llama/llama-prompt-guard-2-22m
+- meta-llama/llama-prompt-guard-2-86m
+- openai/gpt-oss-120b
+- openai/gpt-oss-20b
+- openai/gpt-oss-safeguard-20b
+- qwen/qwen3.8-27b
+- whisper-large-v3
+- whisper-large-v3-turbo
+
+## gemini (50)
+
+- antigravity-preview-05-2026
+- antigravity-preview-09-2026
+- antigravity-preview-latest
+- deep-research-max-preview-04-2026
+- deep-research-preview-04-2026
+- deep-research-pro-preview-12-2025
+- gemini-2.5-computer-use-preview-10-2025
+- gemini-2.5-flash
+- gemini-2.5-flash-image
+- gemini-2.5-flash-lite
+- gemini-2.5-flash-preview-tts
+- gemini-2.5-pro
+- gemini-2.5-pro-preview-tts
+- gemini-3-flash-preview
+- gemini-3-pro-image
+- gemini-3-pro-image-preview
+- gemini-3.1-flash-image
+- gemini-3.1-flash-image-preview
+- gemini-3.1-flash-lite
+- gemini-3.1-flash-lite-image
+- gemini-3.1-flash-lite-preview
+- gemini-3.1-flash-tts-preview
+- gemini-3.1-pro-preview
+- gemini-3.1-pro-preview-customtools
+- gemini-3.5-flash
+- gemini-3.5-flash-lite
+- gemini-3.5-transcribe
+- gemini-3.6-flash
+- gemini-3.7-flash
+- gemini-3.8-flash
+- gemini-3.8-flash-lite-tts
+- gemini-3.8-flash-tts
+- gemini-4-argon
+- gemini-4-carbon
+- gemini-4-hydrogen
+- gemini-4-neon
+- gemini-flash-latest
+- gemini-flash-lite-latest
+- gemini-nano-banana-2.1
+- gemini-omni-1.1-flash
+- gemini-omni-1.2-flash
+- gemini-omni-flash-preview
+- gemini-pro-latest
+- gemini-robotics-er-2-preview
+- gemma-4-26b-a4b-it
+- gemma-4-31b-it
+- lyria-3-clip-preview
+- lyria-3-pro-preview
+- lyria-3.5
+- nano-banana-pro-preview
+
+## xai (12)
+
+- grok-4.20-0309-non-reasoning
+- grok-4.20-0309-reasoning
+- grok-4.20-multi-agent-0309
+- grok-4.3
+- grok-4.5
+- grok-4.6
+- grok-4.7
+- grok-imagine-image
+- grok-imagine-image-2.0
+- grok-imagine-video
+- grok-imagine-video-1.5
+- grok-imagine-video-1.5-lite
+
+## openai (99)
+
+- chat-latest
+- chatgpt-image-latest
+- gpt-4.1
+- gpt-4.1-2025-04-14
+- gpt-4.1-mini
+- gpt-4.1-mini-2025-04-14
+- gpt-4o
+- gpt-4o-2024-08-06
+- gpt-4o-2024-11-20
+- gpt-4o-mini
+- gpt-4o-mini-2024-07-18
+- gpt-4o-mini-transcribe
+- gpt-4o-mini-transcribe-2025-03-20
+- gpt-4o-mini-transcribe-2025-12-15
+- gpt-4o-mini-tts
+- gpt-4o-mini-tts-2025-03-20
+- gpt-4o-mini-tts-2025-12-15
+- gpt-4o-transcribe
+- gpt-4o-transcribe-diarize
+- gpt-5
+- gpt-5-2025-08-07
+- gpt-5-mini
+- gpt-5-mini-2025-08-07
+- gpt-5-nano
+- gpt-5-nano-2025-08-07
+- gpt-5-pro
+- gpt-5-pro-2025-10-06
+- gpt-5-search-api
+- gpt-5-search-api-2025-10-14
+- gpt-5.1
+- gpt-5.1-2025-11-13
+- gpt-5.2
+- gpt-5.2-2025-12-11
+- gpt-5.2-pro
+- gpt-5.2-pro-2025-12-11
+- gpt-5.3-codex
+- gpt-5.4
+- gpt-5.4-2026-03-05
+- gpt-5.4-mini
+- gpt-5.4-mini-2026-03-17
+- gpt-5.4-nano
+- gpt-5.4-nano-2026-03-17
+- gpt-5.4-pro
+- gpt-5.4-pro-2026-03-05
+- gpt-5.5
+- gpt-5.5-2026-04-23
+- gpt-5.5-pro
+- gpt-5.5-pro-2026-04-23
+- gpt-5.6-luna
+- gpt-5.6-sol
+- gpt-5.6-terra
+- gpt-6-astra
+- gpt-6-luna
+- gpt-6-sol
+- gpt-6.1-sol
+- gpt-6.1-terra
+- gpt-6.2-astra
+- gpt-6.2-sol
+- gpt-audio
+- gpt-audio-1.5
+- gpt-audio-2025-08-28
+- gpt-audio-mini
+- gpt-audio-mini-2025-12-15
+- gpt-image-1-mini
+- gpt-image-1.5
+- gpt-image-2
+- gpt-image-2-2026-04-21
+- gpt-image-2.5-flare
+- gpt-image-2.5-flare-2026-09-08
+- gpt-image-2.5-sunburst
+- gpt-image-2.5-sunburst-2026-09-08
+- gpt-image-2.6-flare
+- gpt-image-2.6-sunburst
+- gpt-live-1
+- gpt-live-1.1
+- gpt-live-transcribe
+- gpt-realtime
+- gpt-realtime-1.5
+- gpt-realtime-2
+- gpt-realtime-2.1
+- gpt-realtime-2.1-mini
+- gpt-realtime-2025-08-28
+- gpt-realtime-mini
+- gpt-realtime-mini-2025-12-15
+- gpt-realtime-translate
+- gpt-realtime-whisper
+- gpt-transcribe
+- o3
+- o3-2025-04-16
+- omni-moderation-2024-09-26
+- omni-moderation-latest
+- text-embedding-3-large
+- text-embedding-3-small
+- text-embedding-ada-002
+- tts-1
+- tts-1-1106
+- tts-1-hd
+- tts-1-hd-1106
+- whisper-1
+
+## elevenlabs voices (27)
+
+- Ed - Late Night Announcer [professional] dHd5gvgSOzSfduK4CvEg
+- Eastend Steve [professional] 1TE7ou3jyxHsyRehUuMB
+- Donny - Real New Yorker [professional] BfDbhCUVGzNgO4WXDRdy
+- Allison - inviting and velvety British accent [professional] Se2Vw1WbHmGbBbyWTuu4
+- Aria - Sexy Female Villain Voice [professional] TC0Zp7WVFzhA8zpTlRqV
+- Aja - Sexy Female Villain Voice [professional] eVItLK1UvXctxuaRV2Oq
+- Bella - Professional, Bright, Warm [premade] hpp4J3VqNfWAUOO0d1Us
+- Roger - Laid-Back, Casual, Resonant [premade] CwhRBWXzGAHq8TQ4Fs17
+- Sarah - Mature, Reassuring, Confident [premade] EXAVITQu4vr4xnSDxMaL
+- Laura - Enthusiast, Quirky Attitude [premade] FGY2WhTYpPnrIDTdsKH5
+- Charlie - Deep, Confident, Energetic [premade] IKne3meq5aSn9XLyUdCD
+- George - Warm, Captivating Storyteller [premade] JBFqnCBsd6RMkjVDRZzb
+- Callum - Husky Trickster [premade] N2lVS1w4EtoT3dr4eOWO
+- River - Relaxed, Neutral, Informative [premade] SAz9YHcvj6GT2YYXdXww
+- Harry - Fierce Warrior [premade] SOYHLrjzK2X1ezoPC6cr
+- Liam - Energetic, Social Media Creator [premade] TX3LPaxmHKxFdv7VOQHJ
+- Alice - Clear, Engaging Educator [premade] Xb7hH8MSUJpSbSDYk0k2
+- Matilda - Knowledgable, Professional [premade] XrExE9yKIg1WjnnlVkGX
+- Will - Relaxed Optimist [premade] bIHbv24MWmeRgasZH58o
+- Jessica - Playful, Bright, Warm [premade] cgSgspJ2msm6clMCkdW9
+- Eric - Smooth, Trustworthy [premade] cjVigY5qzO86Huf0OWal
+- Chris - Charming, Down-to-Earth [premade] iP95p4xoKVk53GoZ742B
+- Brian - Deep, Resonant and Comforting [premade] nPczCjzI2devNBz1zQrb
+- Daniel - Steady Broadcaster [premade] onwK4e9ZLuTAKqWW03F9
+- Lily - Velvety Actress [premade] pFZP5JQG7iQjIQuC4Bku
+- Adam - Dominant, Firm [premade] pNInz6obpgDQGcFmaJgB
+- Bill - Wise, Mature, Balanced [premade] pqHfZKP75CvOlQylNhV4
+
+## elevenlabs models (11)
+
+- eleven_v4
+- eleven_v4_turbo
+- eleven_v3
+- eleven_v3_conversational
+- eleven_multilingual_v2
+- eleven_flash_v2_5
+- eleven_turbo_v2_5
+- eleven_turbo_v2
+- eleven_flash_v2
+- eleven_english_sts_v2
+- eleven_multilingual_sts_v2
+
+## fish (your voices) (3)
+
+- Modern Conversational Youth 57a59cabbc1443f1a28ce1998c0a8f3b
+- Middle-Aged Conversational Storyteller 17555b9a5d6a41169279334bd3d64eaa
+
+## inworld voices (ZUJfc05j…Ng==) (366)
+
+- Aanya [SYSTEM] Aanya
+- Aarav [SYSTEM] Aarav
+- Abby [SYSTEM] Abby
+- Ada [SYSTEM] Ada
+- Aditya [SYSTEM] Aditya
+- Adriana [SYSTEM] Adriana
+- Alain [SYSTEM] Alain
+- Alaric [SYSTEM] Alaric
+- Alex [SYSTEM] Alex
+- Alistair [SYSTEM] Alistair
+- Alvaro [SYSTEM] Alvaro
+- Alyona [SYSTEM] Alyona
+- Amara [SYSTEM] Amara
+- Ambrose [SYSTEM] Ambrose
+- Amina [SYSTEM] Amina
+- Amos [SYSTEM] Amos
+- Anders [SYSTEM] Anders
+- Andoy [SYSTEM] Andoy
+- Andreea [SYSTEM] Andreea
+- Andrei [SYSTEM] Andrei
+- Andres [SYSTEM] Andres
+- Anjali [SYSTEM] Anjali
+- Annika [SYSTEM] Annika
+- Antonia [SYSTEM] Antonia
+- Archie [SYSTEM] Archie
+- Arda [SYSTEM] Arda
+- Arjun [SYSTEM] Arjun
+- Arkady [SYSTEM] Arkady
+- Arthur [SYSTEM] Arthur
+- Ashley [SYSTEM] Ashley
+- Astrid [SYSTEM] Astrid
+- Asuka [SYSTEM] Asuka
+- Avery [SYSTEM] Avery
+- Aylin [SYSTEM] Aylin
+- Banjo [SYSTEM] Banjo
+- Baran [SYSTEM] Baran
+- Bastian [SYSTEM] Bastian
+- Beatrice [SYSTEM] Beatrice
+- Beatriz [SYSTEM] Beatriz
+- Benjamin [SYSTEM] Benjamin
+- Bianca [SYSTEM] Bianca
+- Birgit [SYSTEM] Birgit
+- Blake [SYSTEM] Blake
+- Boonleng [SYSTEM] Boonleng
+- Borja [SYSTEM] Borja
+- Brandon [SYSTEM] Brandon
+- Brian [SYSTEM] Brian
+- Brick [SYSTEM] Brick
+- Brooke [SYSTEM] Brooke
+- Bruna [SYSTEM] Bruna
+- Bruno [SYSTEM] Bruno
+- Bryce [SYSTEM] Bryce
+- Callum [SYSTEM] Callum
+- Calvin [SYSTEM] Calvin
+- Camila [SYSTEM] Camila
+- Camille [SYSTEM] Camille
+- Carina [SYSTEM] Carina
+- Carmen [SYSTEM] Carmen
+- Carter [SYSTEM] Carter
+- Casey [SYSTEM] Casey
+- Cedric [SYSTEM] Cedric
+- Celeste [SYSTEM] Celeste
+- Chioma [SYSTEM] Chioma
+- Chip [SYSTEM] Chip
+- Chloe [SYSTEM] Chloe
+- Citlali [SYSTEM] Citlali
+- Claire [SYSTEM] Claire
+- Clive [SYSTEM] Clive
+- Conrad [SYSTEM] Conrad
+- Cooper [SYSTEM] Cooper
+- Cordelia [SYSTEM] Cordelia
+- Craig [SYSTEM] Craig
+- Cristian [SYSTEM] Cristian
+- Cuauhtemoc [SYSTEM] Cuauhtemoc
+- Curro [SYSTEM] Curro
+- Dalisay [SYSTEM] Dalisay
+- Damon [SYSTEM] Damon
+- Daniel [SYSTEM] Daniel
+- Daniela [SYSTEM] Daniela
+- Dante [SYSTEM] Dante
+- Darlene [SYSTEM] Darlene
+- Davi [SYSTEM] Davi
+- Deborah [SYSTEM] Deborah
+- Defne [SYSTEM] Defne
+- Dennis [SYSTEM] Dennis
+- Derek [SYSTEM] Derek
+- Dhruv [SYSTEM] Dhruv
+- Diego [SYSTEM] Diego
+- Diogo [SYSTEM] Diogo
+- Dmitry [SYSTEM] Dmitry
+- Dominus [SYSTEM] Dominus
+- Dorota [SYSTEM] Dorota
+- Duarte [SYSTEM] Duarte
+- Duncan [SYSTEM] Duncan
+- Ecrin [SYSTEM] Ecrin
+- Edward [SYSTEM] Edward
+- Efe [SYSTEM] Efe
+- Eileen [SYSTEM] Eileen
+- Eitan [SYSTEM] Eitan
+- Eldrin [SYSTEM] Eldrin
+- Eleanor [SYSTEM] Eleanor
+- Elena [SYSTEM] Elena
+- Elif [SYSTEM] Elif
+- Elliot [SYSTEM] Elliot
+- Elsa [SYSTEM] Elsa
+- Emeka [SYSTEM] Emeka
+- Emil [SYSTEM] Emil
+- Erik [SYSTEM] Erik
+- Ethan [SYSTEM] Ethan
+- Étienne [SYSTEM] Étienne
+- Evan [SYSTEM] Evan
+- Evelyn [SYSTEM] Evelyn
+- Fabian [SYSTEM] Fabian
+- Felix [SYSTEM] Felix
+- Fernanda [SYSTEM] Fernanda
+- Florencia [SYSTEM] Florencia
+- Florian [SYSTEM] Florian
+- Folake [SYSTEM] Folake
+- Franziska [SYSTEM] Franziska
+- Freddie [SYSTEM] Freddie
+- Gabriela [SYSTEM] Gabriela
+- Galina [SYSTEM] Galina
+- Gareth [SYSTEM] Gareth
+- Gianni [SYSTEM] Gianni
+- Giovanna [SYSTEM] Giovanna
+- Gizem [SYSTEM] Gizem
+- Gleb [SYSTEM] Gleb
+- Gonzalo [SYSTEM] Gonzalo
+- Graham [SYSTEM] Graham
+- Grayson [SYSTEM] Grayson
+- Grigory [SYSTEM] Grigory
+- Guadalupe [SYSTEM] Guadalupe
+- Hades [SYSTEM] Hades
+- Hamish [SYSTEM] Hamish
+- Hana [SYSTEM] Hana
+- Hank [SYSTEM] Hank
+- Harold [SYSTEM] Harold
+- Haruto [SYSTEM] Haruto
+- Hazel [SYSTEM] Hazel
+- Heidi [SYSTEM] Heidi
+- Heike [SYSTEM] Heike
+- Heitor [SYSTEM] Heitor
+- Hélène [SYSTEM] Hélène
+- Hendrik [SYSTEM] Hendrik
+- Hernando [SYSTEM] Hernando
+- Hina [SYSTEM] Hina
+- Huiling [SYSTEM] Huiling
+- Hyunwoo [SYSTEM] Hyunwoo
+- Ignacio [SYSTEM] Ignacio
+- Imogen [SYSTEM] Imogen
+- Indi [SYSTEM] Indi
+- Ingrid [SYSTEM] Ingrid
+- Inigo [SYSTEM] Inigo
+- Inmaculada [SYSTEM] Inmaculada
+- Ioana [SYSTEM] Ioana
+- Ishaan [SYSTEM] Ishaan
+- Itzel [SYSTEM] Itzel
+- James [SYSTEM] James
+- Jannik [SYSTEM] Jannik
+- Jarrah [SYSTEM] Jarrah
+- Jason [SYSTEM] Jason
+- Jessica [SYSTEM] Jessica
+- Jing [SYSTEM] Jing
+- Joanna [SYSTEM] Joanna
+- Joaquim [SYSTEM] Joaquim
+- Joaquin [SYSTEM] Joaquin
+- Johan [SYSTEM] Johan
+- Johanna [SYSTEM] Johanna
+- Jonah [SYSTEM] Jonah
+- Josef [SYSTEM] Josef
+- Josh [SYSTEM] Josh
+- Joy [SYSTEM] Joy
+- Junhao [SYSTEM] Junhao
+- Kabir [SYSTEM] Kabir
+- Karolina [SYSTEM] Karolina
+- Katrien [SYSTEM] Katrien
+- Kelsey [SYSTEM] Kelsey
+- Kenji [SYSTEM] Kenji
+- Kerem [SYSTEM] Kerem
+- Kilian [SYSTEM] Kilian
+- Lachlan [SYSTEM] Lachlan
+- Larissa [SYSTEM] Larissa
+- Lars [SYSTEM] Lars
+- Lauren [SYSTEM] Lauren
+- Lautaro [SYSTEM] Lautaro
+- Lennart [SYSTEM] Lennart
+- Leonor [SYSTEM] Leonor
+- Lev [SYSTEM] Lev
+- Levi [SYSTEM] Levi
+- Liam [SYSTEM] Liam
+- Linnea [SYSTEM] Linnea
+- Liwa [SYSTEM] Liwa
+- Lore [SYSTEM] Lore
+- Lorenzo [SYSTEM] Lorenzo
+- Loretta [SYSTEM] Loretta
+- Lucian [SYSTEM] Lucian
+- Luciana [SYSTEM] Luciana
+- Luna [SYSTEM] Luna
+- Lupita [SYSTEM] Lupita
+- Macarena [SYSTEM] Macarena
+- Madalena [SYSTEM] Madalena
+- Magda [SYSTEM] Magda
+- Maisie [SYSTEM] Maisie
+- Maitê [SYSTEM] Maitê
+- Maja [SYSTEM] Maja
+- Malcolm [SYSTEM] Malcolm
+- Manoj [SYSTEM] Manoj
+- Manuel [SYSTEM] Manuel
+- Marcus [SYSTEM] Marcus
+- Marek [SYSTEM] Marek
+- Mariana [SYSTEM] Mariana
+- Maricel [SYSTEM] Maricel
+- Mark [SYSTEM] Mark
+- Marlene [SYSTEM] Marlene
+- Marta [SYSTEM] Marta
+- Mateo [SYSTEM] Mateo
+- Mathieu [SYSTEM] Mathieu
+- Matias [SYSTEM] Matias
+- Matilda [SYSTEM] Matilda
+- Matilde [SYSTEM] Matilde
+- Matthias [SYSTEM] Matthias
+- Mauricio [SYSTEM] Mauricio
+- Maximiliano [SYSTEM] Maximiliano
+- Mayte [SYSTEM] Mayte
+- Meher [SYSTEM] Meher
+- Mei [SYSTEM] Mei
+- Mercedes [SYSTEM] Mercedes
+- Merve [SYSTEM] Merve
+- Mia [SYSTEM] Mia
+- Miguel [SYSTEM] Miguel
+- Mihai [SYSTEM] Mihai
+- Ming [SYSTEM] Ming
+- Minji [SYSTEM] Minji
+- Miranda [SYSTEM] Miranda
+- Miriam [SYSTEM] Miriam
+- Morgana [SYSTEM] Morgana
+- Mortimer [SYSTEM] Mortimer
+- Murat [SYSTEM] Murat
+- Murilo [SYSTEM] Murilo
+- Nacho [SYSTEM] Nacho
+- Nadia [SYSTEM] Nadia
+- Naomi [SYSTEM] Naomi
+- Natalia [SYSTEM] Natalia
+- Nate [SYSTEM] Nate
+- Nehir [SYSTEM] Nehir
+- Nigel [SYSTEM] Nigel
+- Nikhil [SYSTEM] Nikhil
+- Nikolai [SYSTEM] Nikolai
+- Noa [SYSTEM] Noa
+- Nour [SYSTEM] Nour
+- Nuno [SYSTEM] Nuno
+- Oksana [SYSTEM] Oksana
+- Oliver [SYSTEM] Oliver
+- Olivia [SYSTEM] Olivia
+- Omar [SYSTEM] Omar
+- Oren [SYSTEM] Oren
+- Orietta [SYSTEM] Orietta
+- Oskar [SYSTEM] Oskar
+- Paloma [SYSTEM] Paloma
+- Patricia [SYSTEM] Patricia
+- Paulina [SYSTEM] Paulina
+- Penelope [SYSTEM] Penelope
+- Pilar [SYSTEM] Pilar
+- Piper [SYSTEM] Piper
+- Pippa [SYSTEM] Pippa
+- Pixie [SYSTEM] Pixie
+- Polina [SYSTEM] Polina
+- Poppy [SYSTEM] Poppy
+- Rafael [SYSTEM] Rafael
+- Raluca [SYSTEM] Raluca
+- Reed [SYSTEM] Reed
+- Regina [SYSTEM] Regina
+- Reinhard [SYSTEM] Reinhard
+- Ren [SYSTEM] Ren
+- Renata [SYSTEM] Renata
+- Riley [SYSTEM] Riley
+- Riya [SYSTEM] Riya
+- Rocio [SYSTEM] Rocio
+- Rodion [SYSTEM] Rodion
+- Rodrigo [SYSTEM] Rodrigo
+- Ronald [SYSTEM] Ronald
+- Rosalind [SYSTEM] Rosalind
+- Ruben [SYSTEM] Ruben
+- Rupert [SYSTEM] Rupert
+- Ruslan [SYSTEM] Ruslan
+- Saanvi [SYSTEM] Saanvi
+- Sabine [SYSTEM] Sabine
+- Salvador [SYSTEM] Salvador
+- Sarah [SYSTEM] Sarah
+- Satoshi [SYSTEM] Satoshi
+- Sebastian [SYSTEM] Sebastian
+- Seema [SYSTEM] Seema
+- Selene [SYSTEM] Selene
+- Seojun [SYSTEM] Seojun
+- Seraphine [SYSTEM] Seraphine
+- Serena [SYSTEM] Serena
+- Serene [SYSTEM] Serene
+- Sergio [SYSTEM] Sergio
+- Serkan [SYSTEM] Serkan
+- Sevda [SYSTEM] Sevda
+- Shreya [SYSTEM] Shreya
+- Shu [SYSTEM] Shu
+- Sienna [SYSTEM] Sienna
+- Simon [SYSTEM] Simon
+- Simona [SYSTEM] Simona
+- Snezhana [SYSTEM] Snezhana
+- Snik [SYSTEM] Snik
+- Sofia [SYSTEM] Sofia
+- Sophie [SYSTEM] Sophie
+- Steffi [SYSTEM] Steffi
+- Stepan [SYSTEM] Stepan
+- Svetlana [SYSTEM] Svetlana
+- Szymon [SYSTEM] Szymon
+- Tahlia [SYSTEM] Tahlia
+- Tala [SYSTEM] Tala
+- Tamara [SYSTEM] Tamara
+- Tatiana [SYSTEM] Tatiana
+- Tessa [SYSTEM] Tessa
+- Theodore [SYSTEM] Theodore
+- Tiago [SYSTEM] Tiago
+- Timofey [SYSTEM] Timofey
+- Timothy [SYSTEM] Timothy
+- Tobias [SYSTEM] Tobias
+- Tomas [SYSTEM] Tomas
+- Tonya [SYSTEM] Tonya
+- Trevor [SYSTEM] Trevor
+- Tristan [SYSTEM] Tristan
+- Tunde [SYSTEM] Tunde
+- Tyler [SYSTEM] Tyler
+- Vadim [SYSTEM] Vadim
+- Valentina [SYSTEM] Valentina
+- Valeria [SYSTEM] Valeria
+- Vanessa [SYSTEM] Vanessa
+- Veronica [SYSTEM] Veronica
+- Victor [SYSTEM] Victor
+- Victoria [SYSTEM] Victoria
+- Vikram [SYSTEM] Vikram
+- Viktor [SYSTEM] Viktor
+- Vincent [SYSTEM] Vincent
+- Vinny [SYSTEM] Vinny
+- Vlad [SYSTEM] Vlad
+- Volkan [SYSTEM] Volkan
+- Wade [SYSTEM] Wade
+- Warren [SYSTEM] Warren
+- Wei [SYSTEM] Wei
+- Wendy [SYSTEM] Wendy
+- Wiktoria [SYSTEM] Wiktoria
+- Winifred [SYSTEM] Winifred
+- Winston [SYSTEM] Winston
+- Wojciech [SYSTEM] Wojciech
+- Xiaoyin [SYSTEM] Xiaoyin
+- Ximena [SYSTEM] Ximena
+- Xinyi [SYSTEM] Xinyi
+- Xochitl [SYSTEM] Xochitl
+- Yael [SYSTEM] Yael
+- Yash [SYSTEM] Yash
+- Yegor [SYSTEM] Yegor
+- Yichen [SYSTEM] Yichen
+- Yoona [SYSTEM] Yoona
+- Yuki [SYSTEM] Yuki
+- Yulia [SYSTEM] Yulia
+- Zadie [SYSTEM] Zadie
+- Zeynep [SYSTEM] Zeynep
+- Zherong [SYSTEM] Zherong
+- Zoe [SYSTEM] Zoe
+- Zuzanna [SYSTEM] Zuzanna
+
+## inworld voices (RXR6QVV0…QQ==) (366)
+
+- Aanya [SYSTEM] Aanya
+- Aarav [SYSTEM] Aarav
+- Abby [SYSTEM] Abby
+- Ada [SYSTEM] Ada
+- Aditya [SYSTEM] Aditya
+- Adriana [SYSTEM] Adriana
+- Alain [SYSTEM] Alain
+- Alaric [SYSTEM] Alaric
+- Alex [SYSTEM] Alex
+- Alistair [SYSTEM] Alistair
+- Alvaro [SYSTEM] Alvaro
+- Alyona [SYSTEM] Alyona
+- Amara [SYSTEM] Amara
+- Ambrose [SYSTEM] Ambrose
+- Amina [SYSTEM] Amina
+- Amos [SYSTEM] Amos
+- Anders [SYSTEM] Anders
+- Andoy [SYSTEM] Andoy
+- Andreea [SYSTEM] Andreea
+- Andrei [SYSTEM] Andrei
+- Andres [SYSTEM] Andres
+- Anjali [SYSTEM] Anjali
+- Annika [SYSTEM] Annika
+- Antonia [SYSTEM] Antonia
+- Archie [SYSTEM] Archie
+- Arda [SYSTEM] Arda
+- Arjun [SYSTEM] Arjun
+- Arkady [SYSTEM] Arkady
+- Arthur [SYSTEM] Arthur
+- Ashley [SYSTEM] Ashley
+- Astrid [SYSTEM] Astrid
+- Asuka [SYSTEM] Asuka
+- Avery [SYSTEM] Avery
+- Aylin [SYSTEM] Aylin
+- Banjo [SYSTEM] Banjo
+- Baran [SYSTEM] Baran
+- Bastian [SYSTEM] Bastian
+- Beatrice [SYSTEM] Beatrice
+- Beatriz [SYSTEM] Beatriz
+- Benjamin [SYSTEM] Benjamin
+- Bianca [SYSTEM] Bianca
+- Birgit [SYSTEM] Birgit
+- Blake [SYSTEM] Blake
+- Boonleng [SYSTEM] Boonleng
+- Borja [SYSTEM] Borja
+- Brandon [SYSTEM] Brandon
+- Brian [SYSTEM] Brian
+- Brick [SYSTEM] Brick
+- Brooke [SYSTEM] Brooke
+- Bruna [SYSTEM] Bruna
+- Bruno [SYSTEM] Bruno
+- Bryce [SYSTEM] Bryce
+- Callum [SYSTEM] Callum
+- Calvin [SYSTEM] Calvin
+- Camila [SYSTEM] Camila
+- Camille [SYSTEM] Camille
+- Carina [SYSTEM] Carina
+- Carmen [SYSTEM] Carmen
+- Carter [SYSTEM] Carter
+- Casey [SYSTEM] Casey
+- Cedric [SYSTEM] Cedric
+- Celeste [SYSTEM] Celeste
+- Chioma [SYSTEM] Chioma
+- Chip [SYSTEM] Chip
+- Chloe [SYSTEM] Chloe
+- Citlali [SYSTEM] Citlali
+- Claire [SYSTEM] Claire
+- Clive [SYSTEM] Clive
+- Conrad [SYSTEM] Conrad
+- Cooper [SYSTEM] Cooper
+- Cordelia [SYSTEM] Cordelia
+- Craig [SYSTEM] Craig
+- Cristian [SYSTEM] Cristian
+- Cuauhtemoc [SYSTEM] Cuauhtemoc
+- Curro [SYSTEM] Curro
+- Dalisay [SYSTEM] Dalisay
+- Damon [SYSTEM] Damon
+- Daniel [SYSTEM] Daniel
+- Daniela [SYSTEM] Daniela
+- Dante [SYSTEM] Dante
+- Darlene [SYSTEM] Darlene
+- Davi [SYSTEM] Davi
+- Deborah [SYSTEM] Deborah
+- Defne [SYSTEM] Defne
+- Dennis [SYSTEM] Dennis
+- Derek [SYSTEM] Derek
+- Dhruv [SYSTEM] Dhruv
+- Diego [SYSTEM] Diego
+- Diogo [SYSTEM] Diogo
+- Dmitry [SYSTEM] Dmitry
+- Dominus [SYSTEM] Dominus
+- Dorota [SYSTEM] Dorota
+- Duarte [SYSTEM] Duarte
+- Duncan [SYSTEM] Duncan
+- Ecrin [SYSTEM] Ecrin
+- Edward [SYSTEM] Edward
+- Efe [SYSTEM] Efe
+- Eileen [SYSTEM] Eileen
+- Eitan [SYSTEM] Eitan
+- Eldrin [SYSTEM] Eldrin
+- Eleanor [SYSTEM] Eleanor
+- Elena [SYSTEM] Elena
+- Elif [SYSTEM] Elif
+- Elliot [SYSTEM] Elliot
+- Elsa [SYSTEM] Elsa
+- Emeka [SYSTEM] Emeka
+- Emil [SYSTEM] Emil
+- Erik [SYSTEM] Erik
+- Ethan [SYSTEM] Ethan
+- Étienne [SYSTEM] Étienne
+- Evan [SYSTEM] Evan
+- Evelyn [SYSTEM] Evelyn
+- Fabian [SYSTEM] Fabian
+- Felix [SYSTEM] Felix
+- Fernanda [SYSTEM] Fernanda
+- Florencia [SYSTEM] Florencia
+- Florian [SYSTEM] Florian
+- Folake [SYSTEM] Folake
+- Franziska [SYSTEM] Franziska
+- Freddie [SYSTEM] Freddie
+- Gabriela [SYSTEM] Gabriela
+- Galina [SYSTEM] Galina
+- Gareth [SYSTEM] Gareth
+- Gianni [SYSTEM] Gianni
+- Giovanna [SYSTEM] Giovanna
+- Gizem [SYSTEM] Gizem
+- Gleb [SYSTEM] Gleb
+- Gonzalo [SYSTEM] Gonzalo
+- Graham [SYSTEM] Graham
+- Grayson [SYSTEM] Grayson
+- Grigory [SYSTEM] Grigory
+- Guadalupe [SYSTEM] Guadalupe
+- Hades [SYSTEM] Hades
+- Hamish [SYSTEM] Hamish
+- Hana [SYSTEM] Hana
+- Hank [SYSTEM] Hank
+- Harold [SYSTEM] Harold
+- Haruto [SYSTEM] Haruto
+- Hazel [SYSTEM] Hazel
+- Heidi [SYSTEM] Heidi
+- Heike [SYSTEM] Heike
+- Heitor [SYSTEM] Heitor
+- Hélène [SYSTEM] Hélène
+- Hendrik [SYSTEM] Hendrik
+- Hernando [SYSTEM] Hernando
+- Hina [SYSTEM] Hina
+- Huiling [SYSTEM] Huiling
+- Hyunwoo [SYSTEM] Hyunwoo
+- Ignacio [SYSTEM] Ignacio
+- Imogen [SYSTEM] Imogen
+- Indi [SYSTEM] Indi
+- Ingrid [SYSTEM] Ingrid
+- Inigo [SYSTEM] Inigo
+- Inmaculada [SYSTEM] Inmaculada
+- Ioana [SYSTEM] Ioana
+- Ishaan [SYSTEM] Ishaan
+- Itzel [SYSTEM] Itzel
+- James [SYSTEM] James
+- Jannik [SYSTEM] Jannik
+- Jarrah [SYSTEM] Jarrah
+- Jason [SYSTEM] Jason
+- Jessica [SYSTEM] Jessica
+- Jing [SYSTEM] Jing
+- Joanna [SYSTEM] Joanna
+- Joaquim [SYSTEM] Joaquim
+- Joaquin [SYSTEM] Joaquin
+- Johan [SYSTEM] Johan
+- Johanna [SYSTEM] Johanna
+- Jonah [SYSTEM] Jonah
+- Josef [SYSTEM] Josef
+- Josh [SYSTEM] Josh
+- Joy [SYSTEM] Joy
+- Junhao [SYSTEM] Junhao
+- Kabir [SYSTEM] Kabir
+- Karolina [SYSTEM] Karolina
+- Katrien [SYSTEM] Katrien
+- Kelsey [SYSTEM] Kelsey
+- Kenji [SYSTEM] Kenji
+- Kerem [SYSTEM] Kerem
+- Kilian [SYSTEM] Kilian
+- Lachlan [SYSTEM] Lachlan
+- Larissa [SYSTEM] Larissa
+- Lars [SYSTEM] Lars
+- Lauren [SYSTEM] Lauren
+- Lautaro [SYSTEM] Lautaro
+- Lennart [SYSTEM] Lennart
+- Leonor [SYSTEM] Leonor
+- Lev [SYSTEM] Lev
+- Levi [SYSTEM] Levi
+- Liam [SYSTEM] Liam
+- Linnea [SYSTEM] Linnea
+- Liwa [SYSTEM] Liwa
+- Lore [SYSTEM] Lore
+- Lorenzo [SYSTEM] Lorenzo
+- Loretta [SYSTEM] Loretta
+- Lucian [SYSTEM] Lucian
+- Luciana [SYSTEM] Luciana
+- Luna [SYSTEM] Luna
+- Lupita [SYSTEM] Lupita
+- Macarena [SYSTEM] Macarena
+- Madalena [SYSTEM] Madalena
+- Magda [SYSTEM] Magda
+- Maisie [SYSTEM] Maisie
+- Maitê [SYSTEM] Maitê
+- Maja [SYSTEM] Maja
+- Malcolm [SYSTEM] Malcolm
+- Manoj [SYSTEM] Manoj
+- Manuel [SYSTEM] Manuel
+- Marcus [SYSTEM] Marcus
+- Marek [SYSTEM] Marek
+- Mariana [SYSTEM] Mariana
+- Maricel [SYSTEM] Maricel
+- Mark [SYSTEM] Mark
+- Marlene [SYSTEM] Marlene
+- Marta [SYSTEM] Marta
+- Mateo [SYSTEM] Mateo
+- Mathieu [SYSTEM] Mathieu
+- Matias [SYSTEM] Matias
+- Matilda [SYSTEM] Matilda
+- Matilde [SYSTEM] Matilde
+- Matthias [SYSTEM] Matthias
+- Mauricio [SYSTEM] Mauricio
+- Maximiliano [SYSTEM] Maximiliano
+- Mayte [SYSTEM] Mayte
+- Meher [SYSTEM] Meher
+- Mei [SYSTEM] Mei
+- Mercedes [SYSTEM] Mercedes
+- Merve [SYSTEM] Merve
+- Mia [SYSTEM] Mia
+- Miguel [SYSTEM] Miguel
+- Mihai [SYSTEM] Mihai
+- Ming [SYSTEM] Ming
+- Minji [SYSTEM] Minji
+- Miranda [SYSTEM] Miranda
+- Miriam [SYSTEM] Miriam
+- Morgana [SYSTEM] Morgana
+- Mortimer [SYSTEM] Mortimer
+- Murat [SYSTEM] Murat
+- Murilo [SYSTEM] Murilo
+- Nacho [SYSTEM] Nacho
+- Nadia [SYSTEM] Nadia
+- Naomi [SYSTEM] Naomi
+- Natalia [SYSTEM] Natalia
+- Nate [SYSTEM] Nate
+- Nehir [SYSTEM] Nehir
+- Nigel [SYSTEM] Nigel
+- Nikhil [SYSTEM] Nikhil
+- Nikolai [SYSTEM] Nikolai
+- Noa [SYSTEM] Noa
+- Nour [SYSTEM] Nour
+- Nuno [SYSTEM] Nuno
+- Oksana [SYSTEM] Oksana
+- Oliver [SYSTEM] Oliver
+- Olivia [SYSTEM] Olivia
+- Omar [SYSTEM] Omar
+- Oren [SYSTEM] Oren
+- Orietta [SYSTEM] Orietta
+- Oskar [SYSTEM] Oskar
+- Paloma [SYSTEM] Paloma
+- Patricia [SYSTEM] Patricia
+- Paulina [SYSTEM] Paulina
+- Penelope [SYSTEM] Penelope
+- Pilar [SYSTEM] Pilar
+- Piper [SYSTEM] Piper
+- Pippa [SYSTEM] Pippa
+- Pixie [SYSTEM] Pixie
+- Polina [SYSTEM] Polina
+- Poppy [SYSTEM] Poppy
+- Rafael [SYSTEM] Rafael
+- Raluca [SYSTEM] Raluca
+- Reed [SYSTEM] Reed
+- Regina [SYSTEM] Regina
+- Reinhard [SYSTEM] Reinhard
+- Ren [SYSTEM] Ren
+- Renata [SYSTEM] Renata
+- Riley [SYSTEM] Riley
+- Riya [SYSTEM] Riya
+- Rocio [SYSTEM] Rocio
+- Rodion [SYSTEM] Rodion
+- Rodrigo [SYSTEM] Rodrigo
+- Ronald [SYSTEM] Ronald
+- Rosalind [SYSTEM] Rosalind
+- Ruben [SYSTEM] Ruben
+- Rupert [SYSTEM] Rupert
+- Ruslan [SYSTEM] Ruslan
+- Saanvi [SYSTEM] Saanvi
+- Sabine [SYSTEM] Sabine
+- Salvador [SYSTEM] Salvador
+- Sarah [SYSTEM] Sarah
+- Satoshi [SYSTEM] Satoshi
+- Sebastian [SYSTEM] Sebastian
+- Seema [SYSTEM] Seema
+- Selene [SYSTEM] Selene
+- Seojun [SYSTEM] Seojun
+- Seraphine [SYSTEM] Seraphine
+- Serena [SYSTEM] Serena
+- Serene [SYSTEM] Serene
+- Sergio [SYSTEM] Sergio
+- Serkan [SYSTEM] Serkan
+- Sevda [SYSTEM] Sevda
+- Shreya [SYSTEM] Shreya
+- Shu [SYSTEM] Shu
+- Sienna [SYSTEM] Sienna
+- Simon [SYSTEM] Simon
+- Simona [SYSTEM] Simona
+- Snezhana [SYSTEM] Snezhana
+- Snik [SYSTEM] Snik
+- Sofia [SYSTEM] Sofia
+- Sophie [SYSTEM] Sophie
+- Steffi [SYSTEM] Steffi
+- Stepan [SYSTEM] Stepan
+- Svetlana [SYSTEM] Svetlana
+- Szymon [SYSTEM] Szymon
+- Tahlia [SYSTEM] Tahlia
+- Tala [SYSTEM] Tala
+- Tamara [SYSTEM] Tamara
+- Tatiana [SYSTEM] Tatiana
+- Tessa [SYSTEM] Tessa
+- Theodore [SYSTEM] Theodore
+- Tiago [SYSTEM] Tiago
+- Timofey [SYSTEM] Timofey
+- Timothy [SYSTEM] Timothy
+- Tobias [SYSTEM] Tobias
+- Tomas [SYSTEM] Tomas
+- Tonya [SYSTEM] Tonya
+- Trevor [SYSTEM] Trevor
+- Tristan [SYSTEM] Tristan
+- Tunde [SYSTEM] Tunde
+- Tyler [SYSTEM] Tyler
+- Vadim [SYSTEM] Vadim
+- Valentina [SYSTEM] Valentina
+- Valeria [SYSTEM] Valeria
+- Vanessa [SYSTEM] Vanessa
+- Veronica [SYSTEM] Veronica
+- Victor [SYSTEM] Victor
+- Victoria [SYSTEM] Victoria
+- Vikram [SYSTEM] Vikram
+- Viktor [SYSTEM] Viktor
+- Vincent [SYSTEM] Vincent
+- Vinny [SYSTEM] Vinny
+- Vlad [SYSTEM] Vlad
+- Volkan [SYSTEM] Volkan
+- Wade [SYSTEM] Wade
+- Warren [SYSTEM] Warren
+- Wei [SYSTEM] Wei
+- Wendy [SYSTEM] Wendy
+- Wiktoria [SYSTEM] Wiktoria
+- Winifred [SYSTEM] Winifred
+- Winston [SYSTEM] Winston
+- Wojciech [SYSTEM] Wojciech
+- Xiaoyin [SYSTEM] Xiaoyin
+- Ximena [SYSTEM] Ximena
+- Xinyi [SYSTEM] Xinyi
+- Xochitl [SYSTEM] Xochitl
+- Yael [SYSTEM] Yael
+- Yash [SYSTEM] Yash
+- Yegor [SYSTEM] Yegor
+- Yichen [SYSTEM] Yichen
+- Yoona [SYSTEM] Yoona
+- Yuki [SYSTEM] Yuki
+- Yulia [SYSTEM] Yulia
+- Zadie [SYSTEM] Zadie
+- Zeynep [SYSTEM] Zeynep
+- Zherong [SYSTEM] Zherong
+- Zoe [SYSTEM] Zoe
+- Zuzanna [SYSTEM] Zuzanna
+
+## google cloud tts en-US (99)
+
+- Achernar
+- Achird
+- Algenib
+- Algieba
+- Alnilam
+- Aoede
+- Autonoe
+- Callirrhoe
+- Charon
+- Despina
+- Enceladus
+- Erinome
+- Fenrir
+- Gacrux
+- Iapetus
+- Kore
+- Laomedeia
+- Leda
+- Orus
+- Puck
+- Pulcherrima
+- Rasalgethi
+- Sadachbia
+- Sadaltager
+- Schedar
+- Sulafat
+- Umbriel
+- Vindemiatrix
+- Zephyr
+- Zubenelgenubi
+- en-US-Casual-K
+- en-US-Chirp-HD-D
+- en-US-Chirp-HD-F
+- en-US-Chirp-HD-O
+- en-US-Chirp3-HD-Achernar
+- en-US-Chirp3-HD-Achird
+- en-US-Chirp3-HD-Algenib
+- en-US-Chirp3-HD-Algieba
+- en-US-Chirp3-HD-Alnilam
+- en-US-Chirp3-HD-Aoede
+- en-US-Chirp3-HD-Autonoe
+- en-US-Chirp3-HD-Callirrhoe
+- en-US-Chirp3-HD-Charon
+- en-US-Chirp3-HD-Despina
+- en-US-Chirp3-HD-Enceladus
+- en-US-Chirp3-HD-Erinome
+- en-US-Chirp3-HD-Fenrir
+- en-US-Chirp3-HD-Gacrux
+- en-US-Chirp3-HD-Iapetus
+- en-US-Chirp3-HD-Kore
+- en-US-Chirp3-HD-Laomedeia
+- en-US-Chirp3-HD-Leda
+- en-US-Chirp3-HD-Orus
+- en-US-Chirp3-HD-Puck
+- en-US-Chirp3-HD-Pulcherrima
+- en-US-Chirp3-HD-Rasalgethi
+- en-US-Chirp3-HD-Sadachbia
+- en-US-Chirp3-HD-Sadaltager
+- en-US-Chirp3-HD-Schedar
+- en-US-Chirp3-HD-Sulafat
+- en-US-Chirp3-HD-Umbriel
+- en-US-Chirp3-HD-Vindemiatrix
+- en-US-Chirp3-HD-Zephyr
+- en-US-Chirp3-HD-Zubenelgenubi
+- en-US-Neural2-A
+- en-US-Neural2-C
+- en-US-Neural2-D
+- en-US-Neural2-E
+- en-US-Neural2-F
+- en-US-Neural2-G
+- en-US-Neural2-H
+- en-US-Neural2-I
+- en-US-Neural2-J
+- en-US-News-K
+- en-US-News-L
+- en-US-News-N
+- en-US-Polyglot-1
+- en-US-Standard-A
+- en-US-Standard-B
+- en-US-Standard-C
+- en-US-Standard-D
+- en-US-Standard-E
+- en-US-Standard-F
+- en-US-Standard-G
+- en-US-Standard-H
+- en-US-Standard-I
+- en-US-Standard-J
+- en-US-Studio-O
+- en-US-Studio-Q
+- en-US-Wavenet-A
+- en-US-Wavenet-B
+- en-US-Wavenet-C
+- en-US-Wavenet-D
+- en-US-Wavenet-E
+- en-US-Wavenet-F
+- en-US-Wavenet-G
+- en-US-Wavenet-H
+- en-US-Wavenet-I
+- en-US-Wavenet-J
+

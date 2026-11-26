@@ -38,3 +38,12 @@ proxies.txt
 proxies_ranked.txt
 # extra API keys kept beside .env
 extra_keys.env
+
+# generated or oversized scratch output from the voice/model survey scripts
+samples/
+voices.html
+openrouter_models.json
+# browser-automation captures from checking the UI
+.playwright-mcp/
+# Claude Code's local state and settings
+.claude/
