@@ -78,6 +78,7 @@ export function describeInput(name: string, input: unknown): string {
     case 'claude_interrupt':
     case 'claude_stop':
     case 'claude_reset':
+    case 'claude_compact':
     case 'claude_files':
     case 'claude_attach':
       return typeof i.session === 'string' ? i.session : ''
@@ -172,6 +173,7 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_answer':
     case 'claude_interrupt':
     case 'claude_reset':
+    case 'claude_compact':
     case 'claude_stop': {
       const r = o as { status?: string; error?: string; session?: unknown } | undefined
       return { detail: r?.error ?? r?.status }

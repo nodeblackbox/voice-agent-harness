@@ -4,6 +4,7 @@ import type { CcEvent, CcSession } from '@shared/claude'
 import { T } from '../../theme'
 import { fmtTokens } from '@shared/pricing'
 import { costNote } from './Account'
+import { contextTitle } from './Context'
 import { FAMILY } from './Activity'
 import { ago, latestTodos, toolStats, type Touched } from './feed'
 import { useFileMenu } from './FileMenu'
@@ -29,6 +30,7 @@ export function Inspector({ session, events, touched, onOpenFile }: { session: C
         {[
           [session.billing === 'api-key' ? 'Cost' : 'Usage', `$${session.costUsd.toFixed(2)}`, costNote(session)],
           ['Tokens', `${fmtTokens(session.tokensIn ?? 0)} / ${fmtTokens(session.tokensOut ?? 0)}`, 'Tokens read (cached ones included) / written by this session so far'],
+          ['Context', session.context ? `${session.context.percent}%` : '—', contextTitle(session)],
           ['Turns', String(session.turns)],
           ['Files', String(touched.length)],
           ['Tool calls', String(stats.reduce((n, s) => n + s.count, 0))]

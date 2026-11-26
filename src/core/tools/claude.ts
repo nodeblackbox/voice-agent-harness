@@ -32,8 +32,18 @@ function brief(s: CcSession, m: ClaudeSessionManager) {
     what_just_happened: m.digest(s.id),
     cost_usd: Number(s.costUsd.toFixed(3)),
     tokens_in: s.tokensIn ?? 0,
-    tokens_out: s.tokensOut ?? 0
+    tokens_out: s.tokensOut ?? 0,
+    context: contextLine(s),
+    compactions: s.compactions ?? 0
   }
+}
+
+/** "62% full (124k of 200k tokens)", or null before its first turn. */
+export function contextLine(s: CcSession): string | null {
+  const c = s.context
+  if (!c) return null
+  const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+  return `${c.percent}% full (${k(c.tokens)} of ${k(c.max)} tokens)`
 }
 
 /** One line per event for claude_details: tool calls with their target, results and errors, no file contents. */
@@ -181,6 +191,19 @@ export function claudeTools(m: ClaudeSessionManager): ToolSet {
       }
     }),
 
+    claude_compact: tool({
+      description:
+        "Compact a session's conversation: Claude Code summarises it and carries on from the summary, which frees its context window. Use for \"compact it\", \"its context is full\", \"free up some room\". `focus`: what the summary must keep, in the user's words (\"keep the auth work\"). When it is busy this waits until its current job is done. Each session's context is in claude_status.",
+      inputSchema: z.object({ session: sessionRef, focus: z.string().default('').describe('What the summary must keep, if the user said; else empty') }),
+      execute: async ({ session, focus }) => {
+        const f = find(session)
+        if (!f.ok) return { status: 'failed', error: f.error }
+        const r = m.compact(f.session.id, focus)
+        if (!r.ok) return { status: 'failed', error: r.error }
+        return { status: r.queued ? 'queued: it compacts once its current job is done' : 'compacting', session: f.session.name, context_before: contextLine(f.session) }
+      }
+    }),
+
     claude_stop: tool({
       description: 'Shut a session down completely. Its workspace and history are kept and it can be resumed later by sending it a new instruction.',
       inputSchema: z.object({ session: sessionRef }),
@@ -270,7 +293,8 @@ export function claudeContextBlock(m: ClaudeSessionManager): string {
   return [...sessions]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .map((s, i) => {
-      const head = `- ${s.name} [${s.status}${s.mode ? `, ${s.mode} mode` : ''}]${s.queued.length ? `, ${s.queued.length} queued` : ''}`
+      const full = s.context && s.context.percent >= 50 ? `, context ${s.context.percent}% full` : ''
+      const head = `- ${s.name} [${s.status}${s.mode ? `, ${s.mode} mode` : ''}${full}]${s.queued.length ? `, ${s.queued.length} queued` : ''}`
       const p = s.pending
       if (p?.kind === 'question') {
         const q = p.questions.map((x) => `${x.question} ${x.options.map((o, n) => `${n + 1}) ${clip(o.label, 60)}`).join('  ')}`).join(' | ')

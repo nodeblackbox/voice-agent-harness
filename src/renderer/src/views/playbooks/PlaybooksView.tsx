@@ -5,10 +5,12 @@
  * with a live flowchart), Check (problems, test on recent messages, review), Activity, and the File itself.
  * Edits stay as drafts per file until saved, and a file with problems is never saved, so what is on disk loads.
  */
+import { TriggersOverview } from './TriggersOverview'
+import { DEFAULT_SCHEDULE, EVENT_BY_ID } from './events'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, BookOpen, Copy, FileCode, FlaskConical, History, ListChecks, Mic, Plus, RotateCcw, Save, Scale, Settings2, Trash2, Workflow } from 'lucide-react'
 import type { PlaybookCheck, PlaybookEvalResult, PlaybookEvalRow, PlaybookInfo, PlaybookLabel, PlaybooksState, PlaybookTestRow, RunbookRun } from '@shared/types'
-import { NEW_PLAYBOOK_TEXT, NEW_RUNBOOK_TEXT, field, readPlaybookFile, setPlaybookField } from '@shared/playbookFile'
+import { NEW_PLAYBOOK_TEXT, NEW_RUNBOOK_TEXT, field, readPlaybookFile, setPlaybookField, type FieldPath } from '@shared/playbookFile'
 import { T, alpha } from '../../theme'
 import { useStore } from '../../state/store'
 import { Btn, Select, Toggle } from '../../components/primitives'
@@ -22,6 +24,7 @@ const CodeEditor = lazy(() => import('../claude/CodeEditor'))
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/
 /** The key of a new file that has not been saved yet (not a valid file name, so it never clashes). */
 const NEW = ':new'
+const TRIGGERS = ':triggers'
 
 type Tab = 'setup' | 'steps' | 'check' | 'activity' | 'file'
 interface Draft {
@@ -204,7 +207,7 @@ export function PlaybooksView() {
       openPlaybook(null)
       return
     }
-    if (selected === NEW) return
+    if (selected === NEW || selected === TRIGGERS) return
     if (!selected || !list.some((p) => p.id === selected)) select(list[0]?.id ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, focus])
@@ -302,6 +305,22 @@ export function PlaybooksView() {
     setTab('setup')
   }
   const createKind = (k: 'playbook' | 'runbook') => create(k === 'runbook' ? NEW_RUNBOOK_TEXT : NEW_PLAYBOOK_TEXT, `new-${k}`)
+  /** From the Triggers overview: a new runbook already set to react to this event. */
+  const createOn = (event: string) => {
+    if (event === 'turn.user') return createKind('playbook')
+    const info = EVENT_BY_ID[event]
+    let text: string | null = NEW_RUNBOOK_TEXT
+    const pairs: Array<[FieldPath, unknown]> = [
+      [['triggers', 'events'], [event]],
+      [['triggers', 'said'], undefined],
+      [['triggers', 'schedule'], event === 'schedule' ? DEFAULT_SCHEDULE : undefined],
+      [['triggers', 'when'], info?.suggest],
+      [['ack'], undefined],
+      [['title'], `New runbook: ${info?.label.toLowerCase() ?? event}`]
+    ]
+    for (const [path, v] of pairs) text = text === null ? null : setPlaybookField(text, path, v)
+    create(text ?? NEW_RUNBOOK_TEXT, `on-${event.replace(/[^a-z0-9]+/g, '-')}`)
+  }
 
   const remove = async () => {
     if (!draft?.from) return
@@ -402,13 +421,17 @@ export function PlaybooksView() {
         onToggle={(p, v) => void toggle(p, v)}
         onNew={createKind}
         onCancelRun={cancelRun}
+        triggersActive={selected === TRIGGERS}
+        onTriggers={() => select(TRIGGERS)}
         onOpenRun={(id) => {
           select(id)
           setTab('activity')
         }}
       />
 
-      {!draft ? (
+      {selected === TRIGGERS && data ? (
+        <TriggersOverview data={data} list={list} onOpen={(id) => { select(id); setTab('setup') }} onToggle={(p, v) => void toggle(p, v)} onCreate={createOn} />
+      ) : !draft ? (
         data ? (
           <Welcome onNew={createKind} />
         ) : (

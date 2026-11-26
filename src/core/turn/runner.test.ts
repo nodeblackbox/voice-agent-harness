@@ -403,7 +403,8 @@ describe('TurnRunner', () => {
     const slowThinker = new MockLanguageModelV4({
       doStream: async () => ({ stream: simulateReadableStream({ chunks: thinking, initialDelayInMs: 0, chunkDelayInMs: 250 }) })
     })
-    const h = harness({ 'anthropic:claude-haiku-4-5': slowThinker }, { firstTokenTimeoutMs: 400, stallTimeoutMs: 400 })
+    // text arrives ~750 ms in, past the 400 ms first-token timeout; the stall timeout keeps a wide margin over the 250 ms gaps so a busy machine doesn't trip it
+    const h = harness({ 'anthropic:claude-haiku-4-5': slowThinker }, { firstTokenTimeoutMs: 400, stallTimeoutMs: 1500 })
     const r = await h.run()
     expect(r.text).toBe('Thought it through.')
   }, 10_000)

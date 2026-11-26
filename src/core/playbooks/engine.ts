@@ -5,6 +5,7 @@
 // No randomness: a playbook either fires or it does not.
 
 import { JEV_FIELDS, PRIORITIES, contentWords, usesJev, type Playbook } from './schema'
+import { scheduleDue } from '@shared/schedule'
 
 export interface TurnFacts {
   text: string
@@ -47,7 +48,7 @@ export type EngineTrace = (ev: string, data: Record<string, unknown>) => void
 
 const EVENT = 'turn.user'
 
-function listensTo(p: Playbook, ev: string): boolean {
+export function listensTo(p: Playbook, ev: string): boolean {
   return p.triggers.events.some((e) => e === ev || (e.endsWith('.') && ev.startsWith(e)))
 }
 
@@ -181,8 +182,11 @@ export class PlaybookEngine {
     const matched: Array<{ p: Playbook; why: string }> = []
     for (const p of playbooks) {
       if (p.kind !== 'runbook' || !listensTo(p, type)) continue
+      // the schedule event comes every minute; a runbook takes the minutes its own schedule names
+      if (type === 'schedule' && !(p.triggers.schedule && scheduleDue(p.triggers.schedule, fields as { hour: number; minute: number; weekday: string }))) continue
       if (p.condition && !p.condition.test(ctx)) continue
-      matched.push({ p, why: p.condition ? `${type} and ${p.condition.source}${describeNumbers(p.condition.names, ctx)}` : `every ${type}` })
+      const by = type === 'schedule' ? `schedule ${String(fields.time ?? '')}`.trim() : type
+      matched.push({ p, why: p.condition ? `${by} and ${p.condition.source}${describeNumbers(p.condition.names, ctx)}` : type === 'schedule' ? `${by}` : `every ${type}` })
     }
     const now = this.now()
     const passed = matched.filter((m) => {

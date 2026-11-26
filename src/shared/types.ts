@@ -312,15 +312,34 @@ export interface PlaybookInfo {
   /** Runbooks: the steps as a Mermaid flowchart, and how many there are. */
   diagram?: string
   stepCount?: number
+  /** With the schedule event: when it runs by the clock. */
+  schedule?: import('./schedule').Schedule | null
   /** This app run. */
   firedCount: number
   lastFiredAt: number | null
+  /** Times it matched but was held back this app run, and the latest reason (a DROP_REASON key). */
+  skippedCount?: number
+  lastSkip?: { at: number; reason: string; by?: string } | null
+}
+
+/** One line of the trigger log: a playbook fired, or matched and was held back. Newest first, this app run. */
+export interface TriggerActivity {
+  at: number
+  id: string
+  title: string
+  outcome: 'fired' | 'skipped'
+  /** fired: why it matched ("turn.user and chars > 1200"); skipped: the DROP_REASON key. */
+  detail: string
+  /** The event it came from, when not a user message. */
+  by?: string
 }
 
 export interface PlaybooksState {
   /** The folder the files live in, shown so the user can open it. */
   dir: string
   playbooks: PlaybookInfo[]
+  /** The latest trigger decisions, newest first (fired, or held back and why). */
+  activity?: TriggerActivity[]
   /** Whether playbooks that need Jev can fire: ready, no TypeSafe key, or switched off in Tuning. */
   jev: 'ready' | 'no_key' | 'off'
 }

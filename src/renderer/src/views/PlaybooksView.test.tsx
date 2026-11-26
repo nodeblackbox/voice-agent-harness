@@ -316,3 +316,66 @@ describe('playbook chips in the chat', () => {
     expect(wrong.disabled).toBe(true)
   })
 })
+
+describe('Triggers', () => {
+  const SCHED = '---\nkind: runbook\ntitle: Morning check\ngoal: x\ntriggers:\n  events: [schedule]\n  schedule: { at: ["09:00"], days: [mon, tue, wed, thu, fri] }\nsteps:\n  - { id: hi, do: say, text: hi }\n---\nNotes.\n'
+  const CTX = '---\nkind: runbook\ntitle: Offer to compact\ngoal: x\ntriggers:\n  events: [cc.context]\n  when: "percent >= 80"\nsteps:\n  - { id: hi, do: say, text: hi }\n---\nNotes.\n'
+  const sched: PlaybookInfo = { id: 'morning-check', source: SCHED, ok: true, errors: [], warnings: [], title: 'Morning check', goal: 'x', enabled: true, kind: 'runbook', events: ['schedule'], schedule: { at: ['09:00'], every: null, days: ['mon', 'tue', 'wed', 'thu', 'fri'], from: null, until: null }, said: [], when: null, firedCount: 0, lastFiredAt: null }
+  const ctx: PlaybookInfo = { id: 'offer-compact', source: CTX, ok: true, errors: [], warnings: [], title: 'Offer to compact', goal: 'x', enabled: true, kind: 'runbook', events: ['cc.context'], said: [], when: 'percent >= 80', firedCount: 1, lastFiredAt: Date.now() - 60_000, skippedCount: 1, lastSkip: { at: Date.now() - 5_000, reason: 'cooldown', by: 'cc.context' } }
+  const state = (): PlaybooksState => ({
+    dir: '/d', jev: 'ready', playbooks: [good, sched, ctx],
+    activity: [
+      { at: Date.now() - 5_000, id: 'offer-compact', title: 'Offer to compact', outcome: 'skipped', detail: 'cooldown', by: 'cc.context' },
+      { at: Date.now() - 60_000, id: 'offer-compact', title: 'Offer to compact', outcome: 'fired', detail: 'cc.context and percent >= 80 (percent 82)', by: 'cc.context' }
+    ]
+  })
+
+  it('shows every event with what listens to it, what each did, and a log of decisions', async () => {
+    playbooks.list.mockResolvedValue(state())
+    await render()
+    await click(button('Triggers'))
+    const view = host.querySelector('section[aria-label="Triggers overview"]')!
+    expect(view).toBeTruthy()
+    expect(view.querySelector('[data-event="cc.context"]')!.textContent).toContain('Offer to compact')
+    expect(view.querySelector('[data-event="cc.context"]')!.textContent).toContain('held back 1×: still cooling down from its last firing')
+    expect(view.querySelector('[data-event="schedule"]')!.textContent).toContain('at 09:00 on weekdays')
+    expect(view.querySelector('[data-event="turn.user"]')!.textContent).toContain('fired 2×')
+    expect(view.querySelector('[data-event="cc.error"]')!.textContent).toContain('Nothing reacts to this yet')
+    const log = host.querySelector('[data-testid="trigger-log"]')!.textContent!
+    expect(log).toContain('held back')
+    expect(log).toContain('percent >= 80 (percent 82)')
+    // a row opens its file
+    await click(view.querySelector('[data-trigger="morning-check"]')!)
+    expect(titleInput().value).toBe('Morning check')
+    playbooks.list.mockImplementation(async () => ({ dir: '/data/playbooks', playbooks: [good, broken], jev: 'no_key' }))
+  })
+
+  it('starts a new runbook already set to an event', async () => {
+    playbooks.list.mockResolvedValue(state())
+    await render()
+    await click(button('Triggers'))
+    await click(host.querySelector('button[aria-label="New runbook on Its context fills up"]')!)
+    await click(tab('File'))
+    expect(editor().value).toContain('events:\n    - cc.context')
+    expect(editor().value).toContain('percent >= 80')
+    playbooks.list.mockImplementation(async () => ({ dir: '/data/playbooks', playbooks: [good, broken], jev: 'no_key' }))
+  })
+
+  it('edits a schedule: times, days, and the next runs; another event drops it', async () => {
+    playbooks.list.mockResolvedValue(state())
+    await render()
+    await click(host.querySelector('[data-playbook="morning-check"]')!)
+    expect(host.querySelector('[data-testid="trigger-summary"]')!.textContent).toContain('It runs at 09:00 on weekdays')
+    expect(host.querySelector('[data-testid="next-runs"]')!.textContent).toMatch(/Next: .*09:00/)
+    const time = host.querySelector('input[aria-label="Time to add"]') as HTMLInputElement
+    await type(time, '17:30')
+    await click(button('Add time'))
+    await click(button('Weekends'))
+    expect(host.querySelector('[data-testid="trigger-summary"]')!.textContent).toContain('It runs at 09:00 and 17:30 at weekends')
+    await click([...host.querySelectorAll('button[role="radio"]')].find((b) => b.textContent?.startsWith('A session finishes')))
+    await click(tab('File'))
+    expect(editor().value).toContain('cc.finished')
+    expect(editor().value).not.toContain('schedule')
+    playbooks.list.mockImplementation(async () => ({ dir: '/data/playbooks', playbooks: [good, broken], jev: 'no_key' }))
+  })
+})

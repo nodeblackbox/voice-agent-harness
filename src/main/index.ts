@@ -422,7 +422,8 @@ ${fetchedList.text}`
     // Edge's per-sentence timings and failures steer the automatic route
     trace: (rec) => {
       trace(rec)
-      if (rec.ev === 'trigger.fired' && typeof rec.id === 'string') playbooks.noteFired(rec.id)
+      if (rec.ev === 'trigger.fired' && typeof rec.id === 'string') playbooks.noteFired(rec.id, String(rec.title ?? rec.id), String(rec.why ?? ''), typeof rec.by === 'string' ? rec.by : undefined)
+      if (rec.ev === 'trigger.dropped' && typeof rec.id === 'string') playbooks.noteSkipped(rec.id, String(rec.title ?? rec.id), String(rec.reason ?? ''), typeof rec.by === 'string' ? rec.by : undefined)
       if (rec.ev === 'tts.sentence' && rec.engine === 'edge' && rec.kind === 'speech' && rec.outcome === 'ok' && typeof rec.ms === 'number') {
         const voice = settings.get().voice.voice
         const slow = slowVoice.sample(voice, rec.ms)
@@ -438,6 +439,8 @@ ${fetchedList.text}`
     playbooks.start()
     agent.resumeRunbooks()
     agent.startClock()
+    // app.start: once, after the sessions and playbooks are back and the window has had a moment to open
+    setTimeout(() => agent.appStarted(), 4000).unref?.()
   } catch (e) {
     logError('playbooks', 'could not set up the playbooks folder', e)
   }
@@ -610,6 +613,9 @@ ${fetchedList.text}`
       }
     } else if (event.type === 'needs-input') trace({ ev: 'cc.needs_input', sid: agent.currentSessionId, session: event.name, kind: event.pending.kind, summary: event.pending.summary.slice(0, 160) })
     else if (event.type === 'finished') trace({ ev: 'cc.finished', sid: agent.currentSessionId, session: event.name, chars: event.summary.length })
+    else if (event.type === 'context') trace({ ev: 'cc.context', sid: agent.currentSessionId, session: event.name, percent: event.percent, tokens: event.tokens, max: event.max })
+    else if (event.type === 'compacted') trace({ ev: 'cc.compacted', sid: agent.currentSessionId, session: event.name, how: event.how, before: event.before, after: event.after })
+    else if (event.type === 'error') trace({ ev: 'cc.error', sid: agent.currentSessionId, session: event.name, error: event.error.slice(0, 200) })
     else if (event.type === 'event' && event.event.kind === 'denied') trace({ ev: 'cc.denied', sid: agent.currentSessionId, reason: event.event.text.slice(0, 200) })
     // runbooks can react to sessions too (docs/TRIGGERS.md): a finished job with uncommitted work, a question waiting
     if (event.type === 'finished') {
@@ -621,6 +627,15 @@ ${fetchedList.text}`
           `The Claude Code session "${event.name}" finished${changed ? ` with ${changed} changed files` : ''}: ${event.summary.slice(0, 600)}`
         )
       )
+    } else if (event.type === 'started') {
+      const s = claude.manager.get(event.id)
+      agent.onEvent('cc.started', { session: event.name, sessionId: event.id, task: event.task.slice(0, 2000), folder: s?.workspace ?? '', mode: s?.mode ?? '' }, `The Claude Code session "${event.name}" started${event.task ? `: ${event.task.slice(0, 400)}` : ''}`)
+    } else if (event.type === 'error') {
+      agent.onEvent('cc.error', { session: event.name, sessionId: event.id, error: event.error.slice(0, 2000) }, `The Claude Code session "${event.name}" failed: ${event.error.slice(0, 600)}`)
+    } else if (event.type === 'context') {
+      agent.onEvent('cc.context', { session: event.name, sessionId: event.id, percent: event.percent, previous: event.previous, tokens: event.tokens, maxTokens: event.max }, `The Claude Code session "${event.name}" has used ${event.percent}% of its context.`)
+    } else if (event.type === 'compacted') {
+      agent.onEvent('cc.compacted', { session: event.name, sessionId: event.id, how: event.how, before: event.before, after: event.after ?? 0 }, `The Claude Code session "${event.name}" was compacted${event.after ? ` from ${Math.round(event.before / 1000)}k to ${Math.round(event.after / 1000)}k tokens` : ''}.`)
     } else if (event.type === 'needs-input') {
       agent.onEvent('cc.needs_input', { session: event.name, sessionId: event.id, kind: event.pending.kind, summary: event.pending.summary.slice(0, 600) }, `The Claude Code session "${event.name}" needs the user: ${event.pending.summary.slice(0, 600)}`)
     }

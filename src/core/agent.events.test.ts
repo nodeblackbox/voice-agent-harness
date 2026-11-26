@@ -123,4 +123,38 @@ describe('Agent: runbooks on session and clock events', () => {
     vi.advanceTimersByTime(120_000)
     expect(quietEvent).not.toHaveBeenCalled()
   })
+
+  it('the schedule event runs a scheduled runbook at its time, and cc.idle comes at its marks', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 26, 17, 29, 50)) // a Thursday
+    const on = { ...template('push-reminder'), enabled: true }
+    const idle = { ...template('idle-session-nudge'), enabled: true }
+    const t0 = new Date(2026, 10, 26, 17, 0, 0).getTime()
+    const { agent } = make([on, idle], [session({ sdkSessionId: 'sdk', status: 'idle', updatedAt: t0 }), session({ id: 's2', name: 'busy', sdkSessionId: 'x', status: 'running', updatedAt: t0 })])
+    const onEvent = vi.spyOn(agent, 'onEvent')
+    agent.startClock()
+    vi.advanceTimersByTime(11_000)
+    expect(onEvent).toHaveBeenCalledWith('schedule', expect.objectContaining({ time: '17:30' }), 'It is 17:30 on thursday.')
+    expect(onEvent).toHaveBeenCalledWith('cc.idle', expect.objectContaining({ session: 'fix chips', idleMinutes: 30 }), expect.any(String))
+    expect(onEvent.mock.calls.filter((c) => c[0] === 'cc.idle')).toHaveLength(1)
+    vi.advanceTimersByTime(60_000)
+    expect(onEvent.mock.calls.filter((c) => c[0] === 'cc.idle')).toHaveLength(1) // 31 minutes is not a mark
+  })
+
+  it('app.start carries the time and the sessions', () => {
+    const { agent } = make([], [session({}), session({ id: 's2', status: 'needs_input' })])
+    const onEvent = vi.spyOn(agent, 'onEvent')
+    agent.appStarted(new Date(2026, 10, 26, 8, 15))
+    expect(onEvent).toHaveBeenCalledWith('app.start', expect.objectContaining({ time: '08:15', hour: 8, weekday: 'thursday', sessions: 2, sessionsWaiting: 1 }), expect.any(String))
+  })
+
+  it('offers to compact a full session and sends /compact with what to keep', async () => {
+    const { agent, claude, said } = make([template('compact-when-full')], [session({})])
+    agent.onEvent('cc.context', { session: 'fix chips', sessionId: 's1', percent: 83, previous: 74, tokens: 166_000, maxTokens: 200_000 }, 'x')
+    await vi.waitFor(() => expect(agent.runbooks.list()[0]?.status).toBe('waiting'))
+    expect(said).toHaveBeenCalledWith(expect.stringContaining('fix chips has used 83% of its context'))
+    agent.runbooks.deliverReply('yes go ahead')
+    await vi.waitFor(() => expect(agent.runbooks.list()[0]?.status).toBe('done'))
+    expect(claude.send).toHaveBeenCalledWith('s1', expect.stringMatching(/^\/compact\b/))
+  })
 })

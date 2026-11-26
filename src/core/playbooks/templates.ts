@@ -326,8 +326,8 @@ goal: At six on weekdays, read out the to-dos still saved, so nothing carries ov
 enabled: false
 priority: low
 triggers:
-  events: [clock.tick]
-  when: 'time == "18:00" and not (weekday in ["saturday", "sunday"])'
+  events: [schedule]
+  schedule: { at: ["18:00"], days: [mon, tue, wed, thu, fri] }
 gates:
   cooldownS: 3600
 budget:
@@ -368,8 +368,8 @@ goal: Late on weekday afternoons, remind the user to commit and push their work 
 enabled: false
 priority: low
 triggers:
-  events: [clock.tick]
-  when: 'time == "17:30" and not (weekday in ["saturday", "sunday"])'
+  events: [schedule]
+  schedule: { at: ["17:30"], days: [mon, tue, wed, thu, fri] }
 gates:
   cooldownS: 3600
 budget:
@@ -382,6 +382,174 @@ steps:
 ---
 Off by default: switch it on for a daily nudge to push. "Push after a session finishes" covers work that a
 Claude Code session did; this one is for everything else.
+`
+  },
+  {
+    id: 'compact-when-full',
+    text: `---
+kind: runbook
+title: Offer to compact a full session
+goal: When a Claude Code session's context passes 80%, offer to compact it before Claude Code has to do it by itself.
+enabled: true
+priority: normal
+triggers:
+  events: [cc.context]
+  when: "percent >= 80"
+gates:
+  cooldownS: 600
+budget:
+  maxSteps: 6
+  maxSeconds: 30
+steps:
+  - id: offer
+    do: say
+    text: "{{session}} has used {{percent}}% of its context. Want me to compact it now? You can tell me what it should keep."
+  - id: reply
+    do: wait
+    expireS: 300
+  - id: agree
+    do: ask
+    question: "Is \`latest\` agreeing to compact the session (yes, go ahead, do it, compact it)?"
+    next: { no: end }
+  - id: keep
+    do: model
+    prompt: |
+      The user agreed to compact a Claude Code session and said: "{{reply}}".
+      If they said what the summary should keep (a feature, a file, a bug), write that in a few words.
+      Otherwise answer with nothing at all.
+    save: focus
+  - id: compact
+    do: claude
+    session: "{{sessionId}}"
+    prompt: "/compact {{focus}}"
+  - id: done
+    do: say
+    text: "Compacting {{session}}."
+---
+Fires as the context passes 80% and again at 90% (it reports each tenth on the way up), at most every ten
+minutes. Claude Code compacts by itself when the window is nearly full; doing it a little earlier, with a
+word on what to keep, keeps the parts you care about. Compact by voice any time: "compact the API session".
+`
+  },
+  {
+    id: 'session-error-readout',
+    text: `---
+kind: runbook
+title: Tell me when a session fails
+goal: When a Claude Code session fails, say which one and what went wrong, in a sentence.
+enabled: true
+priority: normal
+triggers:
+  events: [cc.error]
+gates:
+  cooldownS: 60
+budget:
+  maxSteps: 3
+  maxSeconds: 30
+steps:
+  - id: short
+    do: model
+    prompt: |
+      A Claude Code session called "{{session}}" failed with this error:
+      {{error}}
+      Say what went wrong in one short plain sentence a person can act on. No preamble.
+    save: what
+  - id: tell
+    do: say
+    text: "{{session}} stopped with a problem: {{what}}"
+---
+A run that errors or loses its connection. Sending the session a new instruction resumes it.
+`
+  },
+  {
+    id: 'auto-compacted-notice',
+    text: `---
+kind: runbook
+title: Note when a session compacts itself
+goal: When Claude Code compacts a session by itself because it was full, say so, since it may have lost some detail.
+enabled: true
+priority: low
+triggers:
+  events: [cc.compacted]
+  when: 'how == "auto"'
+gates:
+  cooldownS: 300
+budget:
+  maxSteps: 2
+  maxSeconds: 10
+steps:
+  - id: tell
+    do: say
+    text: "Heads up: {{session}} filled its context and compacted itself, so it may have lost some detail. Remind it of anything important."
+---
+Compacting you asked for is not mentioned; only the automatic kind, near the end of the window.
+`
+  },
+  {
+    id: 'idle-session-nudge',
+    text: `---
+kind: runbook
+title: Nudge me about an idle session
+goal: When a Claude Code session has sat finished for half an hour, ask whether it has more to do or can be stopped.
+enabled: false
+priority: low
+triggers:
+  events: [cc.idle]
+  when: "idleMinutes == 30"
+gates:
+  cooldownS: 900
+budget:
+  maxSteps: 2
+  maxSeconds: 10
+steps:
+  - id: nudge
+    do: say
+    text: "{{session}} finished half an hour ago and has been idle since. Anything else for it, or shall I stop it?"
+---
+Off by default. idleMinutes counts at 5, 10, 15, 20, 30, 45 and 60 minutes, then every half hour; change 30
+to suit.
+`
+  },
+  {
+    id: 'start-of-day',
+    text: `---
+kind: runbook
+title: Start-of-day to-dos
+goal: When the app opens in the morning, read out the to-dos still saved.
+enabled: false
+priority: low
+triggers:
+  events: [app.start]
+  when: "hour >= 6 and hour < 12"
+gates:
+  cooldownS: 14400
+budget:
+  maxSteps: 5
+  maxSeconds: 60
+steps:
+  - id: saved
+    do: tool
+    tool: recall
+    args: { query: "To do" }
+    save: saved
+  - id: open
+    do: model
+    prompt: |
+      These are entries from the user's memory. List the ones that are to-dos (kind todo), one per line, as a
+      short instruction of a few words, at most six, most urgent first. If there are none, answer NONE.
+
+      {{saved}}
+    save: open
+    list: true
+  - id: any
+    do: check
+    if: "open_count > 0"
+    next: { yes: say, no: end }
+  - id: say
+    do: say
+    text: "Morning. On your list:\\n{{open|lines}}"
+---
+Off by default. It only reads; it changes nothing.
 `
   }
 ]
@@ -482,8 +650,22 @@ A runbook can also react to things other than a message, with events: [...]:
 - cc.finished: a Claude Code session finished. Fields: session, sessionId, summary, folder, mode, changedFiles
   (files changed and not committed, by git status; empty outside a git project).
 - cc.needs_input: a session needs you. Fields: session, sessionId, kind (question, permission, plan), summary.
+- cc.started: a session was created. Fields: session, sessionId, task.
+- cc.error: a session's run failed. Fields: session, sessionId, error.
+- cc.idle: a session has sat finished. Fields: session, sessionId, idleMinutes (5, 10, 15, 20, 30, 45, 60, then
+  every 30), summary.
+- cc.context: a session's context passed another tenth of its window on the way up. Fields: session, sessionId,
+  percent, previous, tokens, maxTokens. when: "percent >= 80" fires at 80% and again at 90%.
+- cc.compacted: a session's conversation was compacted. Fields: session, sessionId, how ("auto" or "manual"),
+  before, after. A claude step with prompt: "/compact <what to keep>" compacts one.
+- schedule: by the clock, with triggers.schedule saying when:
+    schedule: { at: ["09:00", "17:30"], days: [mon, tue, wed, thu, fri] }   # set times; no days = every day
+    schedule: { every: 30, from: "09:00", until: "18:00" }                  # every 30 minutes in a window
+  Fields: time, hour, minute, weekday, sessionsWaiting, waitingNames, sessionsWorking.
+- app.start: once, a few seconds after the app opens. Fields: time, hour, weekday, sessions, sessionsWaiting.
 - clock.tick: every minute. Fields: time ("14:30"), hour, minute, weekday, sessionsWaiting, waitingNames,
   oldestWaitMinutes, sessionsWorking. "minute % 10 == 0" is every ten minutes; use a cooldown to space it out.
+  For set times, a schedule is simpler.
 The event's fields are in the steps too ({{session}}), and a claude step can message that session with
 session: "{{sessionId}}" instead of starting a new one with name:.
 

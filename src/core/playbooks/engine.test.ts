@@ -176,14 +176,26 @@ describe('the shipped templates fire where they should', () => {
     expect(engine.onUserTurn([p], facts(long), limits, { intent: 'idea', intentP: 0.9, asks: {} }).fired).toHaveLength(0)
   })
 
-  it('the clock runbooks: at their time on weekdays only', () => {
+  it('the scheduled runbooks: at their time on weekdays only', () => {
     const { engine } = setup()
     const evening = tpl('evening-todo-roundup')
     const push = tpl('push-reminder')
-    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:00', weekday: 'tuesday' }, {})).toMatchObject({ id: 'evening-todo-roundup' })
-    expect(engine.onEvent([evening, push], 'clock.tick', { time: '17:30', weekday: 'friday' }, {})).toMatchObject({ id: 'push-reminder' })
-    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:00', weekday: 'sunday' }, {})).toBeNull()
-    expect(engine.onEvent([evening, push], 'clock.tick', { time: '18:01', weekday: 'monday' }, {})).toBeNull()
+    const t = (time: string, weekday: string) => ({ time, hour: Number(time.slice(0, 2)), minute: Number(time.slice(3)), weekday })
+    expect(engine.onEvent([evening, push], 'schedule', t('18:00', 'tuesday'), {})).toMatchObject({ id: 'evening-todo-roundup', why: 'schedule 18:00' })
+    expect(engine.onEvent([evening, push], 'schedule', t('17:30', 'friday'), {})).toMatchObject({ id: 'push-reminder' })
+    expect(engine.onEvent([evening, push], 'schedule', t('18:00', 'sunday'), {})).toBeNull()
+    expect(engine.onEvent([evening, push], 'schedule', t('18:01', 'monday'), {})).toBeNull()
+    // a clock tick is not the schedule event
+    expect(engine.onEvent([evening, push], 'clock.tick', t('18:00', 'tuesday'), {})).toBeNull()
+  })
+
+  it('the context runbook fires at 80% and up, and only on cc.context', () => {
+    const { engine } = setup()
+    const p = tpl('compact-when-full')
+    expect(engine.onEvent([p], 'cc.context', { percent: 72, previous: 64, session: 'api' }, {})).toBeNull()
+    expect(engine.onEvent([p], 'cc.context', { percent: 81, previous: 72, session: 'api' }, {})).toMatchObject({ id: 'compact-when-full' })
+    expect(engine.onEvent([tpl('auto-compacted-notice')], 'cc.compacted', { how: 'manual' }, {})).toBeNull()
+    expect(engine.onEvent([tpl('auto-compacted-notice')], 'cc.compacted', { how: 'auto' }, {})).toMatchObject({ id: 'auto-compacted-notice' })
   })
 
   it('ships the clock runbooks switched off', () => {

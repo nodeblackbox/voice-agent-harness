@@ -1,16 +1,25 @@
 // The Setup tab: when a playbook or runbook fires (event, phrases, condition, Jev's question), how often it may,
 // and what it does. Each control rewrites one field of the file's header, so the file stays the source of truth.
 import { CONTEXT_FIELDS, EVENT_FIELDS, KNOWN_EVENTS, field, readPlaybookFile, setPlaybookBody, setPlaybookField, type FieldPath } from '@shared/playbookFile'
+import { describeSchedule, type Schedule } from '@shared/schedule'
 import { T } from '../../theme'
 import { Btn, Toggle } from '../../components/primitives'
-import { Area, ChipList, duration, EVENT_WORDS, Field, FieldHints, Input, Section } from './parts'
+import { Area, ChipList, duration, Field, FieldHints, Input, Section } from './parts'
+import { DEFAULT_SCHEDULE, EVENT_BY_ID, EVENTS, GROUPS, eventWords } from './events'
+import { ScheduleEditor, readSchedule } from './ScheduleEditor'
 
 /** The trigger as one plain sentence, so it is clear what has to be true at once. */
 export function describeTrigger(h: Record<string, unknown>, kind: 'playbook' | 'runbook'): string {
   const tr = field.obj(h.triggers)
   const events = field.list(tr.events)
   const ev = events.length ? events : ['turn.user']
-  const parts: string[] = [`It fires when ${ev.map((e) => EVENT_WORDS[e] ?? e).join(' or ')}`]
+  const sched = ev.includes('schedule') ? readSchedule(tr.schedule) : null
+  const others = ev.filter((e) => e !== 'schedule')
+  const parts: string[] = [
+    sched && !others.length
+      ? `It runs ${describeSchedule(sched)}`
+      : `It fires when ${others.map(eventWords).join(' or ')}${sched ? `, or ${describeSchedule(sched)}` : ''}`
+  ]
   const said = field.list(tr.said)
   if (said.length) parts.push(said.length === 1 ? `you use every word of “${said[0]}”` : `you use every word of one of ${said.map((s) => `“${s}”`).join(', ')}`)
   if (field.str(tr.when)) parts.push(`${field.str(tr.when)} is true`)
@@ -28,12 +37,8 @@ export function describeTrigger(h: Record<string, unknown>, kind: 'playbook' | '
   return `${s}.${kind === 'runbook' ? ' Then its steps run in the background.' : ' Then its instruction shapes that reply.'}`
 }
 
-const EVENT_CHOICES: Array<{ id: string; label: string; help: string }> = [
-  { id: 'turn.user', label: 'You say something', help: 'Every message, spoken or typed.' },
-  { id: 'cc.finished', label: 'A Claude Code session finishes', help: 'When a session ends its turn.' },
-  { id: 'cc.needs_input', label: 'A session needs you', help: 'A question, a permission or a plan to approve.' },
-  { id: 'clock.tick', label: 'The clock', help: 'Once a minute; use the condition to pick the times.' }
-]
+/** Conditions the picker fills in for an event: replaced when another event is picked, kept once edited. */
+const SUGGESTIONS = new Set(EVENTS.map((e) => e.suggest).filter(Boolean) as string[])
 
 export function FormEditor({ text, kind, onChange, onShowFile }: { text: string; kind: 'playbook' | 'runbook'; onChange: (text: string) => void; onShowFile: () => void }) {
   const file = readPlaybookFile(text)
@@ -70,6 +75,15 @@ export function FormEditor({ text, kind, onChange, onShowFile }: { text: string;
   const when = field.str(tr.when)
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v))
   const cooldown = field.num(gates.cooldownS, 0)!
+  const pick = (id: string) => {
+    const pairs: Array<[FieldPath, unknown]> = [[['triggers', 'events'], [id]]]
+    if (id !== 'turn.user') pairs.push([['triggers', 'said'], undefined], [['triggers', 'ask'], undefined])
+    pairs.push([['triggers', 'schedule'], id === 'schedule' ? (tr.schedule && typeof tr.schedule === 'object' ? tr.schedule : DEFAULT_SCHEDULE) : undefined])
+    const suggest = EVENT_BY_ID[id]?.suggest
+    if (!when || SUGGESTIONS.has(when)) pairs.push([['triggers', 'when'], suggest])
+    setMany(pairs)
+  }
+  const sched: Schedule | null = ev.includes('schedule') ? readSchedule(tr.schedule) : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -80,27 +94,42 @@ export function FormEditor({ text, kind, onChange, onShowFile }: { text: string;
       <Section title="When it fires" hint="Everything you fill in here has to be true at once. Leave a part empty to skip it.">
         {kind === 'runbook' ? (
           <Field label="On" help="What it reacts to. A playbook only reacts to what you say; runbooks can also react to sessions and the clock.">
-            <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-              {EVENT_CHOICES.map((c) => {
-                const sel = ev.length === 1 && ev[0] === c.id
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={sel}
-                    onClick={() => (c.id === 'turn.user' ? set(['triggers', 'events'], ['turn.user']) : setMany([[['triggers', 'events'], [c.id]], [['triggers', 'said'], undefined], [['triggers', 'ask'], undefined]]))}
-                    className="flex flex-col items-start rounded-lg px-2.5 py-2 text-left"
-                    style={{ cursor: 'pointer', background: sel ? T.cyanTint : T.bg, border: `1px solid ${sel ? T.cyanBorder : T.border}` }}
-                  >
-                    <span className="text-xs font-medium" style={{ color: sel ? T.cyan : T.text }}>
-                      {c.label}
-                    </span>
-                    <span className="text-[11px]" style={{ color: T.text3 }}>
-                      {c.help}
-                    </span>
-                  </button>
-                )
-              })}
+            <div className="flex flex-col gap-3" role="radiogroup" aria-label="What it reacts to">
+              {GROUPS.map((g) => (
+                <div key={g.id} className="flex flex-col gap-1.5">
+                  <span className="text-[10.5px] font-medium uppercase" style={{ color: T.text3, letterSpacing: 0.6 }}>
+                    {g.label}
+                  </span>
+                  <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                    {EVENTS.filter((e) => e.group === g.id).map((c) => {
+                      const sel = ev.length === 1 && ev[0] === c.id
+                      const Icon = c.icon
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={sel}
+                          aria-pressed={sel}
+                          onClick={() => pick(c.id)}
+                          className="flex items-start gap-2 rounded-lg px-2.5 py-2 text-left"
+                          style={{ cursor: 'pointer', background: sel ? T.cyanTint : T.bg, border: `1px solid ${sel ? T.cyanBorder : T.border}` }}
+                        >
+                          <Icon size={14} style={{ color: sel ? T.cyan : T.text3, marginTop: 1, flexShrink: 0 }} />
+                          <span className="flex flex-col min-w-0">
+                            <span className="text-xs font-medium" style={{ color: sel ? T.cyan : T.text }}>
+                              {c.label}
+                            </span>
+                            <span className="text-[11px]" style={{ color: T.text3, lineHeight: 1.4 }}>
+                              {c.help}
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
             {!(ev.length === 1 && (KNOWN_EVENTS as readonly string[]).includes(ev[0]!)) && (
               <span className="text-[11px]" style={{ color: T.text3 }}>
@@ -116,13 +145,19 @@ export function FormEditor({ text, kind, onChange, onShowFile }: { text: string;
           </Field>
         )}
 
+        {sched && (
+          <Field label="Schedule" help="When it runs. Times of day, a repeat, or both; and the days.">
+            <ScheduleEditor value={sched} onChange={(v) => set(['triggers', 'schedule'], v)} />
+          </Field>
+        )}
+
         {userEvent && (
           <Field label="Phrases" help="Any one of them, matched on its words in any order. Short and specific works best.">
             <ChipList values={field.list(tr.said)} onChange={(v) => set(['triggers', 'said'], v.length ? v : undefined)} placeholder="e.g. push the changes (Enter to add)" ariaLabel="Add a phrase" />
           </Field>
         )}
 
-        <Field label="Condition" help="Optional. Like chars > 1200, intent == &quot;task&quot; or minute % 10 == 0.">
+        <Field label="Condition" help={userEvent ? 'Optional. Like chars > 1200 or intent == "task".' : 'Optional. Click a field below to use it, e.g. percent >= 80.'}>
           <Input value={when} onChange={(v) => set(['triggers', 'when'], v.trim() ? v : undefined)} placeholder="no condition" mono ariaLabel="Condition" />
           <FieldHints fields={fields} onPick={(n) => set(['triggers', 'when'], when ? `${when} ${n}` : n)} />
         </Field>

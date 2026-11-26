@@ -12,7 +12,7 @@ const ok = { ok: true }
 const claude = {
   list: vi.fn(), events: vi.fn().mockResolvedValue([]), start: vi.fn(), send: vi.fn().mockResolvedValue({ ok: true, queued: false }),
   answer: vi.fn().mockResolvedValue({ ok: true, said: 'x' }), interrupt: vi.fn().mockResolvedValue(ok), stop: vi.fn().mockResolvedValue(ok), dequeue: vi.fn().mockResolvedValue(ok),
-  rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
+  rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), compact: vi.fn().mockResolvedValue({ ok: true, queued: false }), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
   external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
   folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null), setMode: vi.fn().mockResolvedValue({ ok: true }),
@@ -420,5 +420,32 @@ describe('ClaudeView', () => {
     await render()
     expect(host.textContent).toContain('An API key would be billed')
     expect(host.textContent).toContain('ANTHROPIC_API_KEY')
+  })
+})
+
+describe('context', () => {
+  it('shows how full each session is and compacts with what to keep', async () => {
+    useStore.setState({ claudeSessions: [session({ sdkSessionId: 'sdk', context: { tokens: 166_000, max: 200_000, percent: 83, at: 1 }, compactions: 1 })], claudeSelected: 's1' })
+    await render()
+    expect(host.querySelector('[data-testid="context-bar"]')!.textContent).toContain('83%')
+    const meter = host.querySelector('button[aria-label="Context"]') as HTMLButtonElement
+    expect(meter.textContent).toContain('83%')
+    expect(meter.title).toContain('166k of 200k')
+    await click(meter)
+    expect(host.textContent).toContain('Compacted 1× so far')
+    const keep = host.querySelector('input[aria-label="What to keep"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(keep, 'the auth work')
+      keep.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('Compact now'))
+    expect(claude.compact).toHaveBeenCalledWith('s1', 'the auth work')
+  })
+
+  it('has no meter before the first turn', async () => {
+    useStore.setState({ claudeSessions: [session({ turns: 0 })], claudeSelected: 's1' })
+    await render()
+    expect(host.querySelector('[data-testid="context-bar"]')).toBeNull()
+    expect((host.querySelector('button[aria-label="Context"]') as HTMLButtonElement).disabled).toBe(true)
   })
 })

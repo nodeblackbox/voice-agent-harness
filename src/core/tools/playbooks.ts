@@ -3,6 +3,8 @@
 // loader's parser; saving and history are the main process's job (PlaybookAdmin). Deleting needs a clear yes:
 // the first call only asks, and the same id confirmed within two minutes deletes.
 
+import { describeSchedule } from '@shared/schedule'
+import { DROP_REASON } from '@shared/console'
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { ChatMessage, PlaybookEvalResult, PlaybookInfo, PlaybookLabel, PlaybookSaveResult, PlaybooksState, PlaybookTestRow } from '@shared/types'
@@ -46,6 +48,10 @@ export const CONFIRM_WINDOW_MS = 120_000
 /** What it reacts to, in a few words, for the model to say back. */
 export function triggerSummary(p: PlaybookInfo): string {
   const parts: string[] = []
+  const events = (p.events ?? []).filter((e) => e !== 'turn.user')
+  if (events.includes('schedule')) parts.push(`on a schedule, ${describeSchedule(p.schedule)}`)
+  const others = events.filter((e) => e !== 'schedule')
+  if (others.length) parts.push(`on ${others.join(' or ')}`)
   if (p.when) parts.push(`when ${p.when}`)
   if (p.said?.length) parts.push(`when you say ${p.said.map((s) => `"${s}"`).join(' or ')}`)
   if (p.ask) parts.push(`when Jev answers yes to "${p.ask}"`)
@@ -54,7 +60,7 @@ export function triggerSummary(p: PlaybookInfo): string {
 
 function brief(p: PlaybookInfo) {
   return p.ok
-    ? { id: p.id, title: p.title, on: p.enabled, fires: triggerSummary(p), goal: p.goal, needs_jev: !!p.usesJev, fired_this_run: p.firedCount }
+    ? { id: p.id, title: p.title, on: p.enabled, fires: triggerSummary(p), goal: p.goal, needs_jev: !!p.usesJev, fired_this_run: p.firedCount, ...(p.skippedCount ? { held_back_this_run: p.skippedCount, last_held_back_because: DROP_REASON[p.lastSkip?.reason ?? ''] ?? p.lastSkip?.reason } : {}) }
     : { id: p.id, broken: p.errors[0] ? `line ${p.errors[0].line}: ${p.errors[0].message}` : 'unreadable' }
 }
 

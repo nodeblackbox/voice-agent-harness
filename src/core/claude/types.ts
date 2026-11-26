@@ -36,6 +36,8 @@ export interface CcRun {
   interrupt(): Promise<void>
   /** Change the CLI's mode mid-session (lab: works on the live stream). */
   setPermissionMode?(mode: SdkMode): Promise<void>
+  /** How full the context window is, by the CLI's own count. */
+  contextUsage?(): Promise<{ totalTokens: number; maxTokens: number; percentage: number }>
   close(): void
 }
 

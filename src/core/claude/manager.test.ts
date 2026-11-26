@@ -28,6 +28,7 @@ class FakeRun implements CcRun {
   result(text: string, extra: Record<string, unknown> = {}) { this.emit({ type: 'result', subtype: 'success', result: text, total_cost_usd: 0.01, num_turns: 1, terminal_reason: 'completed', ...extra }) }
   async interrupt() { this.interrupts++; this.emit({ type: 'result', subtype: 'error_during_execution', terminal_reason: 'aborted_tools', is_error: true, total_cost_usd: 0, num_turns: 0 }) }
   setPermissionMode?: (mode: 'plan' | 'default') => Promise<void>
+  contextUsage?: () => Promise<{ totalTokens: number; maxTokens: number; percentage: number }>
   close() { this.closed = true; this.done = true; this.wake?.() }
   messages: AsyncIterable<any> = {
     [Symbol.asyncIterator]: () => ({
@@ -567,5 +568,77 @@ describe('plans', () => {
     m.answer(id, { kind: 'allow' }); await tick(); await tick()
     expect(got.r).toMatchObject({ behavior: 'allow' })
     expect(m.get(id)!.mode).toBe('ask')
+  })
+})
+
+describe('context and compacting', () => {
+  const usage = (n: number) => ({ type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 10, cache_read_input_tokens: n - 10, cache_creation_input_tokens: 0, output_tokens: 0 } } })
+
+  it('reads how full the context is from the last reply, and reports each tenth it passes on the way up', async () => {
+    const { m, last, events } = setup()
+    const id = (m.start('Ctx', 'go') as any).session.id
+    await tick()
+    last()!.init(); last()!.emit(usage(50_000)); last()!.result('done', { modelUsage: { 'claude-x': { contextWindow: 200_000 } } })
+    await tick(); await tick()
+    expect(m.get(id)!.context).toMatchObject({ tokens: 50_000, max: 200_000, percent: 25 })
+    expect(events.filter((e) => e.type === 'context').map((e: any) => e.percent)).toEqual([25])
+    m.send(id, 'more'); await tick()
+    last()!.emit(usage(56_000)); last()!.result('done')
+    await tick(); await tick()
+    expect(events.filter((e) => e.type === 'context')).toHaveLength(1) // still in the same tenth
+    m.send(id, 'more'); await tick()
+    last()!.emit(usage(164_000)); last()!.result('done')
+    await tick(); await tick()
+    expect(events.filter((e) => e.type === 'context').map((e: any) => [e.previous, e.percent])).toEqual([[0, 25], [28, 82]])
+  })
+
+  it("prefers the CLI's own count when it gives one", async () => {
+    const { m, last } = setup()
+    const id = (m.start('Ctx', 'go') as any).session.id
+    await tick()
+    last()!.contextUsage = async () => ({ totalTokens: 120_000, maxTokens: 1_000_000, percentage: 12 })
+    last()!.init(); last()!.emit(usage(50_000)); last()!.result('done')
+    await tick(); await tick()
+    expect(m.get(id)!.context).toMatchObject({ tokens: 120_000, max: 1_000_000, percent: 12 })
+  })
+
+  it('compact sends /compact with the focus; its result is not a finished job; the boundary lowers the context', async () => {
+    const { m, last, events } = setup()
+    const id = (m.start('Ctx', 'go') as any).session.id
+    await tick()
+    last()!.init(); last()!.emit(usage(170_000)); last()!.result('done')
+    await tick(); await tick()
+    const finishedBefore = events.filter((e) => e.type === 'finished').length
+    expect(m.compact(id, 'keep the  auth work')).toEqual({ ok: true, queued: false })
+    await tick()
+    expect(last()!.prompts.at(-1)).toBe('/compact keep the auth work')
+    last()!.emit({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'manual', pre_tokens: 170_000, post_tokens: 20_000 } })
+    last()!.result('')
+    await tick(); await tick()
+    const s = m.get(id)!
+    expect(s).toMatchObject({ status: 'idle', lastSummary: 'done', compactions: 1 })
+    expect(s.context?.percent).toBe(10)
+    expect(events.filter((e) => e.type === 'finished')).toHaveLength(finishedBefore)
+    expect(events.find((e) => e.type === 'compacted')).toMatchObject({ before: 170_000, after: 20_000, how: 'manual' })
+    expect(m.events(id).some((e) => e.kind === 'status' && /Compacted: 170k → 20k/.test(e.text))).toBe(true)
+  })
+
+  it('compact refuses a session with no conversation, and queues behind a running job', async () => {
+    const { m } = setup()
+    const a = (m.start('Empty') as any).session.id
+    expect(m.compact(a).ok).toBe(false)
+    const b = (m.start('Busy', 'work') as any).session.id
+    await tick()
+    expect(m.compact(b)).toEqual({ ok: true, queued: true })
+  })
+
+  it('emits started, and error when a run fails', async () => {
+    const { m, last, events } = setup()
+    m.start('Boom', 'go')
+    await tick()
+    last()!.init(); last()!.result('it broke', { is_error: true, subtype: 'error_during_execution' })
+    await tick()
+    expect(events.find((e) => e.type === 'started')).toMatchObject({ name: 'Boom', task: 'go' })
+    expect(events.find((e) => e.type === 'error')).toMatchObject({ name: 'Boom', error: 'it broke' })
   })
 })

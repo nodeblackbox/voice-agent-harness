@@ -10,7 +10,10 @@ import { join } from 'node:path'
 import { PLAYBOOK_ID, parsePlaybook, setHeaderField, usesJev, type ParseIssue, type Playbook } from '@core/playbooks/schema'
 import { GUIDE, TEMPLATES, type Template } from '@core/playbooks/templates'
 import { runbookMermaid } from '@core/runbooks/steps'
-import type { PlaybookCheck, PlaybookInfo, PlaybookSaveResult, PlaybooksState } from '@shared/types'
+import type { PlaybookCheck, PlaybookInfo, PlaybookSaveResult, PlaybooksState, TriggerActivity } from '@shared/types'
+
+/** Trigger decisions kept for the Triggers overview. */
+const ACTIVITY_CAP = 80
 
 const SEEDED = '_seeded.json'
 const GUIDE_FILE = '_guide.md'
@@ -51,6 +54,8 @@ interface Loaded {
 export class PlaybookService {
   private files: Loaded[] = []
   private fired = new Map<string, { count: number; last: number }>()
+  private skipped = new Map<string, { count: number; last: { at: number; reason: string; by?: string } }>()
+  private activity: TriggerActivity[] = []
   private watcher: FSWatcher | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   /** null until checked; false when git is missing or the folder could not become a repository. */
@@ -99,14 +104,30 @@ export class PlaybookService {
   }
 
   /** Counted from `trigger.fired`, for "fired 3 times, last 2 min ago" in the view. Per app run. */
-  noteFired(id: string): void {
+  noteFired(id: string, title = id, why = '', by?: string): void {
+    const at = (this.deps.now ?? Date.now)()
     const f = this.fired.get(id) ?? { count: 0, last: 0 }
-    this.fired.set(id, { count: f.count + 1, last: (this.deps.now ?? Date.now)() })
+    this.fired.set(id, { count: f.count + 1, last: at })
+    this.log({ at, id, title, outcome: 'fired', detail: why, ...(by ? { by } : {}) })
+  }
+
+  /** From `trigger.dropped`: it matched, and a gate held it back. Switched-off ones are not logged (they would be on every message). */
+  noteSkipped(id: string, title = id, reason = '', by?: string): void {
+    if (reason === 'disabled') return
+    const at = (this.deps.now ?? Date.now)()
+    const s = this.skipped.get(id)
+    this.skipped.set(id, { count: (s?.count ?? 0) + 1, last: { at, reason, ...(by ? { by } : {}) } })
+    this.log({ at, id, title, outcome: 'skipped', detail: reason, ...(by ? { by } : {}) })
+  }
+
+  private log(a: TriggerActivity): void {
+    this.activity.unshift(a)
+    if (this.activity.length > ACTIVITY_CAP) this.activity.length = ACTIVITY_CAP
     this.deps.changed?.()
   }
 
   state(): PlaybooksState {
-    return { dir: this.dir, playbooks: this.files.map((f) => this.info(f)), jev: this.deps.jev?.() ?? 'no_key' }
+    return { dir: this.dir, playbooks: this.files.map((f) => this.info(f)), activity: [...this.activity], jev: this.deps.jev?.() ?? 'no_key' }
   }
 
   check(id: string, text: string): PlaybookCheck {
@@ -244,7 +265,8 @@ export class PlaybookService {
   private info(f: Loaded): PlaybookInfo {
     const p = f.playbook
     const stats = this.fired.get(f.id)
-    const base = { id: f.id, source: f.source, ok: !!p, errors: f.errors, warnings: f.warnings, firedCount: stats?.count ?? 0, lastFiredAt: stats?.last ?? null }
+    const skip = this.skipped.get(f.id)
+    const base = { id: f.id, source: f.source, ok: !!p, errors: f.errors, warnings: f.warnings, firedCount: stats?.count ?? 0, lastFiredAt: stats?.last ?? null, skippedCount: skip?.count ?? 0, lastSkip: skip?.last ?? null }
     if (!p) return base
     return {
       ...base,
@@ -259,6 +281,7 @@ export class PlaybookService {
       maxPerSession: p.gates.maxPerSession,
       tags: p.tags,
       ask: p.triggers.ask?.question ?? null,
+      schedule: p.triggers.schedule,
       usesJev: usesJev(p),
       kind: p.kind,
       diagram: p.runbook ? runbookMermaid(p.runbook.steps) : undefined,

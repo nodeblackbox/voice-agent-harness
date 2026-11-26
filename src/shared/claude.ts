@@ -116,9 +116,22 @@ export interface CcSession {
   /** Tokens read (cached ones included) and written across the session's runs. */
   tokensIn?: number
   tokensOut?: number
+  /** How full its context window is, from the last turn (the CLI's own count when it gives one). */
+  context?: CcContext
+  /** How many times its conversation was compacted (by the CLI near the limit, or when asked). */
+  compactions?: number
   turns: number
   createdAt: number
   updatedAt: number
+}
+
+/** A session's context window: tokens in use of the most it can hold. */
+export interface CcContext {
+  tokens: number
+  max: number
+  /** 0 to 100, rounded */
+  percent: number
+  at: number
 }
 
 export type CcManagerEvent =
@@ -127,6 +140,11 @@ export type CcManagerEvent =
   | { type: 'needs-input'; id: string; name: string; pending: CcPending }
   | { type: 'finished'; id: string; name: string; summary: string }
   | { type: 'removed'; id: string }
+  | { type: 'started'; id: string; name: string; task: string }
+  /** The context passed another tenth of the window on its way up (`previous` is the percent before). */
+  | { type: 'context'; id: string; name: string; percent: number; previous: number; tokens: number; max: number }
+  | { type: 'compacted'; id: string; name: string; before: number; after?: number; how: 'auto' | 'manual' }
+  | { type: 'error'; id: string; name: string; error: string }
 
 export type CcAnswer =
   | { kind: 'choice'; choices: number[]; text?: undefined } // 1-based option numbers

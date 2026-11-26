@@ -192,6 +192,8 @@ export interface VoiceAgentApi {
     rename(id: string, name: string): Promise<CcResult>
     /** Fresh start: forget the conversation, keep the folder. */
     reset(id: string): Promise<CcResult>
+    /** Summarise its conversation to free the context; `focus` says what to keep. Queued when busy. */
+    compact(id: string, focus?: string): Promise<CcResult<{ queued: boolean }>>
     /** Drop from the list; the folder stays on disk unless `deleteFolder` (sandbox folders only). */
     remove(id: string, deleteFolder?: boolean): Promise<CcResult<{ deletedFolder?: string }>>
     files(id: string): Promise<CcFile[]>

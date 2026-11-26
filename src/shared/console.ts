@@ -91,12 +91,12 @@ const RUN_END: Record<string, string> = {
   interrupted: 'cut off'
 }
 
-const DROP_REASON: Record<string, string> = {
+export const DROP_REASON: Record<string, string> = {
   disabled: 'it is switched off',
   cooldown: 'still cooling down from its last firing',
   session_cap: 'already fired as often as allowed in this conversation',
   cap: 'too many playbooks matched; higher priorities won',
-  one_runbook: 'another runbook started on this message'
+  one_runbook: 'another runbook took this event'
 }
 
 function category(name: string, kind: ConsoleEntry['kind']): ConsoleCategory {

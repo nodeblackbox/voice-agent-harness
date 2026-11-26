@@ -4,6 +4,7 @@ import { useStore } from '../../state/store'
 import { statusColor, statusLabel } from '../../state/claude'
 import { Dot } from '../primitives'
 import { ClaudeMark, CLAUDE_ORANGE } from '../../views/claude/ClaudeMark'
+import { contextColor } from '../../views/claude/Context'
 
 /**
  * Claude Code at a glance, above the chat input while Claude control is on: one chip per session
@@ -40,6 +41,9 @@ export function ClaudeStrip() {
           <Dot color={statusColor(s.status, T)} pulse={s.status === 'running' || !!s.pending} size={6} />
           <span style={{ maxWidth: 140 }} className="truncate">{s.name}</span>
           <span style={{ color: T.text3 }}>{statusLabel(s.status)}</span>
+          {s.context && s.context.percent >= 50 && (
+            <span title={`Context ${s.context.percent}% full`} style={{ color: contextColor(s.context.percent), fontFamily: T.mono, fontSize: 10.5 }}>{s.context.percent}%</span>
+          )}
         </button>
       ))}
       <button onClick={() => open()} aria-label="Open Claude Code" className="inline-flex items-center gap-1 rounded-full text-xs" style={{ ...chip, color: T.text3 }}>

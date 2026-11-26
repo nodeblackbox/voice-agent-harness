@@ -4,6 +4,9 @@ Status: all seven phases are built. Playbooks (1-2): files with code triggers, g
 reply, the Playbooks view and chat chips. Jev (3): `intent`, `intentP`, `triggers.ask`. Authoring by voice (4):
 the playbook_* tools, the drafter, confirmed deletes, git history and undo. Runbooks (5): `kind: runbook` with
 `steps`, run in the background, saved after every step. Events (6): `cc.finished`, `cc.needs_input`, `clock.tick`.
+More events (2026-11-26): `cc.started`, `cc.error`, `cc.idle`, `cc.context`, `cc.compacted`, `app.start`, and
+`schedule` with a `triggers.schedule` block (see Trigger types). The Playbooks page has a Triggers overview: every
+event, what listens to it, what each did this run, and a log of fired and held-back decisions.
 Evaluation (7): `src/core/playbooks/evaluate.ts` replays the user's recent messages through a trigger and has a
 judge (Jev, one yes/no per message, or the model in one call) say where it should have fired; disagreements are
 misses and false fires, the user's own marks (`<userData>/playbook-labels.json`, set in the Review panel, by the
@@ -92,7 +95,33 @@ Evaluated cheapest first; a playbook fires only if every part it uses matches.
    can't fire by accident.
 4. **Jev** (`ask`): the name of a Jev question in the turn's shared request (below). The playbook states the
    answer it needs (`kind == idea`, `risky >= 0.6`).
-5. **Clock** (`clock.every`, `clock.at`): an event source, emitted by main, for routines.
+5. **Schedule** (`events: [schedule]` with `triggers.schedule`): `at: ["09:00", "17:30"]` (times of day),
+   `every: 30` (minutes, counted from `from`, inside `from`/`until`), `days: [mon, …]` (none = every day). The
+   agent's minute clock sends a `schedule` event and each runbook takes the minutes its own schedule names
+   (`src/shared/schedule.ts`, shared with the form so both say the same thing). `clock.tick` stays for a
+   condition on the time.
+
+The events, all from `src/shared/playbookFile.ts` (`KNOWN_EVENTS`, `EVENT_FIELDS` list each one's fields):
+
+| Event | When | Fields |
+| --- | --- | --- |
+| `turn.user` | you finish saying or typing something | text, chars, words, via, intent… |
+| `cc.started` | a Claude Code session is created | session, sessionId, task |
+| `cc.finished` | a session ends a job | session, sessionId, summary, folder, mode, changedFiles, changes |
+| `cc.needs_input` | a session asks a question, a permission or a plan | session, sessionId, kind, summary |
+| `cc.error` | a run errors or loses its connection | session, sessionId, error |
+| `cc.idle` | a session has sat finished at 5, 10, 15, 20, 30, 45, 60 minutes, then every 30 | session, sessionId, idleMinutes, summary |
+| `cc.context` | its context passes another tenth of the window on the way up | session, sessionId, percent, previous, tokens, maxTokens |
+| `cc.compacted` | its conversation was compacted (auto near the limit, or manual) | session, sessionId, how, before, after |
+| `schedule` | a minute its schedule names | time, hour, minute, weekday, sessionsWaiting, waitingNames, sessionsWorking |
+| `app.start` | once, 4 s after the app opens | time, hour, weekday, sessions, sessionsWaiting |
+| `clock.tick` | every minute | time, hour, minute, weekday, sessionsWaiting, waitingNames, oldestWaitMinutes, sessionsWorking |
+
+Context: after each turn the session manager asks the CLI for its context count (`getContextUsage`, summary),
+falling back to the last main-loop reply's usage against the model's `contextWindow`. Compacting sends
+`/compact <focus>` into the session (claude_compact by voice, the Context button on the Claude Code page, or a
+runbook `claude` step); its result is not reported as a finished job, and the CLI's `compact_boundary` message
+logs "Compacted 182k → 31k tokens" and lowers the meter.
 
 ## Jev in the turn
 
@@ -180,6 +209,11 @@ steps:
   condition rows) and a CodeMirror editor (the repo already has the YAML language). Every control rewrites
   the header text, so the file stays the single source. Buttons: test, duplicate, delete, draft with AI.
   Runbooks also show the Mermaid diagram and recent runs with their step log.
+- **Triggers overview** (the Triggers button at the top of the sidebar): stat cards (on, fired, held back, next
+  scheduled), every event grouped as You / Claude Code sessions / Time with the files that listen to it, what
+  each did this run (`fired 2×`, `held back 1×: still cooling down…`), a New button that starts a runbook
+  already set to that event, and the last 40 decisions (`TriggerActivity`, kept in main from `trigger.fired` and
+  `trigger.dropped`; switched-off ones are not logged).
 - **Chat chips**: under the message that set something off, one chip per firing (title and outcome). Click
   opens the Console filtered to that turn.
 - **Console rows**: a readable row in `src/shared/console.ts` for every new event, coloured as its own part

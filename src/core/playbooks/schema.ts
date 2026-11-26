@@ -6,6 +6,7 @@ import { LineCounter, parseDocument, isMap, isScalar, type Node as YamlNode } fr
 import { z } from 'zod'
 import { compile, ExprError, type Compiled } from './expr'
 import { Budget, checkSteps, type CheckedSteps } from '../runbooks/steps'
+import { DAYS, TIME } from '@shared/schedule'
 
 export const PLAYBOOK_ID = /^[a-z0-9][a-z0-9_-]{0,40}$/
 
@@ -51,9 +52,20 @@ const Header = z.strictObject({
           min: z.number().min(0.5, 'ask.min is at least 0.5').max(0.99, 'ask.min is at most 0.99').default(0.7)
         })
         .nullable()
+        .default(null),
+      /** With the `schedule` event: when it runs by the clock. */
+      schedule: z
+        .strictObject({
+          at: z.array(z.string().trim().regex(TIME, 'a time is "HH:MM", 24-hour, like "09:00" or "17:30"')).default([]),
+          every: z.number().int('every is a whole number of minutes').min(1, 'every is at least 1 minute').max(1440, 'every is at most 1440 minutes (a day)').nullable().default(null),
+          days: z.array(z.enum(DAYS, { error: 'a day is mon, tue, wed, thu, fri, sat or sun' })).default([]),
+          from: z.string().trim().regex(TIME, 'from is "HH:MM", like "09:00"').nullable().default(null),
+          until: z.string().trim().regex(TIME, 'until is "HH:MM", like "18:00"').nullable().default(null)
+        })
+        .nullable()
         .default(null)
     })
-    .default({ events: ['turn.user'], said: [], when: null, ask: null }),
+    .default({ events: ['turn.user'], said: [], when: null, ask: null, schedule: null }),
   gates: z
     .strictObject({
       cooldownS: z.number().min(0, 'cooldownS cannot be negative').default(0),
@@ -150,6 +162,12 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   const otherEvents = [...events].filter((e) => e !== 'turn.user')
   if (otherEvents.length && header.kind === 'playbook') errors.push({ line: nodeLine(['triggers', 'events']), message: `a playbook shapes a reply, so it only reacts to turn.user; to react to ${otherEvents.join(' or ')}, make it kind: runbook` })
   if (otherEvents.length && (header.triggers.said.length || header.triggers.ask)) errors.push({ line: nodeLine(['triggers', header.triggers.said.length ? 'said' : 'ask']), message: `said and ask read what the user said, so they only work with turn.user, not ${otherEvents.join(' or ')}` })
+  const sched = header.triggers.schedule
+  if (events.has('schedule') && !sched) errors.push({ line: nodeLine(['triggers', 'events']), message: 'the schedule event needs triggers.schedule: when it runs (at: ["09:00"], or every: 30 minutes)' })
+  if (sched && !events.has('schedule')) errors.push({ line: nodeLine(['triggers', 'schedule']), message: 'triggers.schedule only applies with the schedule event: add schedule to triggers.events' })
+  if (sched && !sched.at.length && !sched.every) errors.push({ line: nodeLine(['triggers', 'schedule']), message: 'triggers.schedule: give at (times of day) or every (minutes), or both' })
+  if (sched && !sched.every && (sched.from || sched.until)) warnings.push({ line: nodeLine(['triggers', 'schedule']), message: 'triggers.schedule: from and until only bound every; at times run whenever they are' })
+  if (sched?.from && sched.until && sched.from.padStart(5, '0') >= sched.until.padStart(5, '0')) errors.push({ line: nodeLine(['triggers', 'schedule', 'until']), message: 'triggers.schedule: until must be later than from' })
   const fields: Record<string, string> = { tuning: CONTEXT_FIELDS.tuning! }
   if (events.has('turn.user') || !events.size) Object.assign(fields, CONTEXT_FIELDS)
   for (const e of otherEvents) Object.assign(fields, EVENT_FIELDS[e as Exclude<KnownEvent, 'turn.user'>])
@@ -196,7 +214,9 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   const ask = header.triggers.ask
   if (ask && (ask.yes === undefined) !== (ask.no === undefined)) errors.push({ line: nodeLine(['triggers', 'ask']), message: 'triggers.ask: give both yes and no (what each answer means), or neither' })
   if (ask && !/`latest`/.test(ask.question)) warnings.push({ line: nodeLine(['triggers', 'ask', 'question']), message: 'triggers.ask: refer to the message as `latest` (in backticks), which is how Jev sees it' })
-  if (!header.triggers.when && !phrases.length) {
+  // a message or a minute comes all the time; a schedule names its own times, and the other events are rare enough
+  const frequent = events.has('turn.user') || events.has('clock.tick') || events.has('cc.idle') || !events.size
+  if (!header.triggers.when && !phrases.length && frequent) {
     if (ask) warnings.push({ line: nodeLine(['triggers', 'ask']), message: 'the question is asked on every message; a when or said condition asks it less often' })
     else warnings.push({ line: nodeLine(['triggers']), message: 'no when or said condition: this fires on every matching event' })
   }

@@ -72,6 +72,7 @@ export const IPC = {
   claudeSetMode: 'claude:set-mode',
   claudeRename: 'claude:rename',
   claudeReset: 'claude:reset',
+  claudeCompact: 'claude:compact',
   claudeRemove: 'claude:remove',
   claudeFiles: 'claude:files',
   claudeRead: 'claude:read',

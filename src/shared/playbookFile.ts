@@ -8,7 +8,11 @@ import { isMap, parseDocument } from 'yaml'
 export const RUNBOOK_TOOLS = ['remember', 'update_memory', 'recall', 'web_search', 'read_page', 'current_time', 'diagram_create'] as const
 
 /** Events this version can react to. Others are accepted with a warning, since they never fire yet. */
-export const KNOWN_EVENTS = ['turn.user', 'cc.finished', 'cc.needs_input', 'clock.tick'] as const
+export const KNOWN_EVENTS = [
+  'turn.user',
+  'cc.started', 'cc.finished', 'cc.needs_input', 'cc.error', 'cc.idle', 'cc.context', 'cc.compacted',
+  'schedule', 'clock.tick', 'app.start'
+] as const
 export type KnownEvent = (typeof KNOWN_EVENTS)[number]
 
 /** What the events other than a user message carry. Only runbooks react to them: there is no reply to shape. */
@@ -27,6 +31,53 @@ export const EVENT_FIELDS: Record<Exclude<KnownEvent, 'turn.user'>, Record<strin
     sessionId: 'its id',
     kind: 'what it needs: question, permission or plan',
     summary: 'what it is asking'
+  },
+  'cc.started': {
+    session: "the new session's name",
+    sessionId: 'its id',
+    task: 'the first thing it was asked to do (empty when none yet)'
+  },
+  'cc.error': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id',
+    error: 'what went wrong, in its words'
+  },
+  'cc.idle': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id',
+    idleMinutes: 'how long it has sat finished with nothing to do: 5, 10, 15, 20, 30, 45, 60, then every 30',
+    summary: 'what it said it did last'
+  },
+  'cc.context': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id',
+    percent: 'how full its context window is now, 0 to 100 (it fires each time this passes another tenth on the way up)',
+    previous: 'the percent before this turn',
+    tokens: 'tokens in its context now',
+    maxTokens: 'the most its context holds'
+  },
+  'cc.compacted': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id',
+    how: '"auto" (Claude Code did it, nearly full) or "manual" (it was asked to)',
+    before: 'tokens before',
+    after: 'tokens after (0 when not known)'
+  },
+  schedule: {
+    time: 'the local time as "HH:MM", when the schedule is due',
+    hour: 'the hour, 0 to 23',
+    minute: 'the minute, 0 to 59',
+    weekday: 'monday, tuesday, ... sunday',
+    sessionsWaiting: 'Claude Code sessions waiting on the user',
+    waitingNames: 'their names, joined with "and"',
+    sessionsWorking: 'Claude Code sessions working right now'
+  },
+  'app.start': {
+    time: 'the local time as "HH:MM"',
+    hour: 'the hour, 0 to 23',
+    weekday: 'monday, tuesday, ... sunday',
+    sessions: 'Claude Code sessions in the list',
+    sessionsWaiting: 'of those, how many wait on the user'
   },
   'clock.tick': {
     time: 'the local time as "HH:MM", once a minute',

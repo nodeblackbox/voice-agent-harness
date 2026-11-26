@@ -16,6 +16,7 @@ import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
 import { FileMenuProvider } from './claude/FileMenu'
 import { Files, RestartNotice, useWorkspaceFiles } from './claude/Files'
 import { Inspector } from './claude/Inspector'
+import { ContextBar, ContextMeter } from './claude/Context'
 import { Markdown } from './claude/Markdown'
 import { MODES, ModeBadge, ModeChooser, ModeMenu, modeOf } from './claude/Mode'
 import { Preview } from './claude/Preview'
@@ -275,6 +276,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
         <span title="Files changed" className="inline-flex items-center gap-1"><FileCode size={11} />{touched}</span>
         <span title="Tool calls" className="inline-flex items-center gap-1"><Wrench size={11} />{toolCalls}</span>
       </div>
+      <ContextMeter session={session} />
       <ModeMenu session={session} fallback={fallback} />
       <Btn small danger icon={Octagon} disabled={!isBusy(session)} onClick={() => void check(window.api.claude.interrupt(session.id, false))}>Interrupt</Btn>
       <Btn small icon={Square} disabled={session.status === 'stopped'} onClick={() => void check(window.api.claude.stop(session.id))}>Stop</Btn>
@@ -459,6 +461,7 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
         <ModeBadge mode={modeOf(s, fallback)} />
         {s.queued.length > 0 && <span className="rounded-full px-1.5" style={{ background: T.bg, color: T.text2, flexShrink: 0 }}>+{s.queued.length}</span>}
       </div>
+      <ContextBar session={s} />
     </button>
   )
 }

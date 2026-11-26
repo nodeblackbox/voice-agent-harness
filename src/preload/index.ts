@@ -118,6 +118,7 @@ const api: VoiceAgentApi = {
     setMode: (id, mode) => invoke(IPC.claudeSetMode, id, mode),
     rename: (id, name) => invoke(IPC.claudeRename, id, name),
     reset: (id) => invoke(IPC.claudeReset, id),
+    compact: (id, focus) => invoke(IPC.claudeCompact, id, focus),
     remove: (id, deleteFolder) => invoke(IPC.claudeRemove, id, deleteFolder),
     files: (id) => invoke(IPC.claudeFiles, id),
     read: (id, rel) => invoke(IPC.claudeRead, id, rel),

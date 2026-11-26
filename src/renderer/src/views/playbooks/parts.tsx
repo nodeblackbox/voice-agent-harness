@@ -1,4 +1,6 @@
 // Small pieces of the Playbooks page: problem lists, test and review results, runbook runs, and form building blocks.
+import { describeSchedule } from '@shared/schedule'
+import { eventWords } from './events'
 import { useState, type ReactNode } from 'react'
 import { AlertTriangle, Check, CircleAlert, Plus, Sparkles, Square, X } from 'lucide-react'
 import type { PlaybookCheck, PlaybookEvalResult, PlaybookEvalRow, PlaybookInfo, PlaybookIssue, PlaybookLabel, PlaybookTestRow, RunbookRun, RunbookRunStatus } from '@shared/types'
@@ -29,24 +31,17 @@ export function duration(s: number): string {
 
 export const issueText = (i: PlaybookIssue): string => (i.line ? `line ${i.line}: ${i.message}` : i.message)
 
-/** What a playbook reacts to, in a few words, for the sidebar. */
-export function triggerLine(p: PlaybookInfo): string {
-  const ev = (p.events ?? []).filter((e) => e !== 'turn.user')
+/** What a playbook reacts to, in a few words, for the sidebar. `conditionsOnly`: leave the event out (it is named already). */
+export function triggerLine(p: PlaybookInfo, conditionsOnly = false): string {
+  const ev = (p.events ?? []).filter((e) => e !== 'turn.user' && (!conditionsOnly || e === 'schedule'))
   const parts: string[] = []
-  if (ev.length) parts.push(ev.map((e) => EVENT_WORDS[e] ?? e).join(' or '))
+  if (ev.includes('schedule')) parts.push(describeSchedule(p.schedule))
+  const others = ev.filter((e) => e !== 'schedule')
+  if (others.length) parts.push(others.map(eventWords).join(' or '))
   if (p.said?.length) parts.push(p.said.map((s) => `“${s}”`).join(', '))
   if (p.when) parts.push(p.when)
   if (p.ask) parts.push(`Jev: ${p.ask}`)
-  return parts.join(' · ') || 'every message'
-}
-
-export const EVENT_WORDS: Record<string, string> = {
-  'turn.user': 'you say something',
-  'cc.finished': 'a Claude Code session finishes',
-  'cc.needs_input': 'a session needs you',
-  'clock.tick': 'a minute passes',
-  'cc.': 'any Claude Code session event',
-  'clock.': 'the clock'
+  return parts.join(' · ') || (conditionsOnly ? 'every time' : 'every message')
 }
 
 // ---- form building blocks ------------------------------------------------------------------

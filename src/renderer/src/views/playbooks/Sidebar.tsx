@@ -1,6 +1,6 @@
 // The left column of the Playbooks page: new buttons, search, filters, the list in groups, and what is running now.
 import { useMemo, useState } from 'react'
-import { AlertTriangle, CircleAlert, FolderOpen, ListChecks, Plus, Search, Workflow, X } from 'lucide-react'
+import { AlertTriangle, ChevronRight, CircleAlert, FolderOpen, ListChecks, Plus, Search, Workflow, X, Zap } from 'lucide-react'
 import type { PlaybookInfo, PlaybooksState, RunbookRun } from '@shared/types'
 import { T, alpha } from '../../theme'
 import { Btn, Toggle } from '../../components/primitives'
@@ -146,7 +146,9 @@ export function Sidebar({
   onToggle,
   onNew,
   onCancelRun,
-  onOpenRun
+  onOpenRun,
+  triggersActive = false,
+  onTriggers
 }: {
   data: PlaybooksState | null
   list: PlaybookInfo[]
@@ -162,6 +164,9 @@ export function Sidebar({
   onNew: (kind: 'playbook' | 'runbook') => void
   onCancelRun: (runId: string) => void
   onOpenRun: (runbookId: string) => void
+  /** The Triggers overview is open. */
+  triggersActive?: boolean
+  onTriggers?: () => void
 }) {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -195,6 +200,25 @@ export function Sidebar({
             Folder
           </Btn>
         </div>
+        {onTriggers && (
+          <button
+            type="button"
+            onClick={onTriggers}
+            aria-current={triggersActive ? 'true' : undefined}
+            className="flex items-center gap-2 rounded-lg px-2.5 text-left"
+            style={{ height: 34, cursor: 'pointer', background: triggersActive ? alpha(T.amber, 12) : T.bg, border: `1px solid ${triggersActive ? alpha(T.amber, 40) : T.border}` }}
+          >
+            <Zap size={14} style={{ color: T.amber, flexShrink: 0 }} />
+            <span className="text-sm flex-1" style={{ color: T.text }}>Triggers</span>
+            <span className="text-[11px]" style={{ color: T.text3 }}>
+              {(() => {
+                const fired = list.reduce((n, p) => n + p.firedCount, 0)
+                return fired ? `${fired} fired` : 'overview'
+              })()}
+            </span>
+            <ChevronRight size={13} style={{ color: T.text3 }} />
+          </button>
+        )}
         <div className="flex items-center gap-2 rounded-lg px-2.5" style={{ height: 32, background: T.bg, border: `1px solid ${T.border}` }}>
           <Search size={13} style={{ color: T.text3, flexShrink: 0 }} />
           <input

@@ -109,3 +109,26 @@ describe('parsePlaybook', () => {
   })
 })
 
+
+describe('the schedule trigger', () => {
+  const rb = (triggers: string) => file(`kind: runbook\ntitle: X\ngoal: Test.\ntriggers:\n${triggers}\nsteps:\n  - { id: s, do: say, text: hi }`, '')
+  it('parses a schedule with the schedule event', () => {
+    const r = parsePlaybook('x', rb('  events: [schedule]\n  schedule: { at: ["09:00"], days: [mon, fri] }'))
+    expect(r.ok, JSON.stringify(r)).toBe(true)
+    if (r.ok) expect(r.playbook.triggers.schedule).toEqual({ at: ['09:00'], every: null, days: ['mon', 'fri'], from: null, until: null })
+  })
+  it('needs both the event and the schedule, and a time in it', () => {
+    const msgs = (t: string) => { const r = parsePlaybook('x', rb(t)); return r.ok ? [] : r.errors.map((e) => e.message) }
+    expect(msgs('  events: [schedule]').join()).toMatch(/needs triggers.schedule/)
+    expect(msgs('  events: [cc.finished]\n  schedule: { at: ["09:00"] }').join()).toMatch(/only applies with the schedule event/)
+    expect(msgs('  events: [schedule]\n  schedule: { days: [mon] }').join()).toMatch(/give at/)
+    expect(msgs('  events: [schedule]\n  schedule: { at: ["25:00"] }').join()).toMatch(/HH:MM/)
+    expect(msgs('  events: [schedule]\n  schedule: { every: 10, from: "18:00", until: "09:00" }').join()).toMatch(/until must be later/)
+  })
+  it('knows the fields of the new session events', () => {
+    const r = parsePlaybook('x', rb('  events: [cc.context]\n  when: "percent >= 80 and previous < 80"'))
+    expect(r.ok && r.warnings).toEqual([])
+    const bad = parsePlaybook('x', rb('  events: [cc.error]\n  when: "percent > 1"'))
+    expect(bad.warnings.map((w) => w.message).join()).toMatch(/"percent" is not a field/)
+  })
+})

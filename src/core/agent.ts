@@ -55,7 +55,7 @@ import { splitSpoken, type CutPoint, type SpokenChunk } from './turn/spoken'
 import { mergeTexts, parseFillerWords, unfinishedReason } from './turn/continuation'
 import { Coalescer } from './turn/coalesce'
 import { PocketTtsEngine, POCKET_DEFAULT_VOICE, type PocketBackend } from './speech/pocket'
-import { PlaybookEngine, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
+import { PlaybookEngine, listensTo, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
 import { JevError, type JevClient } from './jev/client'
 import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
 import { playbookTools, type PlaybookAdmin } from './tools/playbooks'
@@ -197,6 +197,9 @@ const MAX_EMPTY_RESUMES = 2
 /** A transcript normally lands well under 2 s after speech ends; past this the ears are stuck. */
 export const FINAL_OVERDUE_MS = 25_000
 /** How long turns stay on the fallback voice after Edge failed before Edge is tried again. */
+
+/** The idle times cc.idle reports at, in minutes (then every 30 past an hour). */
+const IDLE_MARKS = new Set([5, 10, 15, 20, 30, 45, 60])
 
 export class Agent {
   readonly sm: StateMachine
@@ -1420,7 +1423,10 @@ export class Agent {
 
   private clock: ReturnType<typeof setTimeout> | null = null
 
-  /** A clock.tick on every whole minute, for runbooks such as reminders; ticks only when one listens to it. */
+  /**
+   * Every whole minute, for the runbooks that listen: clock.tick, the schedule event (each runbook takes the
+   * minutes its schedule names) and cc.idle for sessions that have sat finished for a while.
+   */
   startClock(now: () => Date = () => new Date()): void {
     if (this.clock) return
     const schedule = (): void => {
@@ -1430,16 +1436,36 @@ export class Agent {
     }
     const tick = (): void => {
       try {
-        const list = this.deps.playbooks?.() ?? []
-        if (list.some((p) => p.enabled && p.kind === 'runbook' && p.triggers.events.some((e) => e === 'clock.tick' || e === 'clock.'))) {
-          const fields = this.clockFields(now())
+        const list = (this.deps.playbooks?.() ?? []).filter((p) => p.enabled && p.kind === 'runbook')
+        const d = now()
+        if (list.some((p) => listensTo(p, 'clock.tick'))) {
+          const fields = this.clockFields(d)
           this.onEvent('clock.tick', fields, `It is ${fields.time} on ${fields.weekday}.`)
+        }
+        if (list.some((p) => listensTo(p, 'schedule'))) {
+          const fields = this.clockFields(d)
+          this.onEvent('schedule', fields, `It is ${fields.time} on ${fields.weekday}.`)
+        }
+        if (list.some((p) => listensTo(p, 'cc.idle'))) {
+          for (const s of this.deps.claude?.list() ?? []) {
+            if (s.status !== 'idle' || !s.sdkSessionId) continue
+            const idleMinutes = Math.floor((d.getTime() - s.updatedAt) / 60_000)
+            if (!IDLE_MARKS.has(idleMinutes) && !(idleMinutes > 60 && idleMinutes % 30 === 0)) continue
+            this.onEvent('cc.idle', { session: s.name, sessionId: s.id, idleMinutes, summary: s.lastSummary.slice(0, 2000) }, `The Claude Code session "${s.name}" has been idle for ${idleMinutes} minutes.`)
+          }
         }
       } finally {
         schedule()
       }
     }
     schedule()
+  }
+
+  /** Once, when the app has started and the playbooks are loaded: the app.start event. */
+  appStarted(d: Date = new Date()): void {
+    const c = this.clockFields(d)
+    const sessions = this.deps.claude?.list() ?? []
+    this.onEvent('app.start', { time: c.time, hour: c.hour, minute: c.minute, weekday: c.weekday, sessions: sessions.length, sessionsWaiting: c.sessionsWaiting }, `The app started at ${String(c.time)} on ${String(c.weekday)}.`)
   }
 
   stopClock(): void {

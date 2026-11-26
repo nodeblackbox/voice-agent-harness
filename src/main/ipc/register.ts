@@ -210,6 +210,7 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeSetMode, (_e, id: string, mode: CcMode) => (CC_MODES.includes(mode) ? d.claude.manager.setMode(id, mode) : { ok: false, error: 'Unknown mode.' }))
   h(IPC.claudeRename, (_e, id: string, name: string) => d.claude.manager.rename(id, name))
   h(IPC.claudeReset, (_e, id: string) => d.claude.manager.reset(id))
+  h(IPC.claudeCompact, (_e, id: string, focus?: string) => d.claude.manager.compact(id, focus ?? ''))
   h(IPC.claudeRemove, (_e, id: string, deleteFolder?: boolean) => d.claude.manager.remove(id, { deleteFolder: !!deleteFolder }))
   h(IPC.claudeFolders, () => d.claude.manager.folders())
   h(IPC.claudePickFolder, () => d.claude.pickFolder())
