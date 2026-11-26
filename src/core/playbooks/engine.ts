@@ -171,6 +171,36 @@ export class PlaybookEngine {
     return { block: lines.join('\n\n'), fired }
   }
 
+  /**
+   * An event that is not a user message (a Claude Code session finished, the clock ticked): only runbooks react,
+   * one per event, the highest priority whose condition holds and whose gates let it through. No reply is shaped.
+   * `trace`: there is no turn to hold the lines for, so the caller passes a trace that writes at once.
+   */
+  onEvent(playbooks: Playbook[], type: string, fields: Record<string, unknown>, tuning: EngineLimits['tuning'], trace: EngineTrace = this.trace): Firing | null {
+    const ctx = { ...fields, tuning }
+    const matched: Array<{ p: Playbook; why: string }> = []
+    for (const p of playbooks) {
+      if (p.kind !== 'runbook' || !listensTo(p, type)) continue
+      if (p.condition && !p.condition.test(ctx)) continue
+      matched.push({ p, why: p.condition ? `${type} and ${p.condition.source}${describeNumbers(p.condition.names, ctx)}` : `every ${type}` })
+    }
+    const now = this.now()
+    const passed = matched.filter((m) => {
+      const reason = this.gate(m.p, now)
+      // a clock runbook that is switched off would be logged every minute: only say why for the other events
+      if (reason && type !== 'clock.tick') trace('trigger.dropped', { id: m.p.id, reason, title: m.p.title, by: type })
+      return !reason
+    })
+    passed.sort((a, b) => rank(b.p) - rank(a.p) || a.p.id.localeCompare(b.p.id))
+    const first = passed[0]
+    for (const m of passed.slice(1)) trace('trigger.dropped', { id: m.p.id, reason: 'one_runbook' satisfies DropReason, title: m.p.title, by: type })
+    if (!first) return null
+    this.lastFired.set(first.p.id, now)
+    this.firedCount.set(first.p.id, (this.firedCount.get(first.p.id) ?? 0) + 1)
+    trace('trigger.fired', { id: first.p.id, title: first.p.title, by: type, why: first.why, priority: first.p.priority, kind: 'runbook' })
+    return { id: first.p.id, title: first.p.title, why: first.why, kind: 'runbook' }
+  }
+
   private gate(p: Playbook, now: number): DropReason | null {
     if (!p.enabled) return 'disabled'
     const last = this.lastFired.get(p.id)

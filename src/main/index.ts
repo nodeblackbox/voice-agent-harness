@@ -29,6 +29,7 @@ import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { PlaybookService } from './services/playbooks'
 import { RunbookRunStore } from './services/runbookRuns'
+import { changedFiles } from './services/gitStatus'
 import { JevClient } from '@core/jev/client'
 import { testPlaybook } from '@core/playbooks/test-run'
 import { usesJev } from '@core/playbooks/schema'
@@ -416,6 +417,7 @@ ${fetchedList.text}`
   try {
     playbooks.start()
     agent.resumeRunbooks()
+    agent.startClock()
   } catch (e) {
     logError('playbooks', 'could not set up the playbooks folder', e)
   }
@@ -565,6 +567,19 @@ ${fetchedList.text}`
     } else if (event.type === 'needs-input') trace({ ev: 'cc.needs_input', sid: agent.currentSessionId, session: event.name, kind: event.pending.kind, summary: event.pending.summary.slice(0, 160) })
     else if (event.type === 'finished') trace({ ev: 'cc.finished', sid: agent.currentSessionId, session: event.name, chars: event.summary.length })
     else if (event.type === 'event' && event.event.kind === 'denied') trace({ ev: 'cc.denied', sid: agent.currentSessionId, reason: event.event.text.slice(0, 200) })
+    // runbooks can react to sessions too (docs/TRIGGERS.md): a finished job with uncommitted work, a question waiting
+    if (event.type === 'finished') {
+      const s = claude.manager.list().find((x) => x.id === event.id)
+      void changedFiles(s?.workspace).then((changed) =>
+        agent.onEvent(
+          'cc.finished',
+          { session: event.name, sessionId: event.id, summary: event.summary.slice(0, 2000), folder: s?.workspace ?? '', mode: s?.mode ?? '', changedFiles: changed, changes: changed === null ? '' : `${changed} changed file${changed === 1 ? '' : 's'}` },
+          `The Claude Code session "${event.name}" finished${changed ? ` with ${changed} changed files` : ''}: ${event.summary.slice(0, 600)}`
+        )
+      )
+    } else if (event.type === 'needs-input') {
+      agent.onEvent('cc.needs_input', { session: event.name, sessionId: event.id, kind: event.pending.kind, summary: event.pending.summary.slice(0, 600) }, `The Claude Code session "${event.name}" needs the user: ${event.pending.summary.slice(0, 600)}`)
+    }
     if (!claude.enabled()) return
     const line = announcement(event)
     if (line) agent.announce(line)
@@ -575,6 +590,11 @@ ${fetchedList.text}`
     setTimeout(() => {
       void (async () => {
         for (const [i, line] of lines.entries()) {
+          // "@wait-runbook": hold the next message until a runbook is waiting for a reply (up to five minutes)
+          if (line === '@wait-runbook') {
+            for (let w = 0; w < 600 && !agent.runbooks.list().some((r) => r.status === 'waiting'); w++) await new Promise((r) => setTimeout(r, 500))
+            continue
+          }
           if (i > 0) {
             for (let w = 0; w < 120 && agent.busy; w++) await new Promise((r) => setTimeout(r, 500))
             await new Promise((r) => setTimeout(r, 1500))

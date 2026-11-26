@@ -47,10 +47,10 @@ describe('parsePlaybook', () => {
   })
 
   it('warns about events and fields that never fire, and about conditionless playbooks', () => {
-    const r = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  events: [cc.finished]\n  when: "session == 1"'))
+    const r = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  events: [x.custom]\n  when: "session == 1"'))
     expect(r.ok).toBe(true)
     const text = r.warnings.map((w) => w.message).join('\n')
-    expect(text).toMatch(/"cc.finished" does not fire/)
+    expect(text).toMatch(/"x.custom" does not fire/)
     expect(text).toMatch(/"session" is not a field/)
     const bare = parsePlaybook('y', file('title: Y\ngoal: Test.'))
     expect(bare.warnings[0]!.message).toMatch(/fires on every/)
@@ -74,6 +74,19 @@ describe('parsePlaybook', () => {
 
   it('accepts Windows line endings', () => {
     expect(parsePlaybook('x', '---\r\ntitle: X\r\ngoal: Test.\r\n---\r\nDo it.\r\n').ok).toBe(true)
+  })
+
+  it('lets only runbooks react to session and clock events, without said or ask, and knows their fields', () => {
+    const pb = parsePlaybook('x', file('title: X\ngoal: Test.\ntriggers:\n  events: [cc.finished]'))
+    expect(!pb.ok && pb.errors[0]!.message).toMatch(/a playbook shapes a reply.*make it kind: runbook/)
+    const steps = 'steps:\n  - id: hi\n    do: say\n    text: hi'
+    const said = parsePlaybook('x', file(`kind: runbook\ntitle: X\ngoal: Test.\ntriggers:\n  events: [cc.finished]\n  said: ["push it now"]\n${steps}`))
+    expect(!said.ok && said.errors[0]!.message).toMatch(/said and ask read what the user said/)
+    const ok = parsePlaybook('x', file(`kind: runbook\ntitle: X\ngoal: Test.\ntriggers:\n  events: [cc.finished]\n  when: "changedFiles > 0 and mode != \\"plan\\""\n${steps}`))
+    expect(ok.ok).toBe(true)
+    expect(ok.warnings).toEqual([])
+    const clock = parsePlaybook('x', file(`kind: runbook\ntitle: X\ngoal: Test.\ntriggers:\n  events: [clock.tick]\n  when: "minute % 10 == 0 and sessionsWaiting > 0 and chars > 1"\n${steps}`))
+    expect(clock.warnings.map((w) => w.message)).toEqual([expect.stringMatching(/^"chars" is not a field this event has/)])
   })
 
   it('checks ask questions: both meanings or neither, a sane threshold, and a nudge to say `latest`', () => {

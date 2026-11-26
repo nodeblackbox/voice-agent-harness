@@ -77,7 +77,7 @@ describe('PlaybookEngine', () => {
   })
 
   it('ignores playbooks listening to other events, and cuts long instructions', () => {
-    const other = pb('other', 'triggers:\n  events: [cc.finished]\n  when: "chars > 0"')
+    const other = pb('other', 'triggers:\n  events: [x.custom]\n  when: "chars > 0"')
     const long = pb('long', 'triggers:\n  when: "chars > 0"', 'y'.repeat(500))
     const { engine } = setup()
     const out = engine.onUserTurn([other, long], facts('hi'), { ...limits, injectMaxChars: 100 })
@@ -122,6 +122,34 @@ describe('runbooks in the engine', () => {
     expect(events.find((e) => e.ev === 'trigger.dropped')!.data).toMatchObject({ id: 'low-job', reason: 'one_runbook' })
     expect(out.block).toContain('"high-job" has started in the background for this message (its job: Does high-job). It is already handled: do not do that part yourself, and do not start, queue, save or set up anything for it. Mention it in a few words, in your own way, like: "on it"')
     expect(out.block).not.toContain('Notes')
+  })
+})
+
+describe('PlaybookEngine.onEvent', () => {
+  const rb = (id: string, triggers: string, extra = '') => {
+    const r = parsePlaybook(id, `---\nkind: runbook\ntitle: ${id}\ngoal: x.\n${extra}triggers:\n${triggers}\nsteps:\n  - id: hi\n    do: say\n    text: hi\n---\n`)
+    if (!r.ok) throw new Error(JSON.stringify(r.errors))
+    return r.playbook
+  }
+
+  it('fires the highest-priority runbook listening to the event whose condition holds, and only runbooks', () => {
+    const { engine, events } = setup()
+    const list = [
+      rb('push', '  events: [cc.finished]\n  when: "changedFiles > 0"'),
+      rb('note', '  events: [cc.]', 'priority: high\n'),
+      rb('clock', '  events: [clock.tick]'),
+      pb('plain', 'triggers:\n  when: "chars > 0"')
+    ]
+    expect(engine.onEvent(list, 'cc.finished', { changedFiles: 2 }, {})).toMatchObject({ id: 'note', kind: 'runbook', why: 'every cc.finished' })
+    expect(events.filter((e) => e.ev === 'trigger.dropped').map((e) => e.data)).toEqual([{ id: 'push', reason: 'one_runbook', title: 'push', by: 'cc.finished' }])
+    expect(engine.onEvent([list[0]!], 'cc.finished', { changedFiles: 0 }, {})).toBeNull()
+    expect(engine.onEvent(list, 'turn.user', { text: 'hi' }, {})).toBeNull()
+  })
+
+  it('does not log a switched-off clock runbook every minute', () => {
+    const { engine, events } = setup()
+    expect(engine.onEvent([{ ...rb('clock', '  events: [clock.tick]'), enabled: false }], 'clock.tick', { minute: 1 }, {})).toBeNull()
+    expect(events).toEqual([])
   })
 })
 

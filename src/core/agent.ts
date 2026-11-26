@@ -264,7 +264,7 @@ export class Agent {
       },
       say: (text) => this.announce(text),
       tool: (name, args, signal) => this.runbookTool(name, args, signal),
-      claude: (name, prompt, folder) => this.runbookClaude(name, prompt, folder),
+      claude: (target, prompt, folder) => this.runbookClaude(target, prompt, folder),
       save: (run) => this.deps.runbookStore?.save(run),
       trace: (ev, data) => this.tr(ev, data),
       changed: () => this.deps.emit({ type: 'runbooks-changed' })
@@ -318,6 +318,7 @@ export class Agent {
 
   /** Called on quit: cancel what is running and write the session summary. */
   shutdown(): void {
+    this.stopClock()
     this.runbooks.dispose()
     this.clearFinalWatch()
     this.cancel()
@@ -1382,6 +1383,71 @@ export class Agent {
       .join('\n')
   }
 
+  /**
+   * Something happened that is not a user message (a Claude Code session finished, the clock ticked): the runbook
+   * that reacts to it, if any, starts in the background. `text` is a one-line description for {{text}}.
+   */
+  onEvent(type: string, fields: Record<string, unknown>, text: string): void {
+    try {
+      const s = this.deps.settings()
+      const list = this.deps.playbooks?.() ?? []
+      if (!list.length || s.playbooks.maxInjected <= 0) return
+      const fired = this.playbookEngine.onEvent(list, type, fields, { ...s.playbooks }, (ev, data) => this.tr(ev, data))
+      if (!fired) return
+      const rb = list.find((p) => p.id === fired.id)
+      if (rb) this.runbooks.start(rb, { text, recent: '', fields })
+    } catch (e) {
+      this.deps.log(`runbook event ${type} failed: ${(e as Error).message}`)
+    }
+  }
+
+  private clock: ReturnType<typeof setTimeout> | null = null
+
+  /** A clock.tick on every whole minute, for runbooks such as reminders; ticks only when one listens to it. */
+  startClock(now: () => Date = () => new Date()): void {
+    if (this.clock) return
+    const schedule = (): void => {
+      const d = now()
+      this.clock = setTimeout(tick, 60_000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 50)
+      this.clock.unref?.()
+    }
+    const tick = (): void => {
+      try {
+        const list = this.deps.playbooks?.() ?? []
+        if (list.some((p) => p.enabled && p.kind === 'runbook' && p.triggers.events.some((e) => e === 'clock.tick' || e === 'clock.'))) {
+          const fields = this.clockFields(now())
+          this.onEvent('clock.tick', fields, `It is ${fields.time} on ${fields.weekday}.`)
+        }
+      } finally {
+        schedule()
+      }
+    }
+    schedule()
+  }
+
+  stopClock(): void {
+    if (this.clock) clearTimeout(this.clock)
+    this.clock = null
+  }
+
+  /** What a clock.tick carries: the time, and how the Claude Code sessions stand. */
+  clockFields(d: Date): Record<string, unknown> {
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    const sessions = this.deps.claude?.list() ?? []
+    const waiting = sessions.filter((x) => x.status === 'needs_input' || x.status === 'needs_permission')
+    const names = waiting.map((x) => x.name)
+    return {
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+      weekday: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()],
+      sessionsWaiting: waiting.length,
+      waitingNames: names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? ''),
+      oldestWaitMinutes: waiting.length ? Math.floor((d.getTime() - Math.min(...waiting.map((x) => x.updatedAt))) / 60_000) : 0,
+      sessionsWorking: sessions.filter((x) => x.status === 'running').length
+    }
+  }
+
   /** Runs saved on disk pick up again: one waiting for a reply waits on, one cut off mid-step is marked so. */
   resumeRunbooks(): void {
     const saved = this.deps.runbookStore?.load() ?? []
@@ -1407,10 +1473,21 @@ export class Agent {
     return t.execute(args, { toolCallId: `runbook-${crypto.randomUUID()}`, messages: [], abortSignal: signal })
   }
 
-  /** A runbook's claude step: a new session in plan mode, so it changes nothing until its plan is approved. */
-  private runbookClaude(name: string, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string } {
+  /**
+   * A runbook's claude step: a new session in plan mode, so it changes nothing until its plan is approved, or a
+   * message to one that exists (it works in that session's own mode, behind the fence as always).
+   */
+  private runbookClaude(target: { name?: string; session?: string }, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string } {
     const s = this.deps.settings()
     if (!this.claudeOn(s)) return { ok: false, note: 'Claude Code sessions are switched off in Settings' }
+    if (target.session) {
+      const want = target.session.trim().toLowerCase()
+      const found = this.deps.claude!.list().find((x) => x.id === target.session || x.name.toLowerCase() === want)
+      if (!found) return { ok: false, note: `there is no Claude Code session called "${target.session}"` }
+      const sent = this.deps.claude!.send(found.id, prompt)
+      return sent.ok ? { ok: true, note: `told "${found.name}"${sent.queued ? ' (queued behind its current work)' : ''}` } : { ok: false, note: sent.error }
+    }
+    const name = target.name ?? 'job'
     const appDir = folder === 'app' ? (this.deps.appDir?.() ?? null) : null
     if (folder === 'app' && !appDir) return { ok: false, note: "this app's own folder is not known (it is not running from source)" }
     const r = this.deps.claude!.start(name, prompt, { folder: appDir ?? undefined, mode: 'plan' })

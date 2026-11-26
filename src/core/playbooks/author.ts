@@ -3,7 +3,7 @@
 // parse gets one automatic "fix these errors" round. Ported in spirit from the Lemon co-host's drafter, with
 // the file format and the Jev question rules of this app. Nothing here touches files: the caller saves.
 
-import { CONTEXT_FIELDS, PLAYBOOK_ID, parsePlaybook, type ParseIssue } from './schema'
+import { CONTEXT_FIELDS, EVENT_FIELDS, PLAYBOOK_ID, parsePlaybook, type ParseIssue } from './schema'
 import { GUIDE } from './templates'
 import { INTENTS } from '../jev/turn'
 
@@ -39,8 +39,13 @@ function spec(jev: boolean): string {
 
 ${GUIDE}
 
-Fields a when: condition can read on a user message:
+Fields a when: condition can read on a user message (event turn.user):
 ${fields}
+
+Other events, for runbooks only (a playbook only reacts to turn.user, and said and ask need turn.user). Their fields:
+${Object.entries(EVENT_FIELDS)
+  .map(([ev, f]) => `${ev}:\n${Object.entries(f).map(([k, v]) => `- ${k}: ${v}`).join('\n')}`)
+  .join('\n')}
 ${
   jev
     ? `

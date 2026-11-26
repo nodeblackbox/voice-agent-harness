@@ -8,6 +8,7 @@ describe('playbook expressions', () => {
     expect(compile('chars > tuning.longMessageChars and not fromSplit').test(ctx)).toBe(true)
     expect(compile('chars <= 100 or via == "typed"').test(ctx)).toBe(false)
     expect(compile('(chars - 834) / 2 == 500').test(ctx)).toBe(true)
+    expect(compile('chars % 10 == 4 and chars % 0 == null').test(ctx)).toBe(true)
   })
 
   it('treats missing data as empty, never as an error', () => {

@@ -10,7 +10,37 @@ import { Budget, checkSteps, type CheckedSteps } from '../runbooks/steps'
 export const PLAYBOOK_ID = /^[a-z0-9][a-z0-9_-]{0,40}$/
 
 /** Events this version can react to. Others are accepted with a warning, since they never fire yet. */
-export const KNOWN_EVENTS = ['turn.user'] as const
+export const KNOWN_EVENTS = ['turn.user', 'cc.finished', 'cc.needs_input', 'clock.tick'] as const
+export type KnownEvent = (typeof KNOWN_EVENTS)[number]
+
+/** What the events other than a user message carry. Only runbooks react to them: there is no reply to shape. */
+export const EVENT_FIELDS: Record<Exclude<KnownEvent, 'turn.user'>, Record<string, string>> = {
+  'cc.finished': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id (a claude step can message it with session: "{{sessionId}}")',
+    summary: 'what it said it did',
+    folder: 'the folder it works in',
+    mode: 'its mode: plan, ask, auto or bypass',
+    changedFiles: 'files changed and not yet committed there, by git status (empty when the folder is not a git repository)',
+    changes: 'the same in words: "1 changed file", "3 changed files"'
+  },
+  'cc.needs_input': {
+    session: "the Claude Code session's name",
+    sessionId: 'its id',
+    kind: 'what it needs: question, permission or plan',
+    summary: 'what it is asking'
+  },
+  'clock.tick': {
+    time: 'the local time as "HH:MM", once a minute',
+    hour: 'the hour, 0 to 23',
+    minute: 'the minute, 0 to 59 (minute % 10 == 0 is every ten minutes)',
+    weekday: 'monday, tuesday, ... sunday',
+    sessionsWaiting: 'Claude Code sessions waiting on the user (a question, a permission or a plan)',
+    waitingNames: 'their names, joined with "and"',
+    oldestWaitMinutes: 'how long the longest of them has been waiting, in minutes',
+    sessionsWorking: 'Claude Code sessions working right now'
+  }
+}
 
 /** Fields a `when:` expression can read on a `turn.user` event. */
 export const CONTEXT_FIELDS: Record<string, string> = {
@@ -159,13 +189,23 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   }
   const header = parsed.data
 
+  // the known events this playbook listens to (a prefix such as cc. covers several)
+  const events = new Set<KnownEvent>()
+  for (const ev of header.triggers.events) for (const k of KNOWN_EVENTS) if (k === ev || (ev.endsWith('.') && k.startsWith(ev))) events.add(k)
+  const otherEvents = [...events].filter((e) => e !== 'turn.user')
+  if (otherEvents.length && header.kind === 'playbook') errors.push({ line: nodeLine(['triggers', 'events']), message: `a playbook shapes a reply, so it only reacts to turn.user; to react to ${otherEvents.join(' or ')}, make it kind: runbook` })
+  if (otherEvents.length && (header.triggers.said.length || header.triggers.ask)) errors.push({ line: nodeLine(['triggers', header.triggers.said.length ? 'said' : 'ask']), message: `said and ask read what the user said, so they only work with turn.user, not ${otherEvents.join(' or ')}` })
+  const fields: Record<string, string> = { tuning: CONTEXT_FIELDS.tuning! }
+  if (events.has('turn.user') || !events.size) Object.assign(fields, CONTEXT_FIELDS)
+  for (const e of otherEvents) Object.assign(fields, EVENT_FIELDS[e as Exclude<KnownEvent, 'turn.user'>])
+
   let condition: Compiled | null = null
   if (header.triggers.when) {
     try {
       condition = compile(header.triggers.when)
       for (const name of condition.names) {
         const head = name.split('.')[0]!
-        if (!(head in CONTEXT_FIELDS)) warnings.push({ line: nodeLine(['triggers', 'when']), message: `"${name}" is not a field this event has, so it is always empty (fields: ${Object.keys(CONTEXT_FIELDS).join(', ')})` })
+        if (!(head in fields)) warnings.push({ line: nodeLine(['triggers', 'when']), message: `"${name}" is not a field this event has, so it is always empty (fields: ${Object.keys(fields).join(', ')})` })
       }
     } catch (e) {
       const col = e instanceof ExprError ? ` at column ${e.column}` : ''

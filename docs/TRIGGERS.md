@@ -1,14 +1,14 @@
 # Triggers, playbooks and runbooks: plan
 
-Status: phases 1 to 5 are built. Playbooks (phases 1-2): files with code triggers, gates, priority, injection
-into the reply, the Playbooks view and chat chips. Jev (phase 3): `intent`, `intentP` and `triggers.ask`, one
-request per message only when needed, capped by `playbooks.jevTimeoutMs`. Authoring by voice (phase 4): the
-playbook_* tools, the drafter, confirmed deletes, git history and undo. Runbooks (phase 5): `kind: runbook` with
-`steps` (`src/core/runbooks/steps.ts`) run by `RunbookRunner` (`src/core/runbooks/runner.ts`) in the background:
-model, check, ask (Jev, or the model without it), say (announcement queue), wait (the next user message is the
-reply), tool (an allowlist) and claude (plan mode, only after the user replied); caps on steps and working time;
-runs saved after every step and resumed after a restart; the Playbooks view draws the steps and lists runs.
-Templates "Brain dump to tasks" and "Change request for this app" ship. `mode: canned|hybrid` is still refused.
+Status: phases 1 to 6 are built. Playbooks (phases 1-2): files with code triggers, gates, priority, injection
+into the reply, the Playbooks view and chat chips. Jev (phase 3): `intent`, `intentP` and `triggers.ask`. Authoring
+by voice (phase 4): the playbook_* tools, the drafter, confirmed deletes, git history and undo. Runbooks (phase 5):
+`kind: runbook` with `steps`, run in the background by `RunbookRunner`, saved after every step. Events (phase 6):
+runbooks also react to `cc.finished` (with `changedFiles` from `git status` in the session's folder),
+`cc.needs_input` and a `clock.tick` every minute (`PlaybookEngine.onEvent`, `Agent.onEvent`, `Agent.startClock`);
+conditions have `%`; a claude step can message an existing session (`session:`). Templates: long message
+breakdown, idea, feedback, brain dump to tasks, change request for this app, push after a session finishes,
+remind me about waiting sessions. Still open: phase 7 (evaluation) and `mode: canned|hybrid`.
 The design discussion lives in the owner's doc "Voice Agent Harness: Trigger
 and Playbook Layer". This page is the build plan. It draws on three places: what this repo already has, the
 Lemon co-host project (one-file-per-playbook, gates, voice authoring), and the Jev logic playground (the Jev

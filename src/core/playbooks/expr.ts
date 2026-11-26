@@ -9,7 +9,7 @@
 //   not    := 'not' not | cmp
 //   cmp    := sum (('=='|'!='|'<'|'<='|'>'|'>='|'in') sum)?
 //   sum    := term (('+'|'-') term)*
-//   term   := unary (('*'|'/') unary)*
+//   term   := unary (('*'|'/'|'%') unary)*
 //   unary  := '-' unary | atom
 //   atom   := number | 'string' | "string" | true | false | null | [list] | name(.name)* | fn(args) | (expr)
 
@@ -41,7 +41,7 @@ interface Token {
   at: number
 }
 
-const OPS = ['==', '!=', '<=', '>=', '<', '>', '+', '-', '*', '/', '(', ')', '[', ']', ',', '.']
+const OPS = ['==', '!=', '<=', '>=', '<', '>', '+', '-', '*', '/', '%', '(', ')', '[', ']', ',', '.']
 
 function tokenize(src: string): Token[] {
   const out: Token[] = []
@@ -139,7 +139,7 @@ function parse(src: string): Node {
   }
   const term = (): Node => {
     let a = unary()
-    while (isOp('*') || isOp('/')) a = { k: 'bin', op: take().v, a, b: unary() }
+    while (isOp('*') || isOp('/') || isOp('%')) a = { k: 'bin', op: take().v, a, b: unary() }
     return a
   }
   const unary = (): Node => {
@@ -313,6 +313,9 @@ function evaluate(n: Node, ctx: unknown): Value {
           return isNum(a) && isNum(b) ? a * b : null
         case '/':
           return isNum(a) && isNum(b) && b !== 0 ? a / b : null
+        case '%':
+          // the remainder, for "every ten minutes": minute % 10 == 0
+          return isNum(a) && isNum(b) && b !== 0 ? a % b : null
       }
       return null
     }

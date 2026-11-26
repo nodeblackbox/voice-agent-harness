@@ -18,8 +18,8 @@ export interface RunnerDeps {
   say(text: string): void
   /** Run one of the allowed tools (steps.ts RUNBOOK_TOOLS). */
   tool(name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<unknown>
-  /** Start a Claude Code session (in plan mode) with a first task. */
-  claude?(name: string, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string }
+  /** Start a Claude Code session (in plan mode) with a first task, or message one that exists (`session`). */
+  claude?(target: { name?: string; session?: string }, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string }
   /** Persist the run (main writes it to disk). */
   save(run: RunbookRun): void
   trace(ev: string, data: Record<string, unknown>): void
@@ -81,7 +81,7 @@ export class RunbookRunner {
   }
 
   /** Start a run for a fired runbook; null when it is already running or too many are. */
-  start(rb: Playbook, trigger: { text: string; recent: string }): RunbookRun | null {
+  start(rb: Playbook, trigger: { text: string; recent: string; fields?: Record<string, unknown> }): RunbookRun | null {
     if (!rb.runbook) return null
     const active = this.active()
     if (active.some((r) => r.runbookId === rb.id)) {
@@ -103,7 +103,8 @@ export class RunbookRunner {
       title: rb.title,
       status: 'running',
       step: rb.runbook.steps[0]!.id,
-      scratch: { text: safeText(trigger.text), recent: trigger.recent },
+      // an event's fields ({{session}}, {{changedFiles}}...) are there for the steps too
+      scratch: { ...(trigger.fields ?? {}), text: safeText(trigger.text), recent: trigger.recent },
       log: [],
       startedAt: this.now,
       updatedAt: this.now,
@@ -293,7 +294,8 @@ export class RunbookRunner {
           throw new Error('refused: a Claude Code session starts only after the user replied')
         }
         if (!this.deps.claude) throw new Error('Claude Code sessions are switched off')
-        const r = this.deps.claude(fill(step.name, run.scratch), fill(step.prompt, run.scratch), step.folder)
+        const target = step.session ? { session: fill(step.session, run.scratch) } : { name: fill(step.name ?? 'job', run.scratch) }
+        const r = this.deps.claude(target, fill(step.prompt, run.scratch), step.folder)
         if (!r.ok) throw new Error(r.note)
         done(r.note)
         return sequential()

@@ -67,8 +67,10 @@ const Tool = z.strictObject({
 const Claude = z.strictObject({
   id: name,
   do: z.literal('claude'),
-  /** The session's name, spoken-friendly. */
-  name: z.string().trim().min(1).max(40),
+  /** A new session's name, spoken-friendly. */
+  name: z.string().trim().min(1).max(40).optional(),
+  /** Message this existing session (its name or id, e.g. "{{sessionId}}" from cc.finished) instead of starting one. */
+  session: z.string().trim().min(1).optional(),
   prompt: z.string().trim().min(5),
   /** Where it works: "app" = this app's own source folder, "sandbox" = a fresh folder of its own. */
   folder: z.enum(['app', 'sandbox']).default('sandbox'),
@@ -151,6 +153,9 @@ export function checkSteps(raw: unknown): { ok: true; value: CheckedSteps; warni
       if (s.do === 'model' && s.list) saved.add(`${s.save}_count`)
     }
   })
+  steps.forEach((s, i) => {
+    if (s.do === 'claude' && !s.name === !s.session) errors.push({ path: ['steps', i], message: `step "${s.id}": give a name (start a new session) or a session (message one that exists), not both` })
+  })
   // a claude step only makes sense after the user was asked: the runner refuses it otherwise
   const firstWait = steps.findIndex((s) => s.do === 'wait')
   steps.forEach((s, i) => {
@@ -170,7 +175,8 @@ export function toolsDoneBy(steps: Step[]): string[] {
     if (s.do === 'tool' && s.tool !== 'recall' && s.tool !== 'current_time' && s.tool !== 'web_search' && s.tool !== 'read_page') names.add(s.tool)
     // saving to memory has two doors; the reply was seen reaching for the other one
     if (s.do === 'tool' && (s.tool === 'remember' || s.tool === 'update_memory')) for (const n of ['remember', 'update_memory']) names.add(n)
-    if (s.do === 'claude') for (const n of ['claude_start', 'claude_send']) names.add(n)
+    // seen live: told a job would push, the reply sent the user's "no thanks" to the session with claude_answer
+    if (s.do === 'claude') for (const n of ['claude_start', 'claude_send', 'claude_answer']) names.add(n)
   }
   return [...names]
 }
@@ -192,7 +198,9 @@ export function runbookMermaid(steps: Step[]): string {
                 ? `wait for reply → ${s.save}`
                 : s.do === 'tool'
                   ? `${s.tool}${s.each ? ` for each ${s.each}` : ''}`
-                  : `Claude Code: ${s.name}`
+                  : s.session
+                    ? `tell Claude Code ${s.session}`
+                    : `Claude Code: ${s.name}`
     // inside a quoted Mermaid label only these need escaping: a double quote ends it, < and > read as HTML
     return `${s.id}: ${text}`.replace(/"/g, "'").replace(/</g, '#lt;').replace(/>/g, '#gt;')
   }

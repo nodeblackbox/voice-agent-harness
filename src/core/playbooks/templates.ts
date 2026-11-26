@@ -209,6 +209,71 @@ Needs Jev (a TypeSafe key). The session starts in plan mode in this app's own fo
 until you approve its plan. An answer that is neither clearly now nor clearly drop keeps the job on the
 to-do list, the safe choice, and says so.
 `
+  },
+  {
+    id: 'push-after-session',
+    text: `---
+kind: runbook
+title: Push after a session finishes
+goal: When a Claude Code session finishes with uncommitted changes in a git project, offer to have it commit and push them.
+enabled: true
+priority: normal
+triggers:
+  events: [cc.finished]
+  when: "changedFiles > 0"
+gates:
+  cooldownS: 120
+budget:
+  maxSteps: 8
+  maxSeconds: 60
+steps:
+  - id: offer
+    do: say
+    text: "{{session}} left {{changes}} that are not committed. Want it to commit and push them?"
+  - id: reply
+    do: wait
+    expireS: 600
+  - id: agree
+    do: ask
+    question: "Is \`latest\` agreeing to commit and push (yes, go ahead, push it)?"
+    next: { no: end }
+  - id: push
+    do: claude
+    session: "{{sessionId}}"
+    prompt: "Commit your uncommitted changes with a short message that says what changed for the user, then push the current branch. If there is no remote, or the push fails, say why and stop."
+  - id: sent
+    do: say
+    text: "Asked {{session}} to commit and push."
+---
+Only sessions working in a git project count (a fresh sandbox folder has no git, so it never asks). It asks
+every time, and only your yes sends the instruction; the session then works in its own mode, behind the
+workspace fence, so a push may still ask for approval there.
+`
+  },
+  {
+    id: 'waiting-session-reminder',
+    text: `---
+kind: runbook
+title: Remind me about waiting sessions
+goal: Remind the user once in a while when a Claude Code session has been waiting on them for a long time.
+enabled: true
+priority: low
+triggers:
+  events: [clock.tick]
+  when: "minute % 10 == 0 and sessionsWaiting > 0 and oldestWaitMinutes >= 10"
+gates:
+  cooldownS: 1500
+budget:
+  maxSteps: 3
+  maxSeconds: 10
+steps:
+  - id: remind
+    do: say
+    text: "Just a reminder, Claude Code is still waiting on you in {{waitingNames}}, the longest for about {{oldestWaitMinutes}} minutes."
+---
+Checks every ten minutes and speaks at most every 25 minutes (cooldownS). A session counts as waiting while
+it has a question, a permission or a plan for you.
+`
   }
 ]
 
@@ -301,6 +366,15 @@ steps:
     folder: app               # app = this app's own folder, sandbox = a new folder of its own
 ---
 Notes on what it is for.
+
+A runbook can also react to things other than a message, with events: [...]:
+- cc.finished: a Claude Code session finished. Fields: session, sessionId, summary, folder, mode, changedFiles
+  (files changed and not committed, by git status; empty outside a git project).
+- cc.needs_input: a session needs you. Fields: session, sessionId, kind (question, permission, plan), summary.
+- clock.tick: every minute. Fields: time ("14:30"), hour, minute, weekday, sessionsWaiting, waitingNames,
+  oldestWaitMinutes, sessionsWorking. "minute % 10 == 0" is every ten minutes; use a cooldown to space it out.
+The event's fields are in the steps too ({{session}}), and a claude step can message that session with
+session: "{{sessionId}}" instead of starting a new one with name:.
 
 Runs, their steps and anything they are waiting on show on the Playbooks page and in the Console.
 `

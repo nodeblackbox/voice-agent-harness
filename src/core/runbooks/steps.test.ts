@@ -31,6 +31,13 @@ describe('runbook steps', () => {
     expect(errors('  - id: go\n    do: claude\n    name: x\n    prompt: do the thing')[0]).toMatch(/must come after a wait step/)
   })
 
+  it('wants either a new session name or an existing session on a claude step', () => {
+    const pre = '  - id: r\n    do: wait\n'
+    expect(errors(`${pre}  - id: go\n    do: claude\n    prompt: do the thing`)[0]).toMatch(/give a name .* or a session/)
+    expect(errors(`${pre}  - id: go\n    do: claude\n    name: x\n    session: y\n    prompt: do the thing`)[0]).toMatch(/not both/)
+    expect(errors(`${pre}  - id: go\n    do: claude\n    session: "{{sessionId}}"\n    prompt: push it`)).toEqual([])
+  })
+
   it('refuses steps on a playbook, and a runbook with none', () => {
     const pb = parsePlaybook('p', '---\ntitle: P\ngoal: x.\nsteps:\n  - id: a\n    do: say\n    text: x\n---\nBody\n')
     expect(!pb.ok && pb.errors[0]!.message).toMatch(/set kind: runbook/)

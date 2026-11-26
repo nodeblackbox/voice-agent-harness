@@ -192,6 +192,9 @@ this is the "why" and the bar each part has to meet.
   and ask whether to start a Claude Code session now or later. What they say waits for a pause; the next thing
   said is their reply. They never start work without that reply (a Claude Code session starts in plan mode),
   they stop at their step and time limits, and a run waiting for an answer survives a restart.
+- Runbooks also react to **Claude Code sessions and the clock**: when a session finishes with uncommitted work in a
+  git project the assistant offers to have it commit and push (only on a yes), and a session left waiting on the
+  owner for a while gets a spoken reminder now and then.
 - Playbooks must never slow a reply down or cost one: code checks take microseconds, Jev is capped by its
   timeout, and a failure inside either is logged and the reply goes ahead.
 

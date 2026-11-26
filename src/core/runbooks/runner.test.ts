@@ -116,7 +116,7 @@ describe('RunbookRunner', () => {
     t.runner.deliverReply('yes')
     await t.settle()
     expect(run.status).toBe('done')
-    expect(t.deps.claude).toHaveBeenCalledWith('fix', expect.stringContaining('- write the spend tab'), 'app')
+    expect(t.deps.claude).toHaveBeenCalledWith({ name: 'fix' }, expect.stringContaining('- write the spend tab'), 'app')
 
     const t2 = setup({ claude: vi.fn(() => ({ ok: false, note: 'Claude Code is off' })) })
     const run2 = t2.runner.start(book('change', steps), { text: 'x', recent: '' })!
