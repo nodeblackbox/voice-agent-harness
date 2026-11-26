@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Zap } from 'lucide-react'
-import type { ChatMessage, UserTiming } from '@shared/types'
+import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, Zap } from 'lucide-react'
+import type { ChatMessage, PlaybookFiring, UserTiming } from '@shared/types'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { VoiceBars } from '../VoiceBars'
@@ -24,6 +24,28 @@ function Chip({ children, color, title }: { children: ReactNode; color?: string;
     <span className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5" style={{ background: T.raised, color: color ?? T.text3, fontFamily: T.mono }} title={title}>
       {children}
     </span>
+  )
+}
+
+/** The playbooks that fired on this message and shaped the reply; click one to open it. */
+function PlaybookChips({ firings }: { firings: PlaybookFiring[] }) {
+  const openPlaybook = useStore((s) => s.openPlaybook)
+  return (
+    <div className="flex flex-wrap justify-end gap-1">
+      {firings.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          onClick={() => openPlaybook(f.id)}
+          title={`Playbook fired: ${f.why}. Click to open it.`}
+          className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5"
+          style={{ background: T.violetTint, color: T.violet, border: `1px solid ${T.violetBorder}`, cursor: 'pointer' }}
+        >
+          <Workflow size={11} />
+          {f.title}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -91,6 +113,7 @@ const UserBubble = memo(function UserBubble({ m, gapMs }: { m: ChatMessage; gapM
           </span>
         </div>
         {m.timing && <TimingChips t={m.timing} />}
+        {m.playbooks?.length ? <PlaybookChips firings={m.playbooks} /> : null}
       </div>
     </div>
   )

@@ -59,6 +59,15 @@ const api: VoiceAgentApi = {
     delete: (id) => invoke(IPC.skillsDelete, id),
     generate: (brief) => invoke(IPC.skillsGenerate, brief)
   },
+  playbooks: {
+    list: () => invoke(IPC.playbooksList),
+    check: (id, text) => invoke(IPC.playbooksCheck, id, text),
+    save: (id, text, previousId) => invoke(IPC.playbooksSave, id, text, previousId),
+    toggle: (id, on) => invoke(IPC.playbooksToggle, id, on),
+    delete: (id) => invoke(IPC.playbooksDelete, id),
+    test: (id, text) => invoke(IPC.playbooksTest, id, text),
+    openFolder: () => invoke(IPC.playbooksOpenFolder)
+  },
   memory: {
     scopes: () => invoke(IPC.memoryScopes),
     list: (scopeId, query) => invoke(IPC.memoryList, scopeId, query),

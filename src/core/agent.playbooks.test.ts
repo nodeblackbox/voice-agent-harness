@@ -75,7 +75,7 @@ describe('Agent: playbooks', () => {
   const settings: Settings = { ...DEFAULT_SETTINGS, playbooks: { ...DEFAULT_SETTINGS.playbooks, longMessageChars: 200 } }
 
   it('adds a fired playbook to that reply only, and traces it under the turn', async () => {
-    const { traces, turn } = make(settings, () => [template()])
+    const { agent, traces, turn } = make(settings, () => [template()])
     await turn('a short question')
     expect(prompts[0]!.live).not.toContain('Playbooks for this reply')
 
@@ -91,6 +91,11 @@ describe('Agent: playbooks', () => {
     expect(fired).toBeGreaterThan(start)
     expect(traces[fired]).toMatchObject({ id: 'long-message-breakdown', turn: traces[start]!.turn })
     expect(String(traces[fired]!.why)).toContain('tuning.longMessageChars 200')
+
+    // the user's message carries the firing, for the chip under it, and it is saved with the conversation
+    const saved = store.messages(agent.currentSessionId).filter((m) => m.role === 'user')
+    expect(saved[0]!.playbooks).toBeUndefined()
+    expect(saved[1]!.playbooks).toEqual([{ id: 'long-message-breakdown', title: 'Break down long messages', why: expect.stringContaining('chars > tuning.longMessageChars') }])
   })
 
   it('uses none when maxInjected is 0, and a throwing source never costs the reply', async () => {

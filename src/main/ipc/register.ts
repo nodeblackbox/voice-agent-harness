@@ -17,6 +17,8 @@ import type { SearxngService } from '../services/searxng'
 import type { McpService } from '../services/mcp'
 import type { ClaudeService } from '../services/claude'
 import type { DiagramService } from '../services/diagrams'
+import type { PlaybookService } from '../services/playbooks'
+import { testPlaybook } from '@core/playbooks/test-run'
 import type { DiagramCheck } from '@shared/diagram'
 import { CC_MODES, type CcAnswer, type CcMode } from '@shared/claude'
 import { consoleHistory, log, logAt } from '../services/log'
@@ -34,6 +36,7 @@ export interface IpcDeps {
   mcp: McpService
   claude: ClaudeService
   diagrams: DiagramService
+  playbooks: PlaybookService
   services: () => ServiceStatus[]
   edgeRoute: EdgeRouteService
   kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
@@ -124,6 +127,16 @@ export function registerIpc(d: IpcDeps): void {
     d.win()?.webContents.send(IPC.event, { type: 'skills-changed' })
     return skills
   }
+  h(IPC.playbooksList, () => d.playbooks.state())
+  h(IPC.playbooksCheck, (_e, id: string, text: string) => d.playbooks.check(String(id), String(text)))
+  h(IPC.playbooksSave, (_e, id: string, text: string, previousId?: string) => d.playbooks.save(String(id), String(text), previousId ? String(previousId) : undefined))
+  h(IPC.playbooksToggle, (_e, id: string, on: boolean) => d.playbooks.toggle(String(id), !!on))
+  h(IPC.playbooksDelete, (_e, id: string) => d.playbooks.delete(String(id)))
+  // the last 40 things the user said or typed, newest first, against the draft in the editor
+  h(IPC.playbooksTest, (_e, id: string, text: string) => testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...d.settings.get().playbooks }))
+  h(IPC.playbooksOpenFolder, async () => {
+    await shell.openPath(d.playbooks.dir)
+  })
   h(IPC.skillsList, () => d.settings.skills())
   h(IPC.skillsSave, (_e, skill: Skill) => skillsChanged(d.settings.saveSkill(skill)))
   h(IPC.skillsDelete, (_e, id: string) => skillsChanged(d.settings.deleteSkill(id)))

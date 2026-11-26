@@ -175,6 +175,10 @@ this is the "why" and the bar each part has to meet.
   back.
 - Playbooks are plain files in `<userData>/playbooks`, so they can be read, edited, diffed and (later) put in
   git and written by voice. A broken file is skipped and its errors shown, never half-loaded.
+- The **Playbooks** view on the left rail lists them with what each reacts to and how often it fired, switches
+  them on and off, and edits the file itself with live checks (a file that would not load is not saved). It
+  can replay recent messages to show which would have set a draft off. A message that fired playbooks shows a
+  chip for each under it; clicking one opens that playbook.
 - Playbooks must never slow a reply down or cost one: phase 1 is code-only checks that take microseconds, and a
   failure inside them is logged and the reply goes ahead.
 

@@ -755,6 +755,11 @@ export class Agent {
     const tools = this.tools(settings, model)
     const memory = this.memoryBlock(text, settings)
     const playbooks = this.playbooksFor(text, via, settings)
+    {
+      // the chips under the message; cleared when a merged or retried message no longer fires anything
+      const current = this.messages.find((m) => m.id === user.id) ?? user
+      if (playbooks.fired.length || current.playbooks?.length) this.upsert({ ...current, playbooks: playbooks.fired.length ? playbooks.fired : undefined })
+    }
     const system = composeSystemParts(style, {
       agentName: settings.agentName,
       userName: settings.userName,

@@ -265,8 +265,68 @@ export interface ChatMessage {
   resumeCount?: number
   tool?: ToolActivity
   metrics?: TurnMetrics
+  /** User messages: the playbooks that fired on it and shaped the reply (docs/TRIGGERS.md). */
+  playbooks?: PlaybookFiring[]
   createdAt: number
 }
+
+export interface PlaybookFiring {
+  id: string
+  title: string
+  /** The condition and the numbers it read, or the phrase that matched. */
+  why: string
+}
+
+/** A line and message from parsing a playbook file; line 0 = the file as a whole. */
+export interface PlaybookIssue {
+  line: number
+  message: string
+}
+
+/** One playbook file as the Playbooks view sees it. Unparseable files have `errors` and no title. */
+export interface PlaybookInfo {
+  id: string
+  /** The file text: the single source of truth that the editor shows and saves. */
+  source: string
+  ok: boolean
+  errors: PlaybookIssue[]
+  warnings: PlaybookIssue[]
+  title?: string
+  goal?: string
+  enabled?: boolean
+  priority?: 'low' | 'normal' | 'high' | 'critical'
+  events?: string[]
+  when?: string | null
+  said?: string[]
+  cooldownS?: number
+  maxPerSession?: number | null
+  tags?: string[]
+  /** This app run. */
+  firedCount: number
+  lastFiredAt: number | null
+}
+
+export interface PlaybooksState {
+  /** The folder the files live in, shown so the user can open it. */
+  dir: string
+  playbooks: PlaybookInfo[]
+}
+
+export interface PlaybookCheck {
+  errors: PlaybookIssue[]
+  warnings: PlaybookIssue[]
+}
+
+/** One recent user message replayed against a playbook draft. */
+export interface PlaybookTestRow {
+  text: string
+  createdAt: number
+  via?: 'voice' | 'text'
+  /** Why it would match, or null. Gates (cooldown, caps) are not applied. */
+  why: string | null
+}
+
+export type PlaybookSaveResult = { ok: true; id: string } | { ok: false; errors: PlaybookIssue[] }
 
 export interface Session {
   id: string
@@ -610,6 +670,7 @@ export type AgentEvent =
   | { type: 'voice-slow'; notice: SlowVoiceNotice }
   | { type: 'context'; snapshot: ContextSnapshot }
   | { type: 'skills-changed' }
+  | { type: 'playbooks-changed' }
   | { type: 'mcp-changed' }
   | { type: 'claude'; event: CcManagerEvent }
   /** A diagram was drawn, changed or (doc null) deleted. */

@@ -343,7 +343,8 @@ ${fetchedList.text}`
   // playbooks (docs/TRIGGERS.md): one .md file each in <userData>/playbooks, re-read when they change
   const playbooks = new PlaybookService(join(userData, 'playbooks'), {
     log: (level, m) => logAt(level, 'playbooks', m),
-    trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data })
+    trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data }),
+    changed: () => emit({ type: 'playbooks-changed' })
   })
 
   const agent = new Agent({
@@ -380,6 +381,7 @@ ${fetchedList.text}`
     // Edge's per-sentence timings and failures steer the automatic route
     trace: (rec) => {
       trace(rec)
+      if (rec.ev === 'trigger.fired' && typeof rec.id === 'string') playbooks.noteFired(rec.id)
       if (rec.ev === 'tts.sentence' && rec.engine === 'edge' && rec.kind === 'speech' && rec.outcome === 'ok' && typeof rec.ms === 'number') {
         const voice = settings.get().voice.voice
         const slow = slowVoice.sample(voice, rec.ms)
@@ -495,6 +497,7 @@ ${fetchedList.text}`
     mcp,
     claude,
     diagrams,
+    playbooks,
     services,
     edgeRoute,
     kokoro,

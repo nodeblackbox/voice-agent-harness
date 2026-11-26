@@ -80,6 +80,8 @@ const CANCEL_REASON: Record<string, string> = {
   stop: 'stopped'
 }
 
+const CHANGE: Record<string, string> = { save: 'saved', rename: 'renamed', delete: 'deleted (moved to .trash)', on: 'switched on', off: 'switched off' }
+
 const DROP_REASON: Record<string, string> = {
   disabled: 'it is switched off',
   cooldown: 'still cooling down from its last firing',
@@ -308,6 +310,8 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return row(`Added the ${str(d.id)} instruction to this reply`, `${str(d.chars)} characters`, 'dim', { noisy: true })
     case 'playbooks.loaded':
       return row(`Loaded ${str(d.count)} playbook${d.count === 1 ? '' : 's'} (${str(d.enabled)} on)`, num(d.invalid) ? `${str(d.invalid)} file${d.invalid === 1 ? '' : 's'} could not be read` : '', num(d.invalid) ? 'warn' : 'dim')
+    case 'playbooks.changed':
+      return row(`Playbook ${CHANGE[str(d.action)] ?? str(d.action)}: ${str(d.id)}`, d.by === 'ui' ? 'from the Playbooks view' : str(d.by), 'plain')
     case 'playbooks.invalid': {
       const errs = Array.isArray(d.errors) ? (d.errors as unknown[]).map(str) : []
       return row(`Playbook file not loaded: ${str(d.id)}.md`, join(errs[0] ?? '', errs.length > 1 ? `${errs.length - 1} more problem${errs.length > 2 ? 's' : ''}` : ''), 'bad')

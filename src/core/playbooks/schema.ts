@@ -163,3 +163,20 @@ export function parsePlaybook(id: string, text: string): ParseResult {
   if (errors.length) return { ok: false, errors, warnings }
   return { ok: true, warnings, playbook: { ...header, id, body, phrases, condition, source: text } }
 }
+
+/**
+ * Change one top-level header field and keep everything else as written: comments, order and the body.
+ * Returns null when the file has no header to change.
+ */
+export function setHeaderField(text: string, key: string, value: unknown): string | null {
+  const src = text.replace(/^﻿/, '')
+  const crlf = src.includes('\r\n')
+  const parts = splitFile(src)
+  if (!parts) return null
+  const doc = parseDocument(parts.header)
+  if (doc.errors.length || !isMap(doc.contents)) return null
+  doc.set(key, value)
+  const header = doc.toString({ lineWidth: 0 }).replace(/\n$/, '')
+  const out = `---\n${header}\n---\n${parts.body}`
+  return crlf ? out.replace(/\n/g, '\r\n') : out
+}

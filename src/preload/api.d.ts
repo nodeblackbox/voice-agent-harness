@@ -2,6 +2,11 @@ import type { DiagramCheck, DiagramDoc, DiagramSummary } from '@shared/diagram'
 import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
+  PlaybookCheck,
+  PlaybookIssue,
+  PlaybookSaveResult,
+  PlaybooksState,
+  PlaybookTestRow,
   AgentEvent,
   AudioChunk,
   ChatMessage,
@@ -97,6 +102,19 @@ export interface VoiceAgentApi {
     save(skill: Skill): Promise<Skill[]>
     delete(id: string): Promise<Skill[]>
     generate(brief: string): Promise<{ name: string; trigger: string; procedure: string }>
+  }
+  playbooks: {
+    list(): Promise<PlaybooksState>
+    /** Parse a draft without saving: errors and warnings with line numbers. */
+    check(id: string, text: string): Promise<PlaybookCheck>
+    /** Write the file; refused (nothing written) when it does not parse. `previousId` renames. */
+    save(id: string, text: string, previousId?: string): Promise<PlaybookSaveResult>
+    toggle(id: string, on: boolean): Promise<PlaybookSaveResult>
+    /** Moves the file to .trash in the playbooks folder. */
+    delete(id: string): Promise<void>
+    /** Replay recent user messages against a draft. */
+    test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[] }>
+    openFolder(): Promise<void>
   }
   memory: {
     scopes(): Promise<MemoryScope[]>

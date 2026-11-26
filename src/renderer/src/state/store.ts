@@ -33,7 +33,7 @@ import { applyTheme } from '../lib/theme-mode'
 import { single } from '../lib/single'
 import { startConsole } from './console'
 
-export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'console' | 'diagnostics' | 'settings'
+export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'playbooks' | 'memory' | 'projects' | 'console' | 'diagnostics' | 'settings'
 /** What the chat's right-hand panel shows. */
 export type RightTab = 'glance' | 'console'
 
@@ -102,6 +102,10 @@ interface Store {
   micMuted: boolean
   memoryVersion: number
   mcpVersion: number
+  /** Bumped when the playbooks folder changes; the Playbooks view re-reads on it. */
+  playbooksVersion: number
+  /** The playbook to show when the Playbooks view opens (a chip under a message was clicked). */
+  playbookFocus: string | null
   /** Claude Code sessions managed by voice, with their recent output. */
   claudeSessions: CcSession[]
   claudeOutput: Record<string, CcEvent[]>
@@ -119,6 +123,7 @@ interface Store {
   updateSettings(patch: Partial<Settings>): Promise<void>
   reloadStyles(): Promise<void>
   reloadSkills(): Promise<void>
+  openPlaybook(id: string | null): void
   reloadProjects(): Promise<void>
   reloadSessions(): Promise<void>
   reloadKeys(): Promise<void>
@@ -170,6 +175,8 @@ export const useStore = create<Store>((set, get) => ({
   micMuted: false,
   memoryVersion: 0,
   mcpVersion: 0,
+  playbooksVersion: 0,
+  playbookFocus: null,
   claudeSessions: [],
   claudeOutput: {},
   claudeSelected: null,
@@ -271,6 +278,9 @@ export const useStore = create<Store>((set, get) => ({
         case 'context':
           set({ context: e.snapshot })
           break
+        case 'playbooks-changed':
+          set({ playbooksVersion: get().playbooksVersion + 1 })
+          break
         case 'skills-changed':
           void get().reloadSkills()
           void get().reloadContext()
@@ -366,6 +376,9 @@ export const useStore = create<Store>((set, get) => ({
 
   async reloadStyles() {
     set({ styles: await window.api.styles.list() })
+  },
+  openPlaybook(id) {
+    set({ playbookFocus: id, view: 'playbooks' })
   },
   async reloadSkills() {
     try {

@@ -89,8 +89,10 @@ const look = EditorView.theme(
   { dark: true }
 )
 
-export function CodeEditor({ path, value, readOnly = false, onChange, onSave, onStatus }: {
+export function CodeEditor({ path, value, readOnly = false, wrap = false, onChange, onSave, onStatus }: {
   path: string
+  /** Wrap long lines instead of scrolling sideways (prose-like files). Fixed for the editor's life. */
+  wrap?: boolean
   /** The text to show. A new value replaces the document only when it differs from what is in the editor. */
   value: string
   readOnly?: boolean
@@ -126,6 +128,7 @@ export function CodeEditor({ path, value, readOnly = false, onChange, onSave, on
           syntaxHighlighting(highlight),
           EditorState.tabSize.of(2),
           lang.current.of([]),
+          wrap ? EditorView.lineWrapping : [],
           lock.current.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !applying.current) cb.current.onChange?.(u.state.doc.toString())

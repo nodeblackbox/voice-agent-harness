@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Activity, AlignLeft, Bot, Brain, FolderKanban, MessageSquare, Settings, SquareTerminal, Zap } from 'lucide-react'
+import { Activity, AlignLeft, Bot, Brain, FolderKanban, MessageSquare, Settings, SquareTerminal, Workflow, Zap } from 'lucide-react'
 import { T } from './theme'
 import { useStore, type View } from './state/store'
 import { IconBtn } from './components/primitives'
@@ -8,6 +8,7 @@ import { ChatView } from './views/ChatView'
 import { ClaudeView } from './views/ClaudeView'
 import { PromptsView } from './views/PromptsView'
 import { SkillsView } from './views/SkillsView'
+import { PlaybooksView } from './views/PlaybooksView'
 import { MemoryView } from './views/MemoryView'
 import { ProjectsView } from './views/ProjectsView'
 import { SettingsView } from './views/SettingsView'
@@ -20,6 +21,7 @@ const NAV: Array<{ id: View; icon: typeof MessageSquare; label: string }> = [
   { id: 'claude', icon: Bot, label: 'Claude Code' },
   { id: 'prompts', icon: AlignLeft, label: 'Prompts' },
   { id: 'skills', icon: Zap, label: 'Skills' },
+  { id: 'playbooks', icon: Workflow, label: 'Playbooks' },
   { id: 'memory', icon: Brain, label: 'Memory' },
   { id: 'projects', icon: FolderKanban, label: 'Projects' },
   { id: 'console', icon: SquareTerminal, label: 'Console (live log)' },
@@ -82,6 +84,7 @@ export default function App() {
           {view === 'claude' && <ClaudeView />}
           {view === 'prompts' && <PromptsView />}
           {view === 'skills' && <SkillsView />}
+          {view === 'playbooks' && <PlaybooksView />}
           {view === 'memory' && <MemoryView />}
           {view === 'projects' && <ProjectsView />}
           {view === 'console' && <ConsoleView />}

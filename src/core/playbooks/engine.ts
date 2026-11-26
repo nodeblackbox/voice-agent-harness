@@ -42,6 +42,32 @@ function listensTo(p: Playbook, ev: string): boolean {
 
 const rank = (p: Playbook): number => PRIORITIES.indexOf(p.priority)
 
+/**
+ * Whether a playbook's trigger matches a user message, ignoring on/off and gates: the reason it matched
+ * ("when chars > 1200 (chars 1834)"), or null. Shared by the engine and the "test against recent messages" button.
+ */
+export function matchPlaybook(p: Playbook, facts: TurnFacts, tuning: EngineLimits['tuning']): string | null {
+  if (!listensTo(p, EVENT)) return null
+  const ctx = {
+    ...facts,
+    chars: facts.text.length,
+    words: facts.text.trim() ? facts.text.trim().split(/\s+/).length : 0,
+    tuning
+  }
+  const reasons: string[] = []
+  if (p.condition) {
+    if (!p.condition.test(ctx)) return null
+    reasons.push(`when ${p.condition.source}${describeNumbers(p.condition.names, ctx)}`)
+  }
+  if (p.phrases.length) {
+    const said = new Set(contentWords(facts.text))
+    const hit = p.phrases.find((ph) => ph.words.every((w) => said.has(w)))
+    if (!hit) return null
+    reasons.push(`said "${hit.text}"`)
+  }
+  return reasons.join(' and ') || `every ${EVENT}`
+}
+
 export class PlaybookEngine {
   private lastFired = new Map<string, number>()
   private firedCount = new Map<string, number>()
@@ -59,29 +85,10 @@ export class PlaybookEngine {
 
   /** The playbooks that fire on this user message, and the prompt block they add (empty when none). */
   onUserTurn(playbooks: Playbook[], facts: TurnFacts, limits: EngineLimits): { block: string; fired: Firing[] } {
-    const words = contentWords(facts.text)
-    const ctx = {
-      ...facts,
-      chars: facts.text.length,
-      words: facts.text.trim() ? facts.text.trim().split(/\s+/).length : 0,
-      tuning: limits.tuning
-    }
-    const said = new Set(words)
-
     const matched: Array<{ p: Playbook; why: string }> = []
     for (const p of playbooks) {
-      if (!listensTo(p, EVENT)) continue
-      const reasons: string[] = []
-      if (p.condition) {
-        if (!p.condition.test(ctx)) continue
-        reasons.push(`when ${p.condition.source}${describeNumbers(p.condition.names, ctx)}`)
-      }
-      if (p.phrases.length) {
-        const hit = p.phrases.find((ph) => ph.words.every((w) => said.has(w)))
-        if (!hit) continue
-        reasons.push(`said "${hit.text}"`)
-      }
-      matched.push({ p, why: reasons.join(' and ') || `every ${EVENT}` })
+      const why = matchPlaybook(p, facts, limits.tuning)
+      if (why !== null) matched.push({ p, why })
     }
 
     const now = this.now()

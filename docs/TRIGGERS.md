@@ -1,7 +1,9 @@
 # Triggers, playbooks and runbooks: plan
 
-Status: phase 1 is built (`src/core/playbooks/`, `src/main/services/playbooks.ts`): playbook files with code
-triggers (`when` conditions and `said` phrases), gates, priority, injection into the reply, and Console rows.
+Status: phases 1 and 2 are built (`src/core/playbooks/`, `src/main/services/playbooks.ts`,
+`views/PlaybooksView.tsx`): playbook files with code triggers (`when` conditions and `said` phrases), gates,
+priority, injection into the reply, Console rows, the Playbooks view (list, on/off, editor with live checks,
+test against recent messages) and chips under the messages that fired something.
 `kind: runbook`, `mode: canned|hybrid` and `ask:` (Jev) are refused by the parser until their phases land.
 The design discussion lives in the owner's doc "Voice Agent Harness: Trigger
 and Playbook Layer". This page is the build plan. It draws on three places: what this repo already has, the
