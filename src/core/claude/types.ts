@@ -1,9 +1,9 @@
 /** Types for voice-managed Claude Code sessions. Electron-free: shared by the manager, tools and IPC. */
 
-import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
+import type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus } from '@shared/claude'
 import type { FenceVerdict } from './fence'
 
-export type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
+export type { CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcManagerEvent, CcMode, CcPending, CcQuestion, CcResult, CcSession, CcStatus }
 
 // ---- SDK seam (real implementation in sdk.ts, a scripted fake in tests) ----
 
@@ -36,6 +36,8 @@ export interface CcRun {
   interrupt(): Promise<void>
   /** Change the CLI's mode mid-session (lab: works on the live stream). */
   setPermissionMode?(mode: SdkMode): Promise<void>
+  /** How full the context window is, by the CLI's own count. */
+  contextUsage?(): Promise<{ totalTokens: number; maxTokens: number; percentage: number }>
   close(): void
 }
 

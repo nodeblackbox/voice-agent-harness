@@ -1,12 +1,12 @@
 /**
- * Read-only access to a session's workspace for the UI and the voice tools: a capped listing and
- * a size-capped file read. Every path goes through the same fence as the sessions themselves, so a
+ * A session's workspace for the UI and the voice tools: a capped listing, a size-capped file read, and
+ * a save for the in-app editor. Every path goes through the same fence as the sessions themselves, so a
  * crafted `../` or a junction can never reach outside the workspace.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { insideRoot } from './fence'
-import type { CcFile, CcFileContent } from './types'
+import type { CcFile, CcFileContent, CcFileSaved } from './types'
 
 /** Folders shown but never walked: big, generated, or not interesting to look at. */
 export const SKIP_DIRS = new Set(['node_modules', '.git', '.next', '.venv', 'venv', '__pycache__', 'dist', 'build', '.cache', '.turbo'])
@@ -66,8 +66,41 @@ export function readWorkspaceFile(root: string, rel: string, maxBytes = 400_000)
     const buf = Buffer.alloc(Math.min(st.size, maxBytes))
     fs.readSync(fd, buf, 0, buf.length, 0)
     if (buf.subarray(0, 8000).includes(0)) return { kind: 'binary', size: st.size }
-    return { kind: 'text', text: buf.toString('utf8'), size: st.size, truncated: st.size > maxBytes }
+    return { kind: 'text', text: buf.toString('utf8'), size: st.size, truncated: st.size > maxBytes, mtime: st.mtimeMs }
   } finally {
     fs.closeSync(fd)
+  }
+}
+
+/** Largest text the editor may save: far above any source file, well below anything that would stall the app. */
+export const MAX_SAVE_BYTES = 4_000_000
+
+/**
+ * Save an edit to an existing text file. `expectedMtime` is the change time the editor read: if the file
+ * has changed since (Claude, or another program, wrote it), nothing is written and `conflict` is reported,
+ * so the caller can show both versions instead of losing one. Never creates files or follows links.
+ */
+export function writeWorkspaceFile(root: string, rel: string, text: string, expectedMtime?: number): CcFileSaved {
+  const abs = resolveInside(root, rel)
+  if (!abs) return { ok: false, error: 'That path is outside the workspace.' }
+  if (typeof text !== 'string') return { ok: false, error: 'Nothing to save.' }
+  let st: fs.Stats
+  try {
+    st = fs.lstatSync(abs)
+  } catch {
+    return { ok: false, error: 'That file no longer exists.' }
+  }
+  if (!st.isFile()) return { ok: false, error: 'Not a file.' }
+  const buf = Buffer.from(text, 'utf8')
+  if (buf.length > MAX_SAVE_BYTES) return { ok: false, error: 'Too large to save from here. Use VS Code for this file.' }
+  if (expectedMtime !== undefined && Math.abs(st.mtimeMs - expectedMtime) > 1) {
+    return { ok: false, conflict: true, error: 'This file changed on disk after you opened it.' }
+  }
+  try {
+    fs.writeFileSync(abs, buf)
+    const after = fs.statSync(abs)
+    return { ok: true, mtime: after.mtimeMs, size: after.size }
+  } catch (e) {
+    return { ok: false, error: `Couldn't save: ${e instanceof Error ? e.message : String(e)}` }
   }
 }

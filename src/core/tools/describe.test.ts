@@ -99,3 +99,37 @@ describe('mcpTools', () => {
     expect(calls).toEqual([['demo srv', 'roll-dice', { sides: 6 }, false]])
   })
 })
+
+describe('PC tools in the transcript', () => {
+  it('read as looking at files, with what was looked for and how much came back', () => {
+    for (const n of ['pc_find', 'pc_list', 'pc_read', 'pc_grep', 'pc_explore']) {
+      expect(toolKind(n)).toBe('files')
+      expect(toolLabel(n)).not.toBe(n)
+      expect(fillerFor(n)).not.toBe('Hold on.')
+    }
+    expect(describeInput('pc_find', { query: 'lemon ai', path: 'D:\\' })).toBe('lemon ai in D:\\')
+    expect(describeInput('pc_grep', { text: 'port', path: '' })).toBe('“port”')
+    expect(describeInput('pc_list', { path: '' })).toBe('approved folders')
+    expect(describeInput('pc_explore', { goal: 'find my lemon AI project' })).toBe('find my lemon AI project')
+    expect(describeInput('pc_explore', { goal: 'set the port to 4200', may_edit: true })).toBe('set the port to 4200 (may edit)')
+    expect(describeOutput('pc_find', { matches: [1, 2], more_matches: 4 }).detail).toBe('2+ matches')
+    expect(describeOutput('pc_find', { matches: [], incomplete: 'Stopped early' }).detail).toBe('nothing found (stopped early)')
+    expect(describeOutput('pc_list', { total_folders: 3, total_files: 12 }).detail).toBe('3 folders, 12 files')
+    expect(describeOutput('pc_read', { lines: '1-40 of 212' }).detail).toBe('lines 1-40 of 212')
+    expect(describeOutput('pc_explore', { status: 'done', answer: 'x', steps_taken: ['a', 'b', 'c'] }).detail).toBe('3 steps')
+    expect(describeOutput('pc_explore', { status: 'not_found', steps_taken: ['a'], refused: ['x'] }).detail).toBe('1 step, not found, 1 refused')
+    expect(describeOutput('pc_explore', { status: 'done', steps_taken: ['a', 'b'], edits: [{}] }).detail).toBe('2 steps, 1 file edited')
+    expect(describeOutput('pc_read', { error: 'outside the folders you may read' }).detail).toBe('outside the folders you may read')
+  })
+})
+
+describe('diagram tools in the transcript', () => {
+  it('reads as drawing and changing a diagram', () => {
+    expect(toolKind('diagram_create')).toBe('diagram')
+    expect(describeInput('diagram_create', { title: 'Making tea', code: 'flowchart TD' })).toBe('Making tea')
+    expect(describeInput('diagram_edit', { note: 'Filtered water', edits: [] })).toBe('Filtered water')
+    expect(describeOutput('diagram_create', { status: 'shown', kind: 'Flowchart' }).detail).toBe('flowchart drawn')
+    expect(describeOutput('diagram_edit', { status: 'updated', version: 3, changed: '+2 −1' }).detail).toBe('version 3 · +2 −1')
+    expect(describeOutput('diagram_edit', { error: 'The edit did not apply' }).detail).toBe('The edit did not apply')
+  })
+})

@@ -19,8 +19,42 @@ export class ModelFactory {
   readonly groqPool: GroqKeyPool
   readonly capacity = new ModelCapacity()
 
+  /** Keys a provider answered 401/403 for, as `provider\0key`. A replaced key is a new entry, so it is tried again. */
+  private readonly rejected = new Set<string>()
+
   constructor(private readonly keys: KeySource) {
     this.groqPool = new GroqKeyPool(keys)
+  }
+
+  private currentKey(info: ModelInfo): string | undefined {
+    return info.provider === 'groq' ? undefined : this.keys.keysFor(info.provider)[0]
+  }
+
+  /**
+   * The key this model would use was already refused this run (Groq keys are benched by the pool instead).
+   * Saves a doomed round trip and a toast on every turn while a revoked key sits in .env or Settings.
+   */
+  keyRejected(info: ModelInfo): boolean {
+    const key = this.currentKey(info)
+    return key !== undefined && this.rejected.has(`${info.provider}\0${key}`)
+  }
+
+  /** Remember that the provider refused the key this model uses. */
+  rejectKey(info: ModelInfo): void {
+    const key = this.currentKey(info)
+    if (key !== undefined) this.rejected.add(`${info.provider}\0${key}`)
+  }
+
+  /** Anthropic answered "workspace not found": the workspace header goes, for the rest of this run. */
+  private workspaceDropped = false
+
+  /** Stop sending the Anthropic workspace header. True when there was one to drop (so a retry is worth it). */
+  dropWorkspace(info: ModelInfo): boolean {
+    if (info.provider !== 'anthropic' || this.workspaceDropped) return false
+    const headers = this.keys.headersFor?.('anthropic')
+    if (!headers || !Object.keys(headers).length) return false
+    this.workspaceDropped = true
+    return true
   }
 
   create(info: ModelInfo): { model: LanguageModel; key: string } {
@@ -28,7 +62,7 @@ export class ModelFactory {
     if (!key) throw new MissingKeyError(info.provider)
     switch (info.provider) {
       case 'anthropic':
-        return { model: createAnthropic({ apiKey: key, headers: this.keys.headersFor?.('anthropic') })(info.model), key }
+        return { model: createAnthropic({ apiKey: key, headers: this.workspaceDropped ? undefined : this.keys.headersFor?.('anthropic') })(info.model), key }
       case 'openai':
         return { model: createOpenAI({ apiKey: key })(info.model), key }
       case 'groq':

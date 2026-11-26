@@ -352,7 +352,8 @@ export class SidecarService {
     const idleMs = this.idleShutdownMs
     if (this.proc && idleMs > 0) {
       this.idleTimer = setTimeout(() => {
-        if (this.listening) return
+        // "keep speech recognition loaded" may have been switched on since the mic closed
+        if (this.listening || this.idleShutdownMs === 0) return
         log('sidecar', `idle for ${Math.round(idleMs / 60000)} min, releasing the models`)
         this.trace('idle_shutdown', { idleMs })
         this.shutdownIdle()

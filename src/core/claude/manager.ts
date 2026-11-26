@@ -14,12 +14,15 @@ import { billingOf } from './account'
 import { digest } from './digest'
 import { historyEvents, messageEvents } from './events'
 import { checkToolUse, insideRoot, scratchRoots } from './fence'
-import { listWorkspace, readWorkspaceFile } from './files'
+import { listWorkspace, readWorkspaceFile, writeWorkspaceFile } from './files'
 import { Pushable } from './pushable'
 import { FENCE_TAG } from './types'
 import type {
-  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
+  CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcHistory, CcManagerEvent, CcMode, CcPending, CcPermissionResult, CcQuestion, CcResult, CcRun, CcSdk, CcSession,
 } from './types'
+
+/** Open Claude Code sessions allowed at once when Settings doesn't say (each is a running process). */
+export const DEFAULT_MAX_SESSIONS = 8
 
 export interface ManagerDeps {
   sdk: CcSdk
@@ -58,7 +61,17 @@ interface Rt {
   /** The mode to build in once a plan is approved (the mode it had before planning). */
   afterPlan?: CcMode
   lastText: string
+  /** A /compact this app sent is running: its result is not a finished job. */
+  compacting?: boolean
+  /** Context in use by the last main-loop reply, from its usage (until the CLI's own count arrives). */
+  lastContext?: number
+  /** The highest tenth of the window already reported by a 'context' event (reset when it shrinks). */
+  ctxMark?: number
 }
+
+/** The window assumed until the CLI reports one. */
+export const DEFAULT_CONTEXT_WINDOW = 200_000
+const kTok = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
 
 
 const SHELL = new Set(['Bash', 'PowerShell'])
@@ -93,6 +106,11 @@ export class ClaudeSessionManager {
     const r = this.rts.get(id)
     return r ? readWorkspaceFile(r.s.workspace, rel) : { error: 'No such session.' }
   }
+  /** A save from the in-app editor; refuses when the file changed on disk since `expectedMtime`. */
+  writeFile(id: string, rel: string, text: string, expectedMtime?: number): CcFileSaved {
+    const r = this.rts.get(id)
+    return r ? writeWorkspaceFile(r.s.workspace, rel, text, expectedMtime) : { ok: false, error: 'No such session.' }
+  }
 
   /** Voice-friendly lookup: id, exact name, slug, or a unique case-insensitive partial name. */
   find(ref: string | undefined): CcResult<{ session: CcSession }> {
@@ -123,9 +141,19 @@ export class ClaudeSessionManager {
    * of an existing project folder elsewhere, which makes it an "external" session like an attached one
    * (fenced to that folder; its mode decides what asks).
    */
+  /**
+   * The limit is on sessions that are open (idle, working or waiting on the user). Stopped and failed ones
+   * stay in the list to be resumed or removed and don't count, or a few old sessions would block every new one.
+   */
+  private atLimit(): string | null {
+    const max = this.cfg.maxSessions ?? DEFAULT_MAX_SESSIONS
+    const open = [...this.rts.values()].filter((r) => r.s.status !== 'stopped' && r.s.status !== 'error').length
+    return open >= max ? `Already at the limit of ${max} open sessions. Stop one, or raise "Open sessions at once" in the Claude Code settings.` : null
+  }
+
   start(name: string, firstPrompt?: string, opts: { folder?: string; mode?: CcMode } = {}): CcResult<{ session: CcSession }> {
-    const max = this.cfg.maxSessions ?? 4
-    if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
+    const full = this.atLimit()
+    if (full) return { ok: false, error: full }
     const root = path.resolve(this.cfg.workspaceRoot)
     let workspace: string
     let external = false
@@ -160,6 +188,7 @@ export class ClaudeSessionManager {
     }
     this.rts.set(s.id, { s, events: [], lastText: '' })
     this.changed(this.rts.get(s.id)!)
+    this.emit({ type: 'started', id: s.id, name: s.name, task: firstPrompt?.trim() ?? '' })
     if (firstPrompt?.trim()) this.send(s.id, firstPrompt)
     return { ok: true, session: this.get(s.id)! }
   }
@@ -182,6 +211,17 @@ export class ClaudeSessionManager {
     }
     this.dispatch(r, text)
     return { ok: true, queued: false }
+  }
+
+  /**
+   * Compact its conversation: Claude Code summarises it and carries on from the summary, freeing the context.
+   * `focus` says what the summary must keep. Queued like any prompt when it is busy.
+   */
+  compact(id: string, focus = ''): CcResult<{ queued: boolean }> {
+    const r = this.rts.get(id)
+    if (!r) return { ok: false, error: 'No such session.' }
+    if (!r.s.sdkSessionId && !r.run) return { ok: false, error: `${r.s.name} has no conversation to compact yet.` }
+    return this.send(id, `/compact${focus.trim() ? ` ${focus.trim().replace(/\s+/g, ' ')}` : ''}`)
   }
 
   async interrupt(id: string, opts: { clearQueue?: boolean } = {}): Promise<CcResult> {
@@ -298,8 +338,8 @@ export class ClaudeSessionManager {
    * original transcript is left as it was.
    */
   async attach(x: { sessionId: string; title: string; cwd: string }): Promise<CcResult<{ session: CcSession }>> {
-    const max = this.cfg.maxSessions ?? 4
-    if (this.rts.size >= max) return { ok: false, error: `Already at the limit of ${max} sessions.` }
+    const full = this.atLimit()
+    if (full) return { ok: false, error: full }
     if (!x.cwd || !fs.existsSync(x.cwd)) return { ok: false, error: 'Its project folder no longer exists.' }
     const dup = [...this.rts.values()].find((r) => r.s.sdkSessionId === x.sessionId)
     if (dup) return { ok: true, session: this.snap(dup) }
@@ -528,6 +568,7 @@ export class ClaudeSessionManager {
 
   private dispatch(r: Rt, text: string): void {
     this.ensureRun(r)
+    r.compacting = /^\/compact(\s|$)/.test(text.trim())
     this.log(r, 'user', text)
     r.lastText = ''
     r.s.status = 'running'
@@ -547,6 +588,7 @@ export class ClaudeSessionManager {
         r.s.status = 'error'
         r.s.lastSummary = `Connection problem: ${(e as Error).message}`
         this.changed(r)
+        this.emit({ type: 'error', id: r.s.id, name: r.s.name, error: r.s.lastSummary })
       }
     } finally {
       if (r.run === run) {
@@ -580,9 +622,18 @@ export class ClaudeSessionManager {
       r.s.mode = 'plan'
       this.log(r, 'status', 'Plan mode')
       this.changed(r)
+    } else if (m.type === 'system' && m.subtype === 'compact_boundary') {
+      this.onCompacted(r, m.compact_metadata ?? {})
     } else if (m.type === 'system' && m.subtype === 'permission_denied') {
       this.log(r, 'denied', String(m.message ?? m.tool_name ?? 'Permission denied'))
     } else if (m.type === 'assistant' || m.type === 'user') {
+      // the main loop's latest reply says how much context it read: that is how full the window is
+      const u = m.type === 'assistant' && !m.parent_tool_use_id ? m.message?.usage : undefined
+      if (u) {
+        const n = (v: unknown): number => Number(v) || 0
+        const used = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens) + n(u.output_tokens)
+        if (used > 0) r.lastContext = used
+      }
       for (const e of messageEvents(m, this.now())) {
         if (e.kind === 'text') r.lastText = e.text
         this.push(r, e)
@@ -592,27 +643,81 @@ export class ClaudeSessionManager {
 
   private onResult(r: Rt, m: any): void {
     r.s.costUsd += Number(m.total_cost_usd) || 0
+    const u = (m.usage ?? {}) as Record<string, unknown>
+    const n = (v: unknown): number => Number(v) || 0
+    const tokensIn = n(u.input_tokens) + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens)
+    const tokensOut = n(u.output_tokens)
+    r.s.tokensIn = (r.s.tokensIn ?? 0) + tokensIn
+    r.s.tokensOut = (r.s.tokensOut ?? 0) + tokensOut
     r.s.turns += Number(m.num_turns) || 0
     const aborted = String(m.terminal_reason ?? '').startsWith('aborted')
-    if (aborted) {
+    const compacting = r.compacting
+    r.compacting = false
+    if (compacting && !aborted && !m.is_error) {
+      // a /compact: the session is as it was, with a lighter context; not a finished job to report
+      r.s.status = 'idle'
+      this.changed(r)
+    } else if (aborted) {
       r.s.status = 'idle'
       r.s.lastSummary = 'Interrupted.'
     } else if (m.is_error) {
       this.log(r, 'error', String(m.result ?? m.subtype))
       r.s.status = 'error'
       r.s.lastSummary = String(m.result ?? 'The run failed.')
+      this.emit({ type: 'error', id: r.s.id, name: r.s.name, error: r.s.lastSummary })
     } else {
       r.s.status = 'idle'
       r.s.lastSummary = String(m.result ?? r.lastText ?? '')
-      this.log(r, 'result', r.s.lastSummary, { durationMs: Number(m.duration_ms) || undefined, costUsd: Number(m.total_cost_usd) || undefined, turns: Number(m.num_turns) || undefined })
+      this.log(r, 'result', r.s.lastSummary, { durationMs: Number(m.duration_ms) || undefined, costUsd: Number(m.total_cost_usd) || undefined, turns: Number(m.num_turns) || undefined, tokensIn: tokensIn || undefined, tokensOut: tokensOut || undefined })
     }
     this.changed(r)
-    if (!aborted && !m.is_error) this.emit({ type: 'finished', id: r.s.id, name: r.s.name, summary: r.s.lastSummary })
+    if (!aborted && !m.is_error && !compacting) this.emit({ type: 'finished', id: r.s.id, name: r.s.name, summary: r.s.lastSummary })
+    void this.refreshContext(r, windowOf(m.modelUsage))
 
     // Next: a redirect beats the queue; an interrupt otherwise leaves the queue alone for the user to decide.
     const next = r.redirect ?? (aborted || m.is_error ? undefined : r.s.queued.shift())
     r.redirect = undefined
     if (next) this.dispatch(r, next)
+  }
+
+  /** Update how full the context is after a turn: the CLI's own count, else the last reply's usage. */
+  private async refreshContext(r: Rt, window?: number): Promise<void> {
+    const run = r.run
+    let tokens = r.lastContext
+    let max = window ?? r.s.context?.max ?? DEFAULT_CONTEXT_WINDOW
+    if (run?.contextUsage) {
+      try {
+        const u = await run.contextUsage()
+        if (u.maxTokens > 0) { tokens = u.totalTokens; max = u.maxTokens }
+      } catch { /* the estimate stands */ }
+    }
+    if (tokens === undefined) return
+    this.setContext(r, tokens, max)
+  }
+
+  private setContext(r: Rt, tokens: number, max: number): void {
+    const previous = r.s.context?.percent ?? 0
+    const percent = Math.max(0, Math.min(100, Math.round((tokens / Math.max(1, max)) * 100)))
+    r.s.context = { tokens, max, percent, at: this.now() }
+    const tenth = Math.floor(percent / 10)
+    if (percent < previous) r.ctxMark = tenth
+    else if (tenth > (r.ctxMark ?? 0)) {
+      r.ctxMark = tenth
+      this.emit({ type: 'context', id: r.s.id, name: r.s.name, percent, previous, tokens, max })
+    }
+    this.changed(r)
+  }
+
+  private onCompacted(r: Rt, meta: { trigger?: string; pre_tokens?: number; post_tokens?: number }): void {
+    const before = Number(meta.pre_tokens) || r.s.context?.tokens || 0
+    const after = Number(meta.post_tokens) || undefined
+    const how = meta.trigger === 'manual' ? 'manual' : 'auto'
+    r.s.compactions = (r.s.compactions ?? 0) + 1
+    this.log(r, 'status', `Compacted${how === 'auto' ? ' (it was nearly full)' : ''}: ${kTok(before)}${after ? ` → ${kTok(after)}` : ''} tokens`)
+    r.lastContext = after
+    if (after !== undefined) this.setContext(r, after, r.s.context?.max ?? DEFAULT_CONTEXT_WINDOW)
+    else this.changed(r)
+    this.emit({ type: 'compacted', id: r.s.id, name: r.s.name, before, after, how })
   }
 
   private canUseTool(r: Rt, toolName: string, input: Record<string, unknown>, meta: { reason?: string } = {}): Promise<CcPermissionResult> {
@@ -649,6 +754,14 @@ export class ClaudeSessionManager {
       this.emit({ type: 'needs-input', id: r.s.id, name: r.s.name, pending })
     })
   }
+}
+
+/** The largest context window the result's models report (the main model's, in practice). */
+function windowOf(modelUsage: unknown): number | undefined {
+  if (!modelUsage || typeof modelUsage !== 'object') return undefined
+  const sizes = Object.values(modelUsage as Record<string, { contextWindow?: unknown }>).map((u) => Number(u?.contextWindow) || 0)
+  const max = Math.max(0, ...sizes)
+  return max > 0 ? max : undefined
 }
 
 /** First line of a plan, as a short headline (markdown and a leading "Plan:" stripped). */

@@ -12,7 +12,7 @@ const ok = { ok: true }
 const claude = {
   list: vi.fn(), events: vi.fn().mockResolvedValue([]), start: vi.fn(), send: vi.fn().mockResolvedValue({ ok: true, queued: false }),
   answer: vi.fn().mockResolvedValue({ ok: true, said: 'x' }), interrupt: vi.fn().mockResolvedValue(ok), stop: vi.fn().mockResolvedValue(ok), dequeue: vi.fn().mockResolvedValue(ok),
-  rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
+  rename: vi.fn().mockResolvedValue(ok), reset: vi.fn().mockResolvedValue(ok), compact: vi.fn().mockResolvedValue({ ok: true, queued: false }), remove: vi.fn().mockResolvedValue(ok), open: vi.fn().mockResolvedValue(ok),
   files: vi.fn().mockResolvedValue([]), read: vi.fn().mockResolvedValue({ kind: 'text', text: '', size: 0, truncated: false }),
   external: vi.fn().mockResolvedValue([]), externalEvents: vi.fn().mockResolvedValue([]), attach: vi.fn(),
   folders: vi.fn().mockResolvedValue([]), pickFolder: vi.fn().mockResolvedValue(null), setMode: vi.fn().mockResolvedValue({ ok: true }),
@@ -228,9 +228,49 @@ describe('ClaudeView', () => {
     expect(host.textContent).toContain('A')
     await click(button('index.html'))
     expect(claude.read).toHaveBeenCalledWith('s1', 'index.html')
+    // the editor is loaded on demand: give it a moment to arrive
+    for (let i = 0; i < 100 && !host.textContent?.includes('<h1>Slop</h1>'); i++) await act(async () => { await new Promise((r) => setTimeout(r, 20)) })
     expect(host.textContent).toContain('<h1>Slop</h1>')
+    expect(host.textContent).toContain('HTML')
     await click(button('VS Code'))
     expect(claude.open).toHaveBeenCalledWith('s1', 'index.html', 'code')
+  })
+
+  it('right-clicking a file opens a menu that copies its path and mentions it in the message box', async () => {
+    claude.files.mockResolvedValue([
+      { path: 'src', dir: true, size: 0, mtime: 1 },
+      { path: 'src/app.js', dir: false, size: 20, mtime: 1 }
+    ])
+    claude.read.mockResolvedValue({ kind: 'text', text: 'x', size: 1, truncated: false })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    useStore.setState({ claudeSessions: [session()], claudeSelected: 's1' })
+    await render()
+    await click(button('Files'))
+    const rightClick = async (el: Element | undefined) => {
+      expect(el, 'element to right-click').toBeTruthy()
+      await act(async () => { el!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 })) })
+    }
+
+    await rightClick(button('app.js'))
+    const full = String.raw`D:\ws\landing-page\src\app.js`
+    expect(host.querySelector('[role="menu"]')?.textContent).toContain(full)
+    await click(button('Copy path'))
+    expect(writeText).toHaveBeenCalledWith(full)
+    expect(host.querySelector('[role="menu"]')).toBeNull()
+
+    await rightClick(button('app.js'))
+    await click(button('Copy relative path'))
+    expect(writeText).toHaveBeenLastCalledWith('src/app.js')
+
+    await rightClick(button('app.js'))
+    await click(button('Mention in message'))
+    expect((host.querySelector('textarea[aria-label="Message to this session"]') as HTMLTextAreaElement).value).toBe('`src/app.js` ')
+
+    await rightClick(button('src'))
+    expect(button('Open folder')).toBeTruthy()
+    await click(button('Show in File Explorer'))
+    expect(claude.open).toHaveBeenCalledWith('s1', 'src', 'reveal')
   })
 
   it('the Preview tab frames the page from the workspace in a sandbox', async () => {
@@ -380,5 +420,32 @@ describe('ClaudeView', () => {
     await render()
     expect(host.textContent).toContain('An API key would be billed')
     expect(host.textContent).toContain('ANTHROPIC_API_KEY')
+  })
+})
+
+describe('context', () => {
+  it('shows how full each session is and compacts with what to keep', async () => {
+    useStore.setState({ claudeSessions: [session({ sdkSessionId: 'sdk', context: { tokens: 166_000, max: 200_000, percent: 83, at: 1 }, compactions: 1 })], claudeSelected: 's1' })
+    await render()
+    expect(host.querySelector('[data-testid="context-bar"]')!.textContent).toContain('83%')
+    const meter = host.querySelector('button[aria-label="Context"]') as HTMLButtonElement
+    expect(meter.textContent).toContain('83%')
+    expect(meter.title).toContain('166k of 200k')
+    await click(meter)
+    expect(host.textContent).toContain('Compacted 1× so far')
+    const keep = host.querySelector('input[aria-label="What to keep"]') as HTMLInputElement
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(keep, 'the auth work')
+      keep.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('Compact now'))
+    expect(claude.compact).toHaveBeenCalledWith('s1', 'the auth work')
+  })
+
+  it('has no meter before the first turn', async () => {
+    useStore.setState({ claudeSessions: [session({ turns: 0 })], claudeSelected: 's1' })
+    await render()
+    expect(host.querySelector('[data-testid="context-bar"]')).toBeNull()
+    expect((host.querySelector('button[aria-label="Context"]') as HTMLButtonElement).disabled).toBe(true)
   })
 })

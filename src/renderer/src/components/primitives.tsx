@@ -379,7 +379,7 @@ export function MenuItem({
   )
 }
 
-export function Row({ label, sub, children }: { label: string; sub?: string; children?: ReactNode }) {
+export function Row({ label, sub, children }: { label: string; sub?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3" style={{ borderBottom: `1px solid ${T.border}` }}>
       <div className="flex flex-col gap-0.5 min-w-0">

@@ -1,12 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Zap } from 'lucide-react'
-import type { ChatMessage, UserTiming } from '@shared/types'
+import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, ListChecks, X, Zap } from 'lucide-react'
+import type { ChatMessage, PlaybookFiring, UserTiming } from '@shared/types'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
 import { VoiceBars } from '../VoiceBars'
 import { ToolPill } from './ToolPill'
-import { formatTokens } from '../../lib/format'
-import { splitBySentences, splitInterrupted } from '../../lib/spoken'
+import { DiagramCard, InlineDiagram } from '../diagram/DiagramCard'
+import { splitFences } from '@shared/diagram'
+import { fmtUsd } from '@shared/pricing'
+import { formatTokens, usageTitle } from '../../lib/format'
+import { displayText, endsLine, splitBySentences, splitInterrupted } from '../../lib/spoken'
 
 /**
  * Only this many of the newest messages are mounted. A long session has hundreds of bubbles, and
@@ -21,6 +24,47 @@ function Chip({ children, color, title }: { children: ReactNode; color?: string;
     <span className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5" style={{ background: T.raised, color: color ?? T.text3, fontFamily: T.mono }} title={title}>
       {children}
     </span>
+  )
+}
+
+/** The playbooks that fired on this message and shaped the reply; click one to open it. */
+function PlaybookChips({ firings, messageId }: { firings: PlaybookFiring[]; messageId: string }) {
+  const openPlaybook = useStore((s) => s.openPlaybook)
+  const pushToast = useStore((s) => s.pushToast)
+  const [marked, setMarked] = useState<Set<string>>(new Set())
+  const wrong = (f: PlaybookFiring) => {
+    void window.api.playbooks?.label(f.id, messageId, 'should_not')
+    setMarked(new Set([...marked, f.id]))
+    pushToast('info', `Noted: ${f.title} should not have fired there. Review it on the Playbooks page to tighten its trigger.`)
+  }
+  return (
+    <div className="flex flex-wrap justify-end gap-1">
+      {firings.map((f) => (
+        <span key={f.id} className="inline-flex items-stretch">
+        <button
+          type="button"
+          onClick={() => openPlaybook(f.id)}
+          title={`${f.kind === 'runbook' ? 'Runbook started' : 'Playbook fired'}: ${f.why}. Click to open it.`}
+          className="inline-flex items-center gap-1 text-xs rounded px-1.5 py-0.5"
+          style={{ background: T.violetTint, color: T.violet, border: `1px solid ${T.violetBorder}`, cursor: 'pointer' }}
+        >
+          {f.kind === 'runbook' ? <ListChecks size={11} /> : <Workflow size={11} />}
+          {f.title}
+        </button>
+        <button
+          type="button"
+          onClick={() => wrong(f)}
+          disabled={marked.has(f.id)}
+          aria-label={`${f.title} should not have fired here`}
+          title={marked.has(f.id) ? 'Marked as a wrong firing' : 'This should not have fired here'}
+          className="inline-flex items-center rounded px-1 ml-0.5 text-xs"
+          style={{ background: 'transparent', color: marked.has(f.id) ? T.text3 : T.violet, border: `1px solid ${T.violetBorder}`, cursor: marked.has(f.id) ? 'default' : 'pointer', opacity: marked.has(f.id) ? 0.6 : 1 }}
+        >
+          {marked.has(f.id) ? <Check size={10} /> : <X size={10} />}
+        </button>
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -88,6 +132,7 @@ const UserBubble = memo(function UserBubble({ m, gapMs }: { m: ChatMessage; gapM
           </span>
         </div>
         {m.timing && <TimingChips t={m.timing} />}
+        {m.playbooks?.length ? <PlaybookChips firings={m.playbooks} messageId={m.id} /> : null}
       </div>
     </div>
   )
@@ -122,20 +167,23 @@ function ReplyText({ m }: { m: ChatMessage }) {
     return <>{m.text}</>
   }
 
-  if (!spans || (spans.length === 1 && spans[0]!.state === 'plain')) return <>{m.text}</>
+  if (!spans || (spans.length === 1 && spans[0]!.state === 'plain')) return <>{displayText(m.text, true)}</>
+  let lineStart = true
   return (
     <>
       {spans.map((s, i) => {
+        const shown = displayText(s.text, lineStart)
+        lineStart = endsLine(s.text)
         if (s.state === 'current') {
           return (
             <span key={i} style={{ color: T.text, background: T.cyanTint, boxShadow: `inset 3px 0 0 ${T.cyan}`, paddingLeft: 4, marginLeft: -4, borderRadius: 3 }}>
-              {s.text}
+              {shown}
             </span>
           )
         }
         return (
           <span key={i} style={{ color: s.state === 'upcoming' ? T.text3 : T.text }}>
-            {s.text}
+            {shown}
           </span>
         )
       })}
@@ -165,7 +213,11 @@ const AssistantBubble = memo(function AssistantBubble({
     setTimeout(() => setCopied(false), 1200)
   }
   const interruptedTitle = m.interrupted ? `heard: "${m.spokenText ?? ''}"\nnot heard: "${m.unspokenText ?? ''}"` : undefined
+  // Mermaid written straight into the reply is drawn under it, not left as a block of code
+  const parts = useMemo(() => splitFences(m.text, !!m.streaming), [m.text, m.streaming])
+  const shownMsg = parts.text === m.text ? m : { ...m, text: parts.text }
   return (
+    <>
     <div className="self-start flex flex-col gap-1.5 va-fade" style={{ maxWidth: '70%' }}>
       <div
         className="px-4 py-3 text-sm"
@@ -178,7 +230,7 @@ const AssistantBubble = memo(function AssistantBubble({
           wordBreak: 'break-word'
         }}
       >
-        <ReplyText m={m} />
+        <ReplyText m={shownMsg} />
         {m.streaming && m.text && (
           <span className="va-pulse" style={{ color: T.text3 }}>
             {' ▍'}
@@ -224,12 +276,15 @@ const AssistantBubble = memo(function AssistantBubble({
           </span>
         )}
         {m.metrics?.inputTokens !== undefined && m.metrics?.outputTokens !== undefined && (
-          <span className="text-xs ml-1" style={{ color: T.text3, fontFamily: T.mono }} title="tokens in / out">
+          <span className="text-xs ml-1" style={{ color: T.text3, fontFamily: T.mono }} title={usageTitle(m.metrics)}>
             {formatTokens(m.metrics.inputTokens)}/{formatTokens(m.metrics.outputTokens)}
+            {m.metrics.costUsd !== undefined && ` · ${fmtUsd(m.metrics.costUsd)}`}
           </span>
         )}
       </div>
     </div>
+    {parts.diagrams.map((code, i) => <InlineDiagram key={i} code={code} keep />)}
+    </>
   )
 })
 
@@ -348,6 +403,14 @@ export function Transcript() {
         )}
         {messages.map((m, i) => {
           if (i < from) return null
+          if (m.role === 'tool' && m.tool?.diagram) {
+            return (
+              <div key={m.id} className="flex flex-col gap-3">
+                <ToolPill tool={m.tool} />
+                <DiagramCard id={m.tool.diagram.id} version={m.tool.diagram.version} />
+              </div>
+            )
+          }
           if (m.role === 'tool' && m.tool) return <ToolPill key={m.id} tool={m.tool} />
           if (m.role === 'user') return <UserBubble key={m.id} m={m} gapMs={pauseBefore(messages, i)} />
           if (m.role === 'assistant') return <AssistantBubble key={m.id} m={m} speaking={speakingId === m.id} onSpeak={speak} onStop={stop} />

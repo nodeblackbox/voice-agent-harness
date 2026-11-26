@@ -46,7 +46,7 @@ describe('ElevenLabsEngine', () => {
 
   it('turns an HTTP error into a short message with the status and the body', async () => {
     const f = (async () => new Response('{"detail":{"status":"voice_not_found"}}', { status: 404 })) as unknown as typeof fetch
-    await expect(new ElevenLabsEngine(deps(f)).synth(req(), signal())).rejects.toThrow('ElevenLabs 404: voice_not_found')
+    await expect(new ElevenLabsEngine(deps(f)).synth(req(), signal())).rejects.toThrow(/ElevenLabs 404: the voice isn't on the account this API key belongs to.*voice_not_found/)
     const g = (async () => new Response('{"status":402,"message":"Insufficient API credit for this model."}', { status: 402 })) as unknown as typeof fetch
     await expect(new FishEngine(deps(g)).synth(req(), signal())).rejects.toThrow('Fish Audio 402: Insufficient API credit for this model.')
   })

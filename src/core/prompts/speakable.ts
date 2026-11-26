@@ -44,6 +44,17 @@ export class SpeakableFilter {
   }
 }
 
+/**
+ * One sentence as the voice should say it: a list item's "- " or "1." and bold stars dropped. Replies may show
+ * short lists in the chat (one item per line); each line reaches the voice as its own sentence, without the marker.
+ */
+export function speakableLine(text: string): string {
+  return text
+    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*\*/g, '')
+}
+
 export function stripInlineMarkdown(text: string): string {
   return text
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')

@@ -57,8 +57,13 @@ describe('SettingsService', () => {
     writeFileSync(env, 'OPENAI_API_KEY=sk-test')
     const s = new SettingsService(dir, env)
     expect(s.keysFor('openai')).toEqual(['sk-test'])
-    expect(s.keyStatus().map((k) => k.provider).sort()).toEqual(['anthropic', 'elevenlabs', 'fish', 'google', 'groq', 'inworld', 'openai', 'qwen', 'xai'])
+    expect(s.keyStatus().map((k) => k.provider).sort()).toEqual(['anthropic', 'elevenlabs', 'fish', 'google', 'groq', 'inworld', 'openai', 'qwen', 'typesafe', 'xai'])
     expect(s.keyStatus().find((k) => k.provider === 'openai')?.set).toBe(true)
+  })
+
+  it('reads the TypeSafe key for Jev from TYPESAFE_API_KEY', () => {
+    writeFileSync(env, 'TYPESAFE_API_KEY=ts-test')
+    expect(new SettingsService(dir, env).keysFor('typesafe')).toEqual(['ts-test'])
   })
 
   it('reads GROQ_KEYS in the pool format [{ key, label, proxy }]', () => {
@@ -172,7 +177,7 @@ describe('SettingsService', () => {
     expect(s.get().voice.cloud.fish).toEqual({ voice: 'stored', model: 's1', instruction: '' })
     expect(s.get().voice.cloud.qwen).toEqual({ voice: 'qv', model: '', instruction: 'calm' })
     expect(s.get().voice.cloud.elevenlabs).toBeUndefined()
-    expect(s.get().voice.proxy).toEqual({ url: 'http://u:p@h:1', edge: false, cloud: false })
+    expect(s.get().voice.proxy).toEqual({ url: 'http://u:p@h:1', edge: false, cloud: false, list: '', auto: true })
     expect(s.qwenHost()).toBe('ws-x.ap-southeast-1.maas.aliyuncs.com')
     expect(new SettingsService(dir, join(dir, 'none.env')).qwenHost()).toBe('dashscope-intl.aliyuncs.com')
   })

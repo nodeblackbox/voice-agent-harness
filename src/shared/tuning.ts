@@ -105,6 +105,7 @@ export const TUNING = {
     temperature: n(0.6, 0, 1.5, 0.05, 'core', 'Temperature', 'Sampling temperature for the reply.', { old: 0.6 }),
     maxTokens: n(1000, 100, 4000, 50, 'core', 'Max tokens', 'Output token cap per model call. Spoken replies rarely need more than a few hundred; comprehensive styles need headroom.', { unit: 'tokens', old: 300 }),
     claudeEffort: { kind: 'enum', default: 'low', options: ['low', 'medium', 'high', 'default'], scope: 'core', label: 'Claude effort', doc: 'How hard the newer Claude models (Sonnet 5 and later, Haiku 5.5) think before answering. They think on every turn by default, and that silent thinking was the slow first word; low keeps voice snappy, default lets the model decide.', old: 'default' },
+    openaiReasoningEffort: { kind: 'enum', default: 'minimal', options: ['minimal', 'low', 'medium', 'high', 'default'], scope: 'core', label: 'OpenAI reasoning effort', doc: 'Thinking budget for OpenAI reasoning models (GPT-5, GPT-5 mini). Left to themselves they spent the whole token cap thinking and replied with nothing after 10-16 s; minimal answers in a couple of seconds.' },
     groqReasoningEffort: { kind: 'enum', default: 'low', options: ['low', 'medium', 'high', 'default'], scope: 'core', label: 'Groq reasoning effort', doc: 'Reasoning budget for Groq reasoning models (gpt-oss, qwen). Voice cannot wait for long thinking, so low is the default.', old: 'low' },
     continuationWindowMs: n(2500, 0, 6000, 250, 'core', 'Continuation window', 'If a transcript looks unfinished (ends on a filler word, fewer than "Merge min words", or a timeout on a low score) and you start speaking again within this long, the reply is cancelled silently and the two pieces become one turn. 0 disables merging.', { unit: 'ms' }),
     mergeMinWords: n(4, 1, 10, 1, 'core', 'Merge min words', 'Transcripts shorter than this always count as unfinished for the continuation window ("Yeah, so basically").', { unit: 'words' }),
@@ -120,10 +121,13 @@ export const TUNING = {
     maxChars: n(220, 80, 600, 10, 'core', 'Max sentence chars', 'Run-on sentences are force-cut at the last comma or space past this length so a long sentence cannot stall first audio.', { unit: 'chars', old: 220 }),
     fillerAfterMs: n(1500, 300, 6000, 100, 'core', 'Continuation filler after', 'If a tool is still running and nothing has been spoken for this long, say one short filler ("Still looking.") so the agent never goes dead quiet.', { unit: 'ms', old: 1500 }),
     fillerMinGapMs: n(4000, 0, 20000, 500, 'core', 'Filler min gap', 'Skip the lead-in filler for a tool call if another filler was spoken more recently than this.', { unit: 'ms' }),
-    ttsPoolSize: n(3, 1, 6, 1, 'core', 'TTS pool size', 'Edge TTS sockets kept open; also the number of sentences synthesized ahead of playback.', { unit: 'sockets', restart: true }),
+    ttsPoolSize: n(4, 1, 6, 1, 'core', 'TTS pool size', 'Edge TTS sockets kept open; also the number of sentences synthesized ahead of playback.', { unit: 'sockets', restart: true, superseded: [3] }),
+    ttsRaceFirst: n(3, 1, 4, 1, 'core', 'Race the first sentence', "Copies of a reply's first sentence sent to Edge TTS at once; the quickest is spoken and the rest are cancelled. Edge's answer time swings a lot between identical requests: measured on plain Ava, one request averaged 1.4 s (worst 2.2 s), two copies 1.2 s, three 0.9 s (worst 1.5 s). Costs that many requests for one sentence per reply; lower it if Edge starts refusing (429). 1 sends one request.", { unit: 'copies' }),
     ttsTimeoutMs: n(12000, 3000, 30000, 500, 'core', 'TTS timeout', 'Give up on one sentence of Edge TTS after this long.', { unit: 'ms' }),
     ttsAttempts: n(2, 1, 4, 1, 'core', 'TTS attempts', 'Tries per sentence before it is spoken with the fallback voice.', { unit: 'tries' }),
-    ttsDegradeAfter: n(3, 1, 10, 1, 'core', 'TTS degrade after', 'Consecutive failed sentences before the rest of the turn uses the fallback voice (immediately when Edge is unreachable).', { unit: 'failures' })
+    ttsDegradeAfter: n(3, 1, 10, 1, 'core', 'TTS degrade after', 'Consecutive failed sentences before the rest of the turn uses the fallback voice (immediately when Edge is unreachable).', { unit: 'failures' }),
+    edgeSlowMs: n(2000, 400, 5000, 100, 'main', 'Edge slow threshold', 'Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best proxies. A healthy plain voice answers new text in about 1 s, so the old 1200 re-checked on ordinary swings.', { unit: 'ms', superseded: [1200] }),
+    proxyRankParallel: n(4, 1, 10, 1, 'main', 'Proxy tests at once', 'Proxies the automatic Edge route tests at the same time. Higher finishes a long list sooner; too high and the tests slow each other down.', { unit: 'proxies' })
   },
   playback: {
     duckRampMs: n(60, 10, 500, 10, 'renderer', 'Duck ramp', 'Gain ramp time when ducking or restoring playback volume.', { unit: 'ms' }),
@@ -135,6 +139,14 @@ export const TUNING = {
     relevantMinScore: n(0, 0, 20, 0.5, 'core', 'Relevant min score', 'Minimum |bm25| rank for a memory hit to be injected. 0 disables the filter and always injects the top hits.', { unit: 'score' }),
     historyHits: n(3, 0, 10, 1, 'core', 'History hits', 'Past-session messages matching the utterance injected as hints.', { unit: 'messages', old: 3 }),
     hintMaxChars: n(200, 40, 1000, 20, 'core', 'Hint max chars', 'Each injected memory or history hint is truncated to this length.', { unit: 'chars', old: 200 })
+  },
+  playbooks: {
+    longMessageChars: n(1200, 200, 10000, 100, 'core', 'Long message', 'A message longer than this counts as long; the "Break down long messages" playbook reads it as tuning.longMessageChars. About 1200 characters is a minute and a half of talking.', { unit: 'chars' }),
+    maxInjected: n(3, 0, 10, 1, 'core', 'Playbooks per reply', 'Most playbooks that may shape one reply. When more match, the highest priorities win and the rest are logged as held back. 0 switches playbooks off.', { unit: 'playbooks' }),
+    injectMaxChars: n(1200, 100, 4000, 100, 'core', 'Playbook instruction max', 'Each fired playbook adds its instruction to the prompt, cut to this many characters.', { unit: 'chars' }),
+    useJev: { kind: 'boolean', default: true, scope: 'core', label: 'Ask Jev', doc: 'Let playbooks ask Jev (TypeSafe, needs its key) what kind of message this is, or their own yes/no question. It is only asked when an enabled playbook needs it.' },
+    jevTimeoutMs: n(600, 100, 3000, 50, 'core', 'Jev timeout', 'The longest a reply waits for Jev. The question goes out as soon as the message arrives, so most of this overlaps other work; when it runs out the reply goes ahead and Jev-based playbooks do not fire.', { unit: 'ms' }),
+    intentMin: n(0.5, 0, 0.95, 0.05, 'core', 'Intent confidence floor', 'Below this confidence the message reads as intent "unsure", which no shipped playbook acts on.', { unit: 'p' })
   },
   runtime: {
     idleShutdownMs: n(300000, 0, 3600000, 60000, 'main', 'Ear idle shutdown', 'Unload the ear models after the microphone has been off this long. 0 never unloads. A restart is a full cold load.', { unit: 'ms' }),
@@ -158,6 +170,7 @@ export const TUNING_GROUP_INFO: Record<TuningGroup, { label: string; doc: string
   speech: { label: 'Speech: sentences and fillers', doc: 'Sentence chunking, filler phrases and Edge TTS resilience.' },
   playback: { label: 'Playback', doc: 'Renderer audio scheduling and ducking.' },
   memory: { label: 'Memory injection', doc: 'How much remembered context is put in front of the model each turn.' },
+  playbooks: { label: 'Playbooks', doc: 'Thresholds playbook conditions read, and how many playbooks may shape one reply. Applied on the next turn.' },
   runtime: { label: 'Runtime and logging', doc: 'Process lifecycle and what gets written to disk.' }
 }
 

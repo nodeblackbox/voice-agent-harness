@@ -347,6 +347,12 @@ export class MemoryStore {
     return rows.map((r) => JSON.parse(r.json) as ChatMessage)
   }
 
+  /** The newest user messages across all conversations, newest first. */
+  recentUserMessages(limit: number): ChatMessage[] {
+    const rows = this.db.prepare("SELECT json FROM messages WHERE role = 'user' ORDER BY created_at DESC, rowid DESC LIMIT ?").all(limit) as Array<{ json: string }>
+    return rows.map((r) => JSON.parse(r.json) as ChatMessage)
+  }
+
   /** Past messages matching `query`, other sessions only. `minScore` is a floor on |bm25| (0 = off). */
   searchHistory(query: string, excludeSessionId: string | null, limit = 8, minScore = 0): Array<{ text: string; role: string; createdAt: number; sessionTitle: string }> {
     const q = ftsQuery(query)

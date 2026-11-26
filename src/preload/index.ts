@@ -35,6 +35,11 @@ const api: VoiceAgentApi = {
     stop: () => invoke(IPC.speakStop),
     preview: (voice, engine) => invoke(IPC.ttsPreview, voice, engine),
     catalog: (provider) => invoke(IPC.ttsCatalog, provider),
+    route: () => invoke(IPC.ttsRoute),
+    testRoutes: () => invoke(IPC.ttsRouteTest),
+    speed: (voice) => invoke(IPC.ttsVoiceSpeed, voice),
+    startKokoro: () => invoke(IPC.kokoroStart),
+    startPocket: () => invoke(IPC.pocketStart),
     voices: () => invoke(IPC.voicesList)
   },
   playback: {
@@ -54,6 +59,22 @@ const api: VoiceAgentApi = {
     save: (skill) => invoke(IPC.skillsSave, skill),
     delete: (id) => invoke(IPC.skillsDelete, id),
     generate: (brief) => invoke(IPC.skillsGenerate, brief)
+  },
+  playbooks: {
+    list: () => invoke(IPC.playbooksList),
+    check: (id, text) => invoke(IPC.playbooksCheck, id, text),
+    save: (id, text, previousId) => invoke(IPC.playbooksSave, id, text, previousId),
+    toggle: (id, on) => invoke(IPC.playbooksToggle, id, on),
+    delete: (id) => invoke(IPC.playbooksDelete, id),
+    test: (id, text) => invoke(IPC.playbooksTest, id, text),
+    openFolder: () => invoke(IPC.playbooksOpenFolder),
+    evaluate: (id, text) => invoke(IPC.playbooksEvaluate, id, text),
+    label: (id, messageId, label) => invoke(IPC.playbooksLabel, id, messageId, label),
+    suggest: (id, text) => invoke(IPC.playbooksSuggest, id, text)
+  },
+  runbooks: {
+    runs: () => invoke(IPC.runbooksRuns),
+    cancel: (runId) => invoke(IPC.runbooksCancel, runId)
   },
   memory: {
     scopes: () => invoke(IPC.memoryScopes),
@@ -97,9 +118,11 @@ const api: VoiceAgentApi = {
     setMode: (id, mode) => invoke(IPC.claudeSetMode, id, mode),
     rename: (id, name) => invoke(IPC.claudeRename, id, name),
     reset: (id) => invoke(IPC.claudeReset, id),
+    compact: (id, focus) => invoke(IPC.claudeCompact, id, focus),
     remove: (id, deleteFolder) => invoke(IPC.claudeRemove, id, deleteFolder),
     files: (id) => invoke(IPC.claudeFiles, id),
     read: (id, rel) => invoke(IPC.claudeRead, id, rel),
+    write: (id, rel, text, expectedMtime) => invoke(IPC.claudeWrite, id, rel, text, expectedMtime),
     open: (id, rel, how) => invoke(IPC.claudeOpen, id, rel, how),
     external: () => invoke(IPC.claudeExternal),
     externalEvents: (sessionId, cwd) => invoke(IPC.claudeExternalEvents, sessionId, cwd),
@@ -107,6 +130,27 @@ const api: VoiceAgentApi = {
     folders: () => invoke(IPC.claudeFolders),
     pickFolder: () => invoke(IPC.claudePickFolder),
     account: (fresh) => invoke(IPC.claudeAccount, fresh)
+  },
+  explore: {
+    pickFolder: () => invoke(IPC.explorePickFolder),
+    check: (path) => invoke(IPC.exploreCheck, path)
+  },
+  diagrams: {
+    list: () => invoke(IPC.diagramsList),
+    get: (id) => invoke(IPC.diagramsGet, id),
+    save: (id, x) => invoke(IPC.diagramsSave, id, x),
+    create: (x) => invoke(IPC.diagramsCreate, x),
+    remove: (id) => invoke(IPC.diagramsDelete, id),
+    onCheck: (handler) => {
+      const listener = (_e: Electron.IpcRendererEvent, id: string, code: string): void => {
+        void handler(code).then(
+          (r) => ipcRenderer.send(IPC.diagramChecked, id, r),
+          () => ipcRenderer.send(IPC.diagramChecked, id, null)
+        )
+      }
+      ipcRenderer.on(IPC.diagramCheck, listener)
+      return () => ipcRenderer.removeListener(IPC.diagramCheck, listener)
+    }
   },
   context: { snapshot: () => invoke(IPC.contextSnapshot) },
   shell: { open: (url) => invoke(IPC.openExternal, url) },
@@ -121,6 +165,14 @@ const api: VoiceAgentApi = {
     trace: (sessionId, limit) => invoke(IPC.traceSession, sessionId, limit),
     lastTurn: () => invoke(IPC.traceLastTurn),
     summary: () => invoke(IPC.sessionSummary)
+  },
+  console: {
+    history: () => invoke(IPC.consoleHistory),
+    onEntries: (handler) => {
+      const listener = (_e: Electron.IpcRendererEvent, entries: Parameters<typeof handler>[0]) => handler(entries)
+      ipcRenderer.on(IPC.consoleEntries, listener)
+      return () => ipcRenderer.removeListener(IPC.consoleEntries, listener)
+    }
   },
   onEvent: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, event: Parameters<typeof handler>[0]) => handler(event)

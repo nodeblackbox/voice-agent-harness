@@ -31,7 +31,8 @@ describe('composeSystemPrompt', () => {
   })
 
   it('uses plain speech rules for plain styles and markdown rules otherwise', () => {
-    expect(composeSystemPrompt(style('short'), ctx)).toContain('No markdown, no bullet points')
+    expect(composeSystemPrompt(style('short'), ctx)).toContain('the voice reads them as a list and never says the dash')
+    expect(composeSystemPrompt(style('short'), ctx)).toContain('Otherwise no markdown: no headings, bold, tables')
     expect(composeSystemPrompt(style('comprehensive'), ctx)).toContain('code blocks and tables are shown on screen only')
   })
 
@@ -121,11 +122,32 @@ describe('mergeSkills', () => {
     expect(composeSystemParts(style('short'), ctx).live).not.toContain('Your voice right now')
   })
 
+  it('tells the model what it runs on, in the live part', () => {
+    const models = { chat: 'Claude Haiku 5.5 (Anthropic)', stt: 'nemo-parakeet-tdt-0.6b-v2, running locally', tts: 'Inworld, voice "Hana" (inworld-tts-2-flash)' }
+    const { live, stable } = composeSystemParts(style('short'), { ...ctx, voiceLine: 'Inworld, voice "Hana"', models })
+    expect(live).toContain('- Chat model right now: Claude Haiku 5.5 (Anthropic). Speech to text: nemo-parakeet-tdt-0.6b-v2, running locally. Text to speech: Inworld, voice "Hana" (inworld-tts-2-flash).')
+    // same always-current block as the voice line, right after it
+    expect(live.indexOf('Chat model right now')).toBeGreaterThan(live.indexOf('Your voice right now'))
+    expect(live.slice(0, live.indexOf('Chat model right now'))).not.toContain('\n\n')
+    expect(stable).not.toContain('Chat model right now')
+    expect(composeSystemParts(style('short'), ctx).live).not.toContain('Chat model right now')
+  })
+
   it('puts the delivery-cue guide in the cached part, before the tool rules, only when given', () => {
     const { stable, live } = composeSystemParts(style('short'), { ...ctx, expressiveBlock: 'Delivery cues: [laughs] is fine.' })
     expect(stable.indexOf('Delivery cues:')).toBeGreaterThan(0)
     expect(stable.indexOf('Delivery cues:')).toBeLessThan(stable.indexOf('You have tools:'))
     expect(live).not.toContain('Delivery cues:')
     expect(composeSystemParts(style('short'), ctx).stable).not.toContain('Delivery cues:')
+  })
+
+  it('teaches drawing only when the diagram tools exist, and lists this chat\'s diagrams in the live part', () => {
+    const off = composeSystemParts(style('short'), ctx)
+    expect(off.stable).not.toContain('diagram_create')
+    const on = composeSystemParts(style('short'), { ...ctx, toolNames: ['diagram_create', 'diagram_edit'], diagramsBlock: '- "Making tea" (Flowchart, id d1, version 2)' })
+    expect(on.stable).toContain('never say you cannot show or render one')
+    expect(on.stable).toContain('red and green diff')
+    expect(on.live).toContain('Diagrams in this chat\n- "Making tea" (Flowchart, id d1, version 2)')
+    expect(on.stable).not.toContain('Making tea')
   })
 })

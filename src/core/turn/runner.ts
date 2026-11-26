@@ -2,6 +2,7 @@ import { stepCountIs, streamText, type LanguageModel, type ModelMessage, type Sy
 import type { BrainSettings, ModelInfo, SpeechSettings, StyleFormat, TurnMetrics } from '@shared/types'
 import { MissingKeyError, type ModelFactory } from '../providers/factory'
 import { estimateTokens, isRateLimit, isTooLarge, retryAfterMs } from '../providers/capacity'
+import { costUsd } from '@shared/pricing'
 import { SentenceChunker } from '../speech/chunker'
 import { SpeakableFilter } from '../prompts/speakable'
 import type { Speaker } from '../speech/speaker'
@@ -25,6 +26,8 @@ export interface RunnerDeps {
   firstTokenTimeoutMs: number
   stallTimeoutMs: number
   toolStallTimeoutMs: number
+  /** A longer (or shorter) allowance for one tool, e.g. the explorer, which works on a goal for many seconds. */
+  toolStallMsFor?(toolName: string): number | undefined
   onDelta(text: string): void
   onToolStart(id: string, name: string, input: unknown): void
   onToolEnd(id: string, name: string, ok: boolean, output: unknown, error?: string): void
@@ -57,6 +60,18 @@ const isAuthError = (e: unknown): boolean => {
   const msg = String((e as Error)?.message ?? e).toLowerCase()
   return /invalid x-api-key|invalid api key|authentication_error|unauthorized/.test(msg)
 }
+/** The Anthropic workspace header names a workspace this key can't see: drop the header, the key itself is fine. */
+export const isWorkspaceNotFound = (e: unknown): boolean => status(e) === 404 && /workspace .* not found/i.test(String((e as Error)?.message ?? e))
+/** OpenAI reasoning models (GPT-5 family, o-series) reject or ignore temperature. */
+const openaiReasoning = (info: ModelInfo): boolean => info.provider === 'openai' && (!!info.reasoning || /^(gpt-5|o\d)/.test(info.model))
+
+/** The model finished without a word (and without calling a tool): treated like a failure so the next model answers. */
+export class EmptyReplyError extends Error {
+  constructor(readonly outputTokens: number) {
+    super(`empty reply${outputTokens ? ` (${outputTokens} output tokens, all spent thinking)` : ''}`)
+  }
+}
+
 const describe = (e: unknown): string => {
   if (e instanceof MissingKeyError) return e.message
   const s = status(e)
@@ -76,8 +91,11 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', done, { once: true })
   })
 
-/** Why a model in the chain didn't answer, in words fit for a toast and the "I couldn't get a reply" line. */
-type Miss = { model: ModelInfo; why: string }
+/**
+ * Why a model in the chain didn't answer, in words fit for a toast and the "I couldn't get a reply" line.
+ * `quiet` misses (a key already known to be refused) are not announced again: the user was told the first time.
+ */
+type Miss = { model: ModelInfo; why: string; quiet?: boolean }
 
 type ProviderOptions = NonNullable<Parameters<typeof streamText>[0]['providerOptions']>
 
@@ -87,7 +105,8 @@ const seconds = (ms: number): string => `${Math.max(1, Math.round(ms / 1000))}s`
 
 function missReason(e: unknown, info: ModelInfo): string {
   if (e instanceof MissingKeyError) return `has no API key (add one for ${info.providerLabel})`
-  if (isAuthError(e)) return `rejected the API key`
+  if (isAuthError(e)) return `rejected the API key (replace the ${info.providerLabel} key in Settings or .env)`
+  if (e instanceof EmptyReplyError) return e.outputTokens ? `answered with nothing (it spent ${e.outputTokens} tokens thinking)` : 'answered with nothing'
   if (isTooLarge(e)) return `can't take a request this big`
   if (isRateLimit(e)) {
     const wait = retryAfterMs(e)
@@ -108,6 +127,8 @@ export class TurnRunner {
   private metrics: TurnMetrics = {}
   private lastFillerAt = Number.NEGATIVE_INFINITY
 
+  private costUnknown = false
+
   constructor(private readonly deps: RunnerDeps) {}
 
   /**
@@ -121,29 +142,56 @@ export class TurnRunner {
     const capacity = this.deps.factory.capacity
     const pool = this.deps.factory.groqPool
     const estimate = estimateTokens(this.requestChars(), Object.keys(this.deps.tools).length)
+    {
+      // what this request is made of, so a big prompt can be traced to the part that makes it big
+      const sys = this.deps.system
+      const stableChars = typeof sys === 'string' ? sys.length : sys.stable.length
+      const liveChars = typeof sys === 'string' ? 0 : sys.live.length
+      this.deps.trace?.('turn.context', {
+        estimateTokens: estimate,
+        stableChars,
+        liveChars,
+        historyChars: JSON.stringify(this.deps.messages).length,
+        messages: this.deps.messages.length,
+        tools: Object.keys(this.deps.tools).length
+      })
+    }
     const misses: Miss[] = []
+    // the latest miss the user hasn't been told about; announced as "X …, trying Y." when Y is actually tried
+    let unannounced: Miss | null = null
+    const miss = (m: Miss): void => {
+      misses.push(m)
+      if (!m.quiet) unannounced = m
+    }
     let lastError: unknown
 
     for (let k = 0; k < chain.length; k++) {
       const info = chain[k]!
       if (signal.aborted) return { text: this.text, aborted: true, modelUsed: info.id }
 
+      if (info.provider !== 'groq' && this.deps.factory.keyRejected?.(info)) {
+        miss({ model: info, why: `has a rejected API key (replace the ${info.providerLabel} key in Settings or .env)`, quiet: true })
+        this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'key_rejected' })
+        continue
+      }
+
       const ceiling = capacity?.ceiling(info.id)
       if (ceiling && estimate > ceiling) {
-        misses.push({ model: info, why: `can't take a request this big (about ${estimate} tokens, its limit is ${ceiling})` })
+        miss({ model: info, why: `can't take a request this big (about ${estimate} tokens, its limit is ${ceiling})` })
         this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'too_large', estimate, ceiling })
         continue
       }
       const busyMs = info.provider === 'groq' ? pool.nextFreeInMs() : (capacity?.waitMs(info.id) ?? 0)
       if (busyMs > MAX_RATE_WAIT_MS) {
-        misses.push({ model: info, why: `is rate-limited for another ${seconds(busyMs)}` })
+        miss({ model: info, why: `is rate-limited for another ${seconds(busyMs)}` })
         this.deps.trace?.('turn.model_skipped', { model: info.id, reason: 'rate_limited', waitMs: busyMs })
         continue
       }
       if (busyMs > 0) await sleep(busyMs, signal)
-      if (k > 0 && misses.length) {
-        const prev = misses[misses.length - 1]!
+      if (unannounced) {
+        const prev: Miss = unannounced
         this.deps.onNotice(`${prev.model.label} ${prev.why}, trying ${info.label}.`)
+        unannounced = null
       }
 
       let retried = false
@@ -165,6 +213,13 @@ export class TurnRunner {
           // words already spoken can't be taken back: never restart the answer on another model
           if (this.text.length > 0) return { text: this.text, aborted: false, error: describe(e), modelUsed: info.id }
 
+          // a stale ANTHROPIC_WORKSPACE_ID: the key works without it, so retry this model once without the header
+          if (isWorkspaceNotFound(e) && this.deps.factory.dropWorkspace?.(info) && !retried) {
+            retried = true
+            this.deps.onNotice(`${info.providerLabel} doesn't know the workspace in ANTHROPIC_WORKSPACE_ID; sending without it (remove it from .env).`)
+            this.deps.trace?.('turn.workspace_dropped', { model: info.id })
+            continue
+          }
           const keys = info.provider === 'groq' ? pool.size() : 1
           if (info.provider === 'groq' && (isAuthError(e) || isRateLimit(e)) && rotations + 1 < keys && pool.hasUsable()) {
             rotations++ // the pool benched that key; the next one may be another account with its own limit
@@ -181,7 +236,8 @@ export class TurnRunner {
             if (this.deps.brain.retryBackoffMs > 0) await sleep(this.deps.brain.retryBackoffMs, signal)
             continue
           }
-          misses.push({ model: info, why: missReason(e, info) })
+          if (isAuthError(e) && info.provider !== 'groq') this.deps.factory.rejectKey?.(info)
+          miss({ model: info, why: missReason(e, info) })
           break
         }
       }
@@ -207,6 +263,8 @@ export class TurnRunner {
   private providerOptions(info: ModelInfo): ProviderOptions | undefined {
     const groqEffort = this.deps.brain.groqReasoningEffort
     if (info.provider === 'groq' && info.reasoning && groqEffort !== 'default') return { groq: { reasoningEffort: groqEffort } }
+    const openaiEffort = this.deps.brain.openaiReasoningEffort
+    if (info.provider === 'openai' && info.reasoning && openaiEffort && openaiEffort !== 'default') return { openai: { reasoningEffort: openaiEffort } }
     const claudeEffort = this.deps.brain.claudeEffort
     if (info.provider === 'anthropic' && info.effort && claudeEffort !== 'default') return { anthropic: { effort: claudeEffort } }
     return undefined
@@ -258,6 +316,9 @@ export class TurnRunner {
     let firstToken = false
     let firstSentence = false
     let toolsInFlight = 0
+    let toolCalls = 0
+    // text before and after a tool call arrive as separate steps: "…as a priority?" + "Echo issue saved" needs a space
+    let afterTool = false
     let lastFinish: string | undefined
     let noteBuf = ''
     const textBefore = this.text
@@ -273,7 +334,7 @@ export class TurnRunner {
         stopWhen: stepCountIs(this.deps.maxSteps),
         abortSignal: signal,
         maxRetries: 0,
-        temperature: this.deps.brain.temperature,
+        temperature: openaiReasoning(info) ? undefined : this.deps.brain.temperature,
         maxOutputTokens: this.deps.brain.maxTokens,
         providerOptions: this.providerOptions(info)
       })
@@ -311,6 +372,9 @@ export class TurnRunner {
                 break
               }
             }
+            // after a tool call the model starts a new thought: a new paragraph, not a run-on sentence
+            if (afterTool && this.text.trim() && !/\n\s*$/.test(this.text)) delta = `\n\n${delta.replace(/^\s+/, '')}`
+            afterTool = false
             this.text += delta
             this.deps.onDelta(delta)
             for (const sentence of chunker.feed(filter.feed(delta))) {
@@ -326,6 +390,7 @@ export class TurnRunner {
           }
           case 'tool-call': {
             toolsInFlight++
+            toolCalls++
             this.deps.onToolStart(part.toolCallId, part.toolName, part.input)
             if (this.deps.fillerEnabled) {
               const now = performance.now()
@@ -340,10 +405,11 @@ export class TurnRunner {
               scheduleContinuation(part.toolName, this.deps.speech.fillerAfterMs)
             }
             this.deps.onCue(true)
-            arm(this.deps.toolStallTimeoutMs, `the ${part.toolName} tool took too long`)
+            arm(this.deps.toolStallMsFor?.(part.toolName) ?? this.deps.toolStallTimeoutMs, `the ${part.toolName} tool took too long`)
             break
           }
           case 'tool-result': {
+            afterTool = true
             toolsInFlight = Math.max(0, toolsInFlight - 1)
             this.deps.onToolEnd(part.toolCallId, part.toolName, true, part.output)
             if (toolsInFlight === 0) {
@@ -354,6 +420,7 @@ export class TurnRunner {
             break
           }
           case 'tool-error': {
+            afterTool = true
             toolsInFlight = Math.max(0, toolsInFlight - 1)
             this.deps.onToolEnd(part.toolCallId, part.toolName, false, undefined, describe(part.error))
             if (toolsInFlight === 0) {
@@ -366,10 +433,39 @@ export class TurnRunner {
           case 'finish-step': {
             this.metrics.steps = (this.metrics.steps ?? 0) + 1
             lastFinish = part.finishReason
-            const u = part.usage as { inputTokens?: number | { total?: number }; outputTokens?: number | { total?: number } } | undefined
+            const u = part.usage as
+              | {
+                  inputTokens?: number | { total?: number }
+                  outputTokens?: number | { total?: number }
+                  inputTokenDetails?: { cacheReadTokens?: number; cacheWriteTokens?: number }
+                  outputTokenDetails?: { reasoningTokens?: number }
+                }
+              | undefined
             const total = (v: number | { total?: number } | undefined): number => (typeof v === 'number' ? v : (v?.total ?? 0))
-            this.metrics.inputTokens = (this.metrics.inputTokens ?? 0) + total(u?.inputTokens)
-            this.metrics.outputTokens = (this.metrics.outputTokens ?? 0) + total(u?.outputTokens)
+            const step = {
+              inputTokens: total(u?.inputTokens),
+              outputTokens: total(u?.outputTokens),
+              cacheReadTokens: u?.inputTokenDetails?.cacheReadTokens ?? 0,
+              cacheWriteTokens: u?.inputTokenDetails?.cacheWriteTokens ?? 0
+            }
+            const cost = costUsd(info.id, step)
+            const mt = this.metrics
+            mt.inputTokens = (mt.inputTokens ?? 0) + step.inputTokens
+            mt.outputTokens = (mt.outputTokens ?? 0) + step.outputTokens
+            mt.cacheReadTokens = (mt.cacheReadTokens ?? 0) + step.cacheReadTokens
+            mt.cacheWriteTokens = (mt.cacheWriteTokens ?? 0) + step.cacheWriteTokens
+            // a step on a model with no known price leaves the turn's cost unknown rather than too low
+            if (cost === undefined) this.costUnknown = true
+            else mt.costUsd = (mt.costUsd ?? 0) + cost
+            if (this.costUnknown) delete mt.costUsd
+            this.deps.trace?.('turn.usage', {
+              step: mt.steps,
+              model: info.id,
+              ...step,
+              reasoningTokens: u?.outputTokenDetails?.reasoningTokens ?? 0,
+              costUsd: cost,
+              finish: part.finishReason
+            })
             break
           }
           case 'error':
@@ -391,6 +487,9 @@ export class TurnRunner {
         noteBuf = ''
       }
       for (const s of chunker.flush()) this.deps.speaker.say(s)
+      // nothing said and nothing done: a silent reply is a failure, not an answer (the next model gets the turn).
+      // After a tool call it stays this model's turn: retrying elsewhere would run the tool twice.
+      if (!this.text.trim() && toolCalls === 0 && !outer.aborted) throw new EmptyReplyError(this.metrics.outputTokens ?? 0)
       let hitStepLimit = false
       if (lastFinish === 'tool-calls' && (this.metrics.steps ?? 0) >= this.deps.maxSteps) {
         // the model still wanted tools when the round cap hit: say so only if it said nothing else

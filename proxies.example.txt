@@ -1,5 +1,8 @@
 # Copy to proxies.txt (ignored by git) for `pnpm tts:latency -- --proxies proxies.txt`.
 # One proxy per line: host:port:user:pass, or a full URL http://user:pass@host:port
 # The fastest route for Edge TTS can then go into TTS_PROXY in .env, or the Proxy field in Settings > Voice output.
+# Or paste the lines into Settings > Voice output > Proxy list (or set PROXY_LIST_URL in .env): with Edge route on
+# Automatic, Edge goes direct while it is quick and through the fastest proxy when Microsoft throttles it.
+# pnpm lab:proxies ranks them all by country from the command line.
 203.0.113.10:8080:user:password
 http://user:password@203.0.113.11:3128

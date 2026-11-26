@@ -1,5 +1,16 @@
-import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcMode, CcResult, CcSession } from '@shared/claude'
+import type { DiagramCheck, DiagramDoc, DiagramSummary } from '@shared/diagram'
+import type { ConsoleEntry } from '@shared/console'
+import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
+  KeyName,
+  PlaybookEvalResult,
+  PlaybookLabel,
+  RunbookRun,
+  PlaybookCheck,
+  PlaybookIssue,
+  PlaybookSaveResult,
+  PlaybooksState,
+  PlaybookTestRow,
   AgentEvent,
   AudioChunk,
   ChatMessage,
@@ -10,6 +21,7 @@ import type {
   LogLevel,
   McpServerConfig,
   McpServerStatus,
+  EdgeRouteState,
   MemoryEntry,
   MemoryHistoryEntry,
   MemoryScope,
@@ -39,7 +51,7 @@ export interface VoiceAgentApi {
   models: { list(): Promise<ModelInfo[]> }
   keys: {
     status(): Promise<KeyStatus[]>
-    set(provider: Provider | CloudTtsProvider, key: string): Promise<KeyStatus[]>
+    set(provider: KeyName, key: string): Promise<KeyStatus[]>
   }
   chat: {
     send(text: string): Promise<void>
@@ -64,6 +76,16 @@ export interface VoiceAgentApi {
     stop(): Promise<void>
     preview(voice: string, engine?: TtsEngineId): Promise<void>
     catalog(provider: CloudTtsProvider): Promise<TtsCatalog>
+    /** The automatic Edge route: what it uses now, and the ranking behind it. */
+    route(): Promise<EdgeRouteState>
+    /** Test every route again now (the Settings "Test all" button). */
+    testRoutes(): Promise<EdgeRouteState>
+    /** Time an Edge voice on new text: ms until a sentence's audio is ready (median of 3). */
+    speed(voice: string): Promise<number>
+    /** Load Kokoro now (skips the back-off after a failed load); true once it is ready. */
+    startKokoro(): Promise<boolean>
+    /** Start the local Pocket TTS server now (it otherwise starts on the first sentence). */
+    startPocket(): Promise<boolean>
     voices(): Promise<VoiceInfo[]>
   }
   playback: {
@@ -86,6 +108,30 @@ export interface VoiceAgentApi {
     save(skill: Skill): Promise<Skill[]>
     delete(id: string): Promise<Skill[]>
     generate(brief: string): Promise<{ name: string; trigger: string; procedure: string }>
+  }
+  playbooks: {
+    list(): Promise<PlaybooksState>
+    /** Parse a draft without saving: errors and warnings with line numbers. */
+    check(id: string, text: string): Promise<PlaybookCheck>
+    /** Write the file; refused (nothing written) when it does not parse. `previousId` renames. */
+    save(id: string, text: string, previousId?: string): Promise<PlaybookSaveResult>
+    toggle(id: string, on: boolean): Promise<PlaybookSaveResult>
+    /** Moves the file to .trash in the playbooks folder. */
+    delete(id: string): Promise<void>
+    /** Replay recent user messages against a draft. */
+    test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[]; jevNote?: string }>
+    openFolder(): Promise<void>
+    /** Review a trigger against recent messages: misses and false fires, judged by Jev or the model. */
+    evaluate(id: string, text?: string): Promise<PlaybookEvalResult & { errors: PlaybookIssue[] }>
+    /** Mark a message: the playbook should fire there, should not, or clear the mark (null). */
+    label(id: string, messageId: string, label: PlaybookLabel | null): Promise<void>
+    /** Draft a tighter trigger from a review; nothing is saved. */
+    suggest(id: string, text?: string): Promise<{ ok: true; id: string; text: string; repaired: boolean; warnings: PlaybookIssue[] } | { ok: false; errors: PlaybookIssue[]; text: string }>
+  }
+  runbooks: {
+    /** Recent runs, newest first: working, waiting for a reply, and finished. */
+    runs(): Promise<RunbookRun[]>
+    cancel(runId: string): Promise<boolean>
   }
   memory: {
     scopes(): Promise<MemoryScope[]>
@@ -119,6 +165,17 @@ export interface VoiceAgentApi {
     searxngEnsure(): Promise<ServiceStatus>
     sidecarRestart(): Promise<void>
   }
+  /** Diagrams the agent (or the owner) drew. Live changes arrive as `{type:'diagram'}` events. */
+  diagrams: {
+    list(): Promise<DiagramSummary[]>
+    get(id: string): Promise<DiagramDoc | null>
+    /** The owner's edit: adds a version (and/or renames). Null when the diagram is gone. */
+    save(id: string, x: { code?: string; title?: string; note?: string }): Promise<DiagramDoc | null>
+    create(x: { title: string; code: string }): Promise<DiagramDoc>
+    remove(id: string): Promise<boolean>
+    /** The main process asks this window to run Mermaid's parser (the agent's drawings are checked before they are shown). */
+    onCheck(handler: (code: string) => Promise<DiagramCheck | null>): () => void
+  }
   /** Claude Code sessions managed by the voice agent. Live changes arrive as `{type:'claude'}` events. */
   claude: {
     list(): Promise<CcSession[]>
@@ -135,10 +192,14 @@ export interface VoiceAgentApi {
     rename(id: string, name: string): Promise<CcResult>
     /** Fresh start: forget the conversation, keep the folder. */
     reset(id: string): Promise<CcResult>
+    /** Summarise its conversation to free the context; `focus` says what to keep. Queued when busy. */
+    compact(id: string, focus?: string): Promise<CcResult<{ queued: boolean }>>
     /** Drop from the list; the folder stays on disk unless `deleteFolder` (sandbox folders only). */
     remove(id: string, deleteFolder?: boolean): Promise<CcResult<{ deletedFolder?: string }>>
     files(id: string): Promise<CcFile[]>
     read(id: string, rel: string): Promise<CcFileContent | { error: string }>
+    /** Save an edit; `expectedMtime` (from `read`) makes it refuse when the file changed on disk meanwhile. */
+    write(id: string, rel: string, text: string, expectedMtime?: number): Promise<CcFileSaved>
     /** Open the workspace (rel '') or a file in it: default app, Explorer, or VS Code. */
     open(id: string, rel: string, how: 'default' | 'reveal' | 'code'): Promise<CcResult>
     /** Your other saved Claude Code sessions on this machine, newest first. */
@@ -152,6 +213,13 @@ export interface VoiceAgentApi {
     pickFolder(): Promise<string | null>
     /** Who sessions run as (asked of the CLI, no usage); `fresh` skips the cached answer. */
     account(fresh?: boolean): Promise<CcAccount>
+  }
+  /** Settings > PC access: the folders the agent's read-only pc_* tools may look in. */
+  explore: {
+    /** Native folder picker; null when cancelled. */
+    pickFolder(): Promise<string | null>
+    /** A typed path, tidied and checked: it must be an existing folder given in full. */
+    check(path: string): Promise<{ ok: true; path: string } | { ok: false; error: string }>
   }
   context: { snapshot(): Promise<ContextSnapshot> }
   shell: { open(url: string): Promise<void> }
@@ -170,6 +238,11 @@ export interface VoiceAgentApi {
     trace(sessionId?: string | null, limit?: number): Promise<TraceEvent[]>
     lastTurn(): Promise<TraceEvent[]>
     summary(): Promise<SessionSummary>
+  }
+  /** The live console: this run's log lines and trace events so far, then batches as they happen. */
+  console: {
+    history(): Promise<ConsoleEntry[]>
+    onEntries(handler: (entries: ConsoleEntry[]) => void): () => void
   }
   onEvent(handler: (event: AgentEvent) => void): () => void
   onAudioChunk(handler: (chunk: AudioChunk) => void): () => void

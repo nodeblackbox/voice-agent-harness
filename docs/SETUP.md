@@ -131,7 +131,7 @@ Delete the folder to start over. To try the fresh-user experience without touchi
 | Ears exit code 3, "CUDA is not available" | no usable CUDA; set the STT device to `cpu` |
 | Ears exit code 1, "model load failed" | the first Parakeet download was interrupted, or Smart Turn is missing: rerun `pnpm sidecar:install`, check `HF_HOME` has space |
 | "ears crashed 3 times" | see `logs/app.log`; most often a Python path pointing at an old venv |
-| Voice switched to Kokoro, toast about Edge | Edge TTS rate-limited you; the app probes it in the background and announces when it is back. Kokoro needs the sidecar venv. Slow first audio from Edge (2 s and more) usually means your IP is throttled: set `TTS_PROXY` and switch the Edge toggle on |
+| Voice switched to Kokoro, toast about Edge | Edge TTS rate-limited you; the app probes it in the background and announces when it is back. Kokoro needs the sidecar venv. Slow first audio from Edge (2 s and more) is nearly always the voice: the Multilingual voices take 3-5 s a sentence on any route, the plain voice of the same name about 1 s. Time voices with "speed" in Settings > Voice output and pick a quick one; a proxy only helps when Microsoft refuses your address (429/403) |
 | "ElevenLabs 404: voice_not_found" or "402" toast | the voice id is not on that account, or the account is out of credit; the turn finishes on Kokoro. Pick a listed voice or the free model |
 | The engine picker shows "no key" on a voice | add the provider's key in Settings → Providers or `.env` |
 | "Couldn't check your Claude login" | run `claude` in a terminal and `/login`, then press the refresh icon on the badge |

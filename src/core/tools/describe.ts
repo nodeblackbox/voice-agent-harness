@@ -7,6 +7,8 @@ export function toolKind(name: string): ToolActivity['kind'] {
   if (name === 'read_page') return 'read'
   if (name === 'remember' || name === 'recall' || name === 'forget' || name === 'search_history' || name === 'update_memory') return 'memory'
   if (name === 'current_time') return 'time'
+  if (name.startsWith('diagram_')) return 'diagram'
+  if (name.startsWith('pc_')) return 'files'
   return 'other'
 }
 
@@ -42,6 +44,22 @@ export function describeInput(name: string, input: unknown): string {
       return i.id !== undefined ? `#${String(i.id)}` : ''
     case 'current_time':
       return ''
+    case 'diagram_create':
+      return typeof i.title === 'string' ? i.title : ''
+    case 'diagram_edit':
+      return str(i.note ?? i.title ?? i.diagram ?? '', 80)
+    case 'diagram_get':
+      return typeof i.diagram === 'string' ? i.diagram : ''
+    case 'pc_find':
+      return `${str(i.query, 60)}${typeof i.path === 'string' && i.path ? ` in ${str(i.path, 50)}` : ''}`
+    case 'pc_grep':
+      return `“${str(i.text, 50)}”${typeof i.path === 'string' && i.path ? ` in ${str(i.path, 50)}` : ''}`
+    case 'pc_list':
+      return typeof i.path === 'string' && i.path ? str(i.path, 90) : 'approved folders'
+    case 'pc_read':
+      return str(i.path, 90)
+    case 'pc_explore':
+      return `${str(i.goal, 100)}${i.may_edit ? ' (may edit)' : ''}`
     case 'claude_start':
       return typeof i.name === 'string' ? `${i.name}${typeof i.task === 'string' && i.task ? ` · ${str(i.task, 70)}` : ''}` : ''
     case 'claude_send':
@@ -60,6 +78,7 @@ export function describeInput(name: string, input: unknown): string {
     case 'claude_interrupt':
     case 'claude_stop':
     case 'claude_reset':
+    case 'claude_compact':
     case 'claude_files':
     case 'claude_attach':
       return typeof i.session === 'string' ? i.session : ''
@@ -117,6 +136,36 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     }
     case 'current_time':
       return { detail: (o as { now?: string })?.now }
+    case 'diagram_create':
+      return { detail: (o as { kind?: string })?.kind ? `${(o as { kind: string }).kind.toLowerCase()} drawn` : 'drawn' }
+    case 'diagram_edit': {
+      const r = o as { status?: string; version?: number; changed?: string } | undefined
+      return { detail: r?.status === 'no_change' ? 'nothing to change' : `version ${r?.version ?? '?'}${r?.changed ? ` · ${r.changed}` : ''}` }
+    }
+    case 'diagram_get': {
+      const r = o as { title?: string; version?: number } | undefined
+      return { detail: r?.title ? `${r.title} · version ${r.version ?? 1}` : '' }
+    }
+    case 'pc_find':
+    case 'pc_grep': {
+      const r = o as { matches?: unknown[]; more_matches?: number; incomplete?: string } | undefined
+      const n = r?.matches?.length ?? 0
+      return { detail: `${n ? `${n}${r?.more_matches ? '+' : ''} match${n === 1 ? '' : 'es'}` : 'nothing found'}${r?.incomplete ? ' (stopped early)' : ''}` }
+    }
+    case 'pc_list': {
+      const r = o as { total_folders?: number; total_files?: number; approved_folders?: unknown[] } | undefined
+      return { detail: r?.approved_folders ? `${r.approved_folders.length} approved folders` : `${r?.total_folders ?? 0} folders, ${r?.total_files ?? 0} files` }
+    }
+    case 'pc_read': {
+      const r = o as { lines?: string; kb?: number } | undefined
+      return { detail: r?.lines ? `lines ${r.lines}` : '' }
+    }
+    case 'pc_explore': {
+      const r = o as { status?: string; steps_taken?: unknown[]; edits?: unknown[]; refused?: unknown[] } | undefined
+      const n = r?.steps_taken?.length ?? 0
+      const how = r?.status && r.status !== 'done' ? `, ${r.status.replace('_', ' ')}` : ''
+      return { detail: `${n} step${n === 1 ? '' : 's'}${how}${r?.edits?.length ? `, ${r.edits.length} file${r.edits.length === 1 ? '' : 's'} edited` : ''}${r?.refused?.length ? `, ${r.refused.length} refused` : ''}` }
+    }
     case 'claude_list':
       return { detail: `${((o as { sessions?: unknown[] })?.sessions ?? []).length} sessions` }
     case 'claude_start':
@@ -124,6 +173,7 @@ export function describeOutput(name: string, output: unknown): { detail?: string
     case 'claude_answer':
     case 'claude_interrupt':
     case 'claude_reset':
+    case 'claude_compact':
     case 'claude_stop': {
       const r = o as { status?: string; error?: string; session?: unknown } | undefined
       return { detail: r?.error ?? r?.status }

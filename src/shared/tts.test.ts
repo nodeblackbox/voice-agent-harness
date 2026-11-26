@@ -10,7 +10,7 @@ const voice: VoiceSettings = {
   pitch: 0,
   cloud: { inworld: { voice: 'Dennis' }, qwen: { voice: 'mine-123', model: 'qwen-audio-3.0-tts-plus', instruction: 'cheerful' } },
   expressive: true,
-  proxy: { url: '', edge: false, cloud: false }
+  proxy: { url: '', edge: false, cloud: false, list: '' }
 }
 
 describe('TTS provider metadata', () => {

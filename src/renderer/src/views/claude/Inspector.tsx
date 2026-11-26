@@ -2,9 +2,12 @@
 import { CircleCheck, CircleDot, Circle } from 'lucide-react'
 import type { CcEvent, CcSession } from '@shared/claude'
 import { T } from '../../theme'
+import { fmtTokens } from '@shared/pricing'
 import { costNote } from './Account'
+import { contextTitle } from './Context'
 import { FAMILY } from './Activity'
 import { ago, latestTodos, toolStats, type Touched } from './feed'
+import { useFileMenu } from './FileMenu'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -16,6 +19,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function Inspector({ session, events, touched, onOpenFile }: { session: CcSession; events: CcEvent[]; touched: Touched[]; onOpenFile: (rel: string) => void }) {
+  const menu = useFileMenu()
   const todos = latestTodos(events)
   const stats = toolStats(events)
   const max = Math.max(1, ...stats.map((s) => s.count))
@@ -25,6 +29,8 @@ export function Inspector({ session, events, touched, onOpenFile }: { session: C
       <div className="grid grid-cols-2 gap-2">
         {[
           [session.billing === 'api-key' ? 'Cost' : 'Usage', `$${session.costUsd.toFixed(2)}`, costNote(session)],
+          ['Tokens', `${fmtTokens(session.tokensIn ?? 0)} / ${fmtTokens(session.tokensOut ?? 0)}`, 'Tokens read (cached ones included) / written by this session so far'],
+          ['Context', session.context ? `${session.context.percent}%` : '—', contextTitle(session)],
           ['Turns', String(session.turns)],
           ['Files', String(touched.length)],
           ['Tool calls', String(stats.reduce((n, s) => n + s.count, 0))]
@@ -58,7 +64,7 @@ export function Inspector({ session, events, touched, onOpenFile }: { session: C
       <Section title="Changed files">
         {touched.length === 0 && <div className="text-xs" style={{ color: T.text3 }}>Nothing yet.</div>}
         {touched.slice(0, 12).map((t) => (
-          <button key={t.path} type="button" onClick={() => onOpenFile(t.path)} className="va-tree-row flex items-center gap-2 text-xs rounded-md px-1.5 py-1 text-left" style={{ cursor: 'pointer', background: 'transparent' }}>
+          <button key={t.path} type="button" onClick={() => onOpenFile(t.path)} onContextMenu={(e) => menu(e, t.path)} className="va-tree-row flex items-center gap-2 text-xs rounded-md px-1.5 py-1 text-left" style={{ cursor: 'pointer', background: 'transparent' }}>
             <span style={{ color: t.writes ? T.green : T.violet, fontFamily: T.mono, fontWeight: 600, width: 10 }}>{t.writes ? 'A' : 'M'}</span>
             <span className="truncate flex-1" style={{ color: T.text2, fontFamily: T.mono }}>{t.path}</span>
             <span style={{ color: T.text3, fontSize: 10.5, flexShrink: 0 }}>{ago(t.t)}</span>

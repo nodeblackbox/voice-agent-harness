@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from 'react'
 import { T, TERM } from '../../theme'
+import { InlineDiagram } from '../../components/diagram/DiagramCard'
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = []
@@ -44,6 +45,10 @@ export function Markdown({ text }: { text: string }) {
       const body: string[] = []
       for (i++; i < lines.length && !/^```/.test(lines[i]!); i++) body.push(lines[i]!)
       i++
+      if (lang.toLowerCase() === 'mermaid' && body.join('').trim()) {
+        blocks.push(<InlineDiagram key={key} code={body.join('\n')} />)
+        continue
+      }
       blocks.push(
         <pre key={key} className="va-term va-scroll rounded-lg overflow-x-auto" style={{ margin: 0, padding: '10px 12px', fontSize: 12, color: TERM.text, border: `1px solid ${T.border}` }}>
           {lang && <div style={{ color: T.text3, fontSize: 10.5, marginBottom: 4 }}>{lang}</div>}

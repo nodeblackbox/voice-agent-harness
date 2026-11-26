@@ -62,7 +62,7 @@ function harness(models: Record<string, MockLanguageModelV4>, over: Partial<Runn
     {
       engine: { name: 'edge', synth: async (req) => Buffer.from(req.text) },
       fallback: { name: 'system', synth: async () => null },
-      voice: { engine: 'edge', voice: 'v', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false } },
+      voice: { engine: 'edge', voice: 'v', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false, list: '' } },
       emit: (c) => chunks.push(c),
       onDegraded: () => undefined,
       log: () => undefined
@@ -114,6 +114,26 @@ describe('TurnRunner', () => {
     expect(metrics.ttftMs).toBeGreaterThanOrEqual(0)
   })
 
+  it('gives a named tool its own time allowance, longer than the usual tool stall timeout', async () => {
+    const slow = tool({
+      description: 'works on a goal for a while',
+      inputSchema: z.object({}),
+      execute: async () => {
+        await new Promise((r) => setTimeout(r, 450))
+        return { status: 'done' }
+      }
+    })
+    const model = () => ({ 'anthropic:claude-haiku-4-5': mockModel([toolCallStream('pc_explore', {}), textStream(['Found it.'])]) })
+    const stalls = (h: ReturnType<typeof harness>) => vi.mocked(h.deps.trace!).mock.calls.filter(([ev]) => ev === 'turn.stall')
+    // with the usual allowance the tool call is cut off as a stall
+    const cut = harness(model(), { tools: { pc_explore: slow }, toolStallTimeoutMs: 150, fallbacks: [], fillerEnabled: false })
+    await cut.run()
+    expect(stalls(cut)[0]?.[1]).toMatchObject({ reason: 'the pc_explore tool took too long' })
+    const h = harness(model(), { tools: { pc_explore: slow }, toolStallTimeoutMs: 150, fallbacks: [], fillerEnabled: false, toolStallMsFor: (name) => (name === 'pc_explore' ? 3000 : undefined) })
+    expect((await h.run()).text).toBe('Found it.')
+    expect(stalls(h)).toHaveLength(0)
+  })
+
   it('runs a tool round, speaks a filler once, and reports input and output', async () => {
     const calc = tool({
       description: 'add',
@@ -134,6 +154,20 @@ describe('TurnRunner', () => {
     expect(spoken).toHaveLength(2)
     expect(spoken[1]).toBe('Five.')
     expect(vi.mocked(h.deps.onMetrics).mock.calls[0]![0]).toMatchObject({ inputTokens: 27, outputTokens: 5, steps: 2 })
+  })
+
+  it('starts a new paragraph for what the model says after a tool call', async () => {
+    const save = tool({ description: 'save', inputSchema: z.object({}), execute: async () => ({ ok: true }) })
+    const before: LanguageModelV4StreamPart[] = [
+      { type: 'stream-start', warnings: [] },
+      { type: 'text-start', id: 't' },
+      { type: 'text-delta', id: 't', delta: 'Want me to save it?' },
+      { type: 'text-end', id: 't' },
+      { type: 'tool-call', toolCallId: 'call-1', toolName: 'save', input: '{}' },
+      { type: 'finish', finishReason: { unified: 'tool-calls', raw: 'tool_use' }, usage: usage(7, 3) }
+    ]
+    const h = harness({ 'anthropic:claude-haiku-4-5': mockModel([before, textStream(['Saved it.'])]) }, { tools: { save }, fillerEnabled: false })
+    expect((await h.run()).text).toBe('Want me to save it?\n\nSaved it.')
   })
 
   it('reports a failing tool as an error and keeps going', async () => {
@@ -187,6 +221,73 @@ describe('TurnRunner', () => {
     expect(r.error).toBe("Claude Haiku 4.5 failed (400: bad request); GPT-OSS 20B can't take a request this big")
   })
 
+  it('remembers a rejected key: other models on it are skipped, and later turns go straight to a working provider', async () => {
+    const forbidden = Object.assign(new Error('invalid x-api-key'), { statusCode: 401 })
+    const rejected = new Set<string>()
+    const models: Record<string, MockLanguageModelV4> = {
+      'anthropic:claude-haiku-5-5': mockModel([forbidden]),
+      'anthropic:claude-haiku-4-5': mockModel([forbidden]),
+      'groq:openai/gpt-oss-20b': mockModel([textStream(['Fallback.'])])
+    }
+    const factory = {
+      create: (m: ModelInfo) => ({ model: models[m.id]!, key: 'k' }),
+      keyRejected: (m: ModelInfo) => rejected.has(m.provider),
+      rejectKey: (m: ModelInfo) => rejected.add(m.provider),
+      groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }
+    } as unknown as ModelFactory
+    const over = { factory, model: info('anthropic:claude-haiku-5-5'), fallbacks: [info('anthropic:claude-haiku-4-5'), info('groq:openai/gpt-oss-20b')] }
+
+    const first = harness(models, over)
+    expect((await first.run()).text).toBe('Fallback.')
+    expect(models['anthropic:claude-haiku-5-5']!.doStreamCalls).toHaveLength(1)
+    expect(models['anthropic:claude-haiku-4-5']!.doStreamCalls).toHaveLength(0) // same key: not tried
+    expect(first.deps.onNotice).toHaveBeenCalledTimes(1)
+    expect(first.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 5.5 rejected the API key (replace the Anthropic key in Settings or .env), trying GPT-OSS 20B.')
+
+    const second = harness(models, over)
+    expect((await second.run()).text).toBe('Fallback.')
+    expect(models['anthropic:claude-haiku-5-5']!.doStreamCalls).toHaveLength(1) // no doomed round trip
+    expect(second.deps.onNotice).not.toHaveBeenCalled() // told once is enough
+    expect(second.deps.trace).toHaveBeenCalledWith('turn.model_skipped', { model: 'anthropic:claude-haiku-5-5', reason: 'key_rejected' })
+  })
+
+  it('an empty reply is a failure: the next model answers, and the user hears why', async () => {
+    const thinker = mockModel([[{ type: 'stream-start', warnings: [] }, { type: 'finish', finishReason: { unified: 'length', raw: 'length' }, usage: usage(2600, 960) }]])
+    const h = harness({ 'openai:gpt-5-mini': thinker, 'groq:openai/gpt-oss-20b': mockModel([textStream(['Here.'])]) }, { model: info('openai:gpt-5-mini') })
+    const r = await h.run()
+    expect(r.text).toBe('Here.')
+    expect(r.modelUsed).toBe('groq:openai/gpt-oss-20b')
+    expect(h.deps.onNotice).toHaveBeenCalledWith('GPT-5 mini answered with nothing (it spent 960 tokens thinking), trying GPT-OSS 20B.')
+  })
+
+  it('OpenAI reasoning models get minimal effort and no temperature', async () => {
+    const m = mockModel([textStream(['Quick.'])])
+    await harness({ 'openai:gpt-5-mini': m }, { model: info('openai:gpt-5-mini'), fallbacks: [] }).run()
+    const call = m.doStreamCalls[0]!
+    expect(call.temperature).toBeUndefined()
+    expect(call.providerOptions).toEqual({ openai: { reasoningEffort: 'minimal' } })
+    const plain = mockModel([textStream(['Quick.'])])
+    await harness({ 'openai:gpt-4.1-mini': plain }, { model: info('openai:gpt-4.1-mini'), fallbacks: [] }).run()
+    expect(plain.doStreamCalls[0]!.temperature).toBe(DEFAULT_TUNING.brain.temperature)
+  })
+
+  it('a stale Anthropic workspace: the header is dropped and the same model retried once', async () => {
+    const notFound = Object.assign(new Error('Workspace 5e1a0934 not found'), { statusCode: 404 })
+    const claude = mockModel([notFound, textStream(['Back.'])])
+    const dropWorkspace = vi.fn(() => true)
+    const factory = {
+      create: () => ({ model: claude, key: 'k' }),
+      dropWorkspace,
+      groqPool: { report: vi.fn(), pick: () => 'k', size: () => 1, nextFreeInMs: () => 0, hasUsable: () => true }
+    } as unknown as ModelFactory
+    const h = harness({ 'anthropic:claude-haiku-4-5': claude }, { factory })
+    const r = await h.run()
+    expect(r.text).toBe('Back.')
+    expect(r.modelUsed).toBe('anthropic:claude-haiku-4-5')
+    expect(claude.doStreamCalls).toHaveLength(2)
+    expect(h.deps.onNotice).toHaveBeenCalledWith("Anthropic doesn't know the workspace in ANTHROPIC_WORKSPACE_ID; sending without it (remove it from .env).")
+  })
+
   it('skips straight to the fallback model on an invalid API key, without a wasted same-model retry', async () => {
     const forbidden = Object.assign(new Error('invalid x-api-key'), { statusCode: 401 })
     const primary = mockModel([forbidden, textStream(['should not be reached'])])
@@ -195,7 +296,7 @@ describe('TurnRunner', () => {
     expect(r.text).toBe('Fallback.')
     expect(r.modelUsed).toBe('groq:openai/gpt-oss-20b')
     expect(primary.doStreamCalls).toHaveLength(1)
-    expect(h.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 rejected the API key, trying GPT-OSS 20B.')
+    expect(h.deps.onNotice).toHaveBeenCalledWith('Claude Haiku 4.5 rejected the API key (replace the Anthropic key in Settings or .env), trying GPT-OSS 20B.')
   })
 
   it('rotates past a dead key in the Groq pool instead of failing the turn', async () => {
@@ -302,7 +403,8 @@ describe('TurnRunner', () => {
     const slowThinker = new MockLanguageModelV4({
       doStream: async () => ({ stream: simulateReadableStream({ chunks: thinking, initialDelayInMs: 0, chunkDelayInMs: 250 }) })
     })
-    const h = harness({ 'anthropic:claude-haiku-4-5': slowThinker }, { firstTokenTimeoutMs: 400, stallTimeoutMs: 400 })
+    // text arrives ~750 ms in, past the 400 ms first-token timeout; the stall timeout keeps a wide margin over the 250 ms gaps so a busy machine doesn't trip it
+    const h = harness({ 'anthropic:claude-haiku-4-5': slowThinker }, { firstTokenTimeoutMs: 400, stallTimeoutMs: 1500 })
     const r = await h.run()
     expect(r.text).toBe('Thought it through.')
   }, 10_000)

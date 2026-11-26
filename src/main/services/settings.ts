@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { safeStorage } from 'electron'
-import type { ClaudeSettings, CloudTtsProvider, KeyStatus, PromptStyle, Provider, Settings, Skill, VoiceSettings } from '@shared/types'
+import type { ClaudeSettings, KeyName, KeyStatus, PromptStyle, Provider, Settings, Skill, VoiceSettings } from '@shared/types'
 import { CC_MODES } from '@shared/claude'
 import { CLOUD_TTS_PROVIDERS, QWEN_DEFAULT_HOST, QWEN_HOST_ENV, TTS_PROVIDERS } from '@shared/tts'
 import { defaultTuning, sanitizeTuning, stripTuningDefaults, type TuningMigration } from '@shared/tuning'
@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentName: 'Ava',
   userName: 'the user',
   aboutUser: '',
-  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false } },
+  voice: { engine: 'edge', voice: 'en-US-AvaNeural', kokoroVoice: 'af_heart', pocketVoice: 'cosette', pocketServer: '', rate: 0, pitch: 0, cloud: {}, expressive: false, proxy: { url: '', edge: false, cloud: false, list: '', auto: true } },
   audio: {},
   ...defaultTuning(),
   stt: { model: 'nemo-parakeet-tdt-0.6b-v2', device: 'hybrid', pythonPath: '' },
@@ -29,7 +29,9 @@ export const DEFAULT_SETTINGS: Settings = {
   searxng: { url: 'http://127.0.0.1:8888', autostart: false },
   mcp: { enabled: true },
   // workspaceRoot '' = filled at construction from SettingsOptions.defaultWorkspaceRoot (the main process passes a Documents folder)
-  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 4, defaultMode: 'auto' }
+  claude: { enabled: false, workspaceRoot: '', model: '', maxSessions: 8, defaultMode: 'auto', limitChosen: true },
+  // roots [] and seeded false = the main process adds the first-run folders once (see seedExploreRoots)
+  explore: { enabled: true, roots: [], agent: true, edit: true, terminal: true, seeded: false }
 }
 
 export interface SettingsOptions {
@@ -37,7 +39,7 @@ export interface SettingsOptions {
   defaultWorkspaceRoot?: string
 }
 
-export type KeyedProvider = Provider | CloudTtsProvider
+export type KeyedProvider = KeyName
 
 const ENV_KEYS: Record<KeyedProvider, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
@@ -48,7 +50,8 @@ const ENV_KEYS: Record<KeyedProvider, string[]> = {
   elevenlabs: TTS_PROVIDERS.elevenlabs.envKeys,
   fish: TTS_PROVIDERS.fish.envKeys,
   inworld: TTS_PROVIDERS.inworld.envKeys,
-  qwen: TTS_PROVIDERS.qwen.envKeys
+  qwen: TTS_PROVIDERS.qwen.envKeys,
+  typesafe: ['TYPESAFE_API_KEY']
 }
 
 function deepMerge<T>(base: T, patch: Partial<T>): T {
@@ -116,6 +119,10 @@ export class SettingsService implements KeySource {
     const cc = this.settings.claude as ClaudeSettings & { approveShell?: boolean }
     if (!CC_MODES.includes(cc.defaultMode)) cc.defaultMode = 'auto'
     delete cc.approveShell
+    // 4 was the fixed limit before there was a setting for it, so a stored 4 was never chosen
+    if (!cc.limitChosen && cc.maxSessions === 4) cc.maxSessions = DEFAULT_SETTINGS.claude.maxSessions
+    cc.maxSessions = Math.min(24, Math.max(1, Math.round(Number(cc.maxSessions) || DEFAULT_SETTINGS.claude.maxSessions)))
+    cc.limitChosen = true
     // the old default backup (GPT-OSS 20B on Groq's free tier, 8k tokens a minute) can't take a voice turn, which runs
     // 10k+ tokens once Claude sessions are on; a stored old default was never chosen, so it moves to Claude Haiku 5.5
     if (OLD_FALLBACK_MODEL_IDS.includes(this.settings.fallbackModelId)) this.settings.fallbackModelId = DEFAULT_FALLBACK_MODEL_ID
@@ -141,8 +148,13 @@ export class SettingsService implements KeySource {
       }
       if (next.voice || next.model || next.instruction) cloud[p] = next
     }
-    const proxy = { ...v.proxy, url: v.proxy?.url?.trim() || this.env.TTS_PROXY?.trim() || '' }
+    const proxy = { auto: true, ...v.proxy, list: v.proxy?.list ?? '', url: v.proxy?.url?.trim() || this.env.TTS_PROXY?.trim() || '' }
     return { ...v, cloud, proxy }
+  }
+
+  /** A URL that returns proxy lines (a Webshare "download" link), from PROXY_LIST_URL in .env; '' = none. */
+  proxyListUrl(): string {
+    return this.env.PROXY_LIST_URL?.trim() || ''
   }
 
   /** The Qwen WebSocket host from DASHSCOPE_HOST (a workspace host), else the public Singapore endpoint. */

@@ -1,6 +1,8 @@
+import { useDiagrams } from './diagrams'
 import { create } from 'zustand'
-import { isCloudTts } from '@shared/tts'
 import type {
+  EdgeRouteState,
+  SlowVoiceNotice,
   AgentEvent,
   AgentState,
   ChatMessage,
@@ -27,12 +29,24 @@ import type { ChunkText } from '../lib/spoken'
 import { listDevices, pickDefaults } from '../audio/devices'
 import { rlog } from '../lib/rlog'
 import { applyTheme } from '../lib/theme-mode'
+import { single } from '../lib/single'
+import { startConsole } from './console'
 
-export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'memory' | 'projects' | 'diagnostics' | 'settings'
+export type View = 'chat' | 'claude' | 'prompts' | 'skills' | 'playbooks' | 'memory' | 'projects' | 'console' | 'diagnostics' | 'settings'
+/** What the chat's right-hand panel shows. */
+export type RightTab = 'glance' | 'console'
 
 const MUTED_KEY = 'va.muted'
 const LEFT_KEY = 'va.leftOpen'
 const RIGHT_KEY = 'va.rightOpen'
+const RIGHT_TAB_KEY = 'va.rightTab'
+const readRightTab = (): RightTab => {
+  try {
+    return localStorage.getItem(RIGHT_TAB_KEY) === 'console' ? 'console' : 'glance'
+  } catch {
+    return 'glance'
+  }
+}
 
 function readBool(key: string, fallback: boolean): boolean {
   try {
@@ -56,6 +70,7 @@ interface Store {
   view: View
   leftOpen: boolean
   rightOpen: boolean
+  rightTab: RightTab
   settings: Settings | null
   models: ModelInfo[]
   styles: PromptStyle[]
@@ -66,6 +81,10 @@ interface Store {
   messages: ChatMessage[]
   agentState: AgentState
   services: Partial<Record<ServiceName, ServiceStatus>>
+  /** The automatic Edge route (pushed by main whenever it re-checks). */
+  edgeRoute: EdgeRouteState | null
+  /** The chosen Edge voice has been slow; shown above the chat until switched or dismissed. */
+  slowVoice: SlowVoiceNotice | null
   partial: string
   level: number
   cueOn: boolean
@@ -82,6 +101,12 @@ interface Store {
   micMuted: boolean
   memoryVersion: number
   mcpVersion: number
+  /** Bumped when the playbooks folder changes; the Playbooks view re-reads on it. */
+  playbooksVersion: number
+  /** Bumped whenever a runbook run moves on; the Playbooks view re-reads the runs on it. */
+  runbooksVersion: number
+  /** The playbook to show when the Playbooks view opens (a chip under a message was clicked). */
+  playbookFocus: string | null
   /** Claude Code sessions managed by voice, with their recent output. */
   claudeSessions: CcSession[]
   claudeOutput: Record<string, CcEvent[]>
@@ -95,9 +120,11 @@ interface Store {
   setView(v: View): void
   setLeftOpen(v: boolean): void
   setRightOpen(v: boolean): void
+  setRightTab(t: RightTab): void
   updateSettings(patch: Partial<Settings>): Promise<void>
   reloadStyles(): Promise<void>
   reloadSkills(): Promise<void>
+  openPlaybook(id: string | null): void
   reloadProjects(): Promise<void>
   reloadSessions(): Promise<void>
   reloadKeys(): Promise<void>
@@ -122,6 +149,7 @@ export const useStore = create<Store>((set, get) => ({
   view: 'chat',
   leftOpen: readBool(LEFT_KEY, true),
   rightOpen: readBool(RIGHT_KEY, false),
+  rightTab: readRightTab(),
   settings: null,
   models: [],
   styles: [],
@@ -132,6 +160,8 @@ export const useStore = create<Store>((set, get) => ({
   messages: [],
   agentState: 'idle',
   services: {},
+  edgeRoute: null,
+  slowVoice: null,
   partial: '',
   level: 0,
   cueOn: false,
@@ -146,6 +176,9 @@ export const useStore = create<Store>((set, get) => ({
   micMuted: false,
   memoryVersion: 0,
   mcpVersion: 0,
+  playbooksVersion: 0,
+  runbooksVersion: 0,
+  playbookFocus: null,
   claudeSessions: [],
   claudeOutput: {},
   claudeSelected: null,
@@ -156,6 +189,7 @@ export const useStore = create<Store>((set, get) => ({
     if (initialised) return
     initialised = true
     playback.subscribe()
+    startConsole()
     playback.setMuted(get().muted)
     playback.onSpeaking((s) => set({ speaking: s }))
     playback.onChunk((turnId, chunk) => {
@@ -167,13 +201,19 @@ export const useStore = create<Store>((set, get) => ({
       set({ chunkTexts: all })
     })
 
-    window.api.onEvent((e: AgentEvent) => {
+    single('agent-events', () => window.api.onEvent((e: AgentEvent) => {
       switch (e.type) {
         case 'state':
           set({ agentState: e.state, partial: e.state === 'user_speaking' ? get().partial : '' })
           break
         case 'service':
           set({ services: { ...get().services, [e.status.name]: e.status } })
+          break
+        case 'edge-route':
+          set({ edgeRoute: e.state })
+          break
+        case 'voice-slow':
+          set({ slowVoice: e.notice })
           break
         case 'message': {
           const msgs = get().messages
@@ -240,9 +280,18 @@ export const useStore = create<Store>((set, get) => ({
         case 'context':
           set({ context: e.snapshot })
           break
+        case 'playbooks-changed':
+          set({ playbooksVersion: get().playbooksVersion + 1 })
+          break
+        case 'runbooks-changed':
+          set({ runbooksVersion: get().runbooksVersion + 1 })
+          break
         case 'skills-changed':
           void get().reloadSkills()
           void get().reloadContext()
+          break
+        case 'diagram':
+          useDiagrams.getState().apply(e.id, e.doc)
           break
         case 'claude': {
           const next = applyClaudeEvent({ sessions: get().claudeSessions, output: get().claudeOutput }, e.event)
@@ -258,7 +307,7 @@ export const useStore = create<Store>((set, get) => ({
           void get().reloadContext()
           break
       }
-    })
+    }))
 
     const [settings, models, styles, projects, sessions, services, keys, history, context, skills] = await Promise.all([
       window.api.settings.get(),
@@ -309,6 +358,14 @@ export const useStore = create<Store>((set, get) => ({
     writeBool(LEFT_KEY, v)
     set({ leftOpen: v })
   },
+  setRightTab: (t) => {
+    try {
+      localStorage.setItem(RIGHT_TAB_KEY, t)
+    } catch {
+      // a preference; fine to lose
+    }
+    set({ rightTab: t })
+  },
   setRightOpen: (v) => {
     writeBool(RIGHT_KEY, v)
     set({ rightOpen: v })
@@ -324,6 +381,9 @@ export const useStore = create<Store>((set, get) => ({
 
   async reloadStyles() {
     set({ styles: await window.api.styles.list() })
+  },
+  openPlaybook(id) {
+    set({ playbookFocus: id, view: 'playbooks' })
   },
   async reloadSkills() {
     try {
@@ -415,7 +475,9 @@ export const selectActiveStyle = (s: Store): PromptStyle | undefined =>
 export const keyedProviders = (keys: KeyStatus[]): Set<KeyStatus['provider']> | null =>
   keys.length ? new Set(keys.filter((k) => k.set).map((k) => k.provider)) : null
 /** false = loaded and no LLM provider has a key (the chat shows how to add one); null = not loaded yet. Voice keys don't count. */
-export const selectHasAnyKey = (s: Store): boolean | null => (s.keys.length ? s.keys.some((k) => k.set && !isCloudTts(k.provider)) : null)
+const CHAT_PROVIDERS = new Set<KeyStatus['provider']>(['anthropic', 'openai', 'groq', 'google', 'xai'])
+/** Voice keys and service keys (TypeSafe for playbooks) don't count: only a chat model can answer. */
+export const selectHasAnyKey = (s: Store): boolean | null => (s.keys.length ? s.keys.some((k) => k.set && CHAT_PROVIDERS.has(k.provider)) : null)
 export const selectActiveModel = (s: Store): ModelInfo | undefined =>
   s.models.find((m) => m.id === s.settings?.modelId)
 

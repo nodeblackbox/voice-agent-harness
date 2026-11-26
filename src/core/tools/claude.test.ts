@@ -10,7 +10,7 @@ function setup() {
   const runs: CcRunOpts[] = []
   const m = new ClaudeSessionManager({
     sdk: (o) => { runs.push(o); return { messages: never, interrupt: async () => {}, close: () => {} } },
-    workspaceRoot: 'C:\\fake\\ws', mkdir: () => {}, defaultMode: 'auto',
+    workspaceRoot: 'C:\\fake\\ws', mkdir: () => {}, defaultMode: 'auto', maxSessions: 4,
   })
   const tools = claudeTools(m) as Record<string, { execute: (a: any, o: any) => Promise<any> }>
   const call = (name: string, args: Record<string, unknown> = {}) => tools[name]!.execute(args, { toolCallId: 't', messages: [] })
@@ -22,7 +22,7 @@ const Q = { questions: [{ question: 'Pick one?', header: 'p', multiSelect: false
 describe('claude voice tools', () => {
   it('exposes the session tools', () => {
     expect(Object.keys(claudeTools(setup().m)).sort()).toEqual(
-      ['claude_answer', 'claude_attach', 'claude_details', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_mode', 'claude_recent', 'claude_remove', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
+      ['claude_answer', 'claude_attach', 'claude_compact', 'claude_details', 'claude_files', 'claude_interrupt', 'claude_list', 'claude_mode', 'claude_recent', 'claude_remove', 'claude_reset', 'claude_send', 'claude_start', 'claude_status', 'claude_stop'])
   })
 
   it('start -> list -> status flow returns immediately with speakable fields', async () => {
@@ -38,7 +38,7 @@ describe('claude voice tools', () => {
     const { call, m } = setup()
     const r = await call('claude_start', { name: 'Astro', task: 'video one', mode: 'bypass', more: [{ name: 'Nova', task: 'video two' }, { name: 'Flow', task: 'video three' }, { name: 'Extra', task: 'x' }, { name: 'Too many', task: 'y' }] })
     expect(r.started).toBe(4)
-    expect(r.results[4]).toMatchObject({ status: 'failed', name: 'Too many', error: expect.stringContaining('limit of 4') })
+    expect(r.results[4]).toMatchObject({ status: 'failed', name: 'Too many', error: expect.stringContaining('limit of 4 open sessions') })
     expect(m.list().map((s) => [s.name, s.mode])).toEqual([['Astro', 'bypass'], ['Nova', 'bypass'], ['Flow', 'bypass'], ['Extra', 'bypass']])
   })
 

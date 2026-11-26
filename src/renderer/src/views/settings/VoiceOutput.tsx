@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Check, Headphones, Play, type LucideIcon } from 'lucide-react'
-import type { CloudTtsProvider, CloudVoiceChoice, TtsCatalog, TtsEngineId, VoiceInfo } from '@shared/types'
-import { CLOUD_TTS_PROVIDERS, TTS_ENGINE_LABELS, TTS_PROVIDERS, cloudChoice, isCloudTts, modelTakesTags } from '@shared/tts'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Check, Gauge, Headphones, Play, type LucideIcon } from 'lucide-react'
+import type { CloudTtsProvider, CloudVoiceChoice, ProxyRank, TtsCatalog, TtsEngineId, VoiceInfo } from '@shared/types'
+import { CLOUD_TTS_PROVIDERS, POCKET_VOICES, TTS_ENGINE_LABELS, TTS_PROVIDERS, cloudChoice, isCloudTts, modelTakesTags } from '@shared/tts'
 import { T, serviceColor, serviceLabel } from '../../theme'
 import { keyedProviders, useStore } from '../../state/store'
-import { Card, Dot, Row, Select, TextInput, Toggle } from '../../components/primitives'
+import { Btn, Card, Dot, Row, Select, TextInput, Toggle } from '../../components/primitives'
 
 const ENGINE_SUB: Record<TtsEngineId, string> = {
   edge: 'Free Microsoft voice, streamed sentence by sentence. If it is unreachable or rate-limited the local Kokoro voice takes over until it recovers.',
   kokoro: 'Runs on this machine (needs the sidecar Python). Slower to start, never rate-limited.',
+  pocket: 'Kyutai Pocket TTS, on this machine\u2019s CPU: one to two seconds to make a sentence, no key, never rate-limited; Edge speaks while it starts. Needs pocket-tts installed, or the address of a server you run.',
   system: 'The Windows voice, spoken by the renderer. Always available.',
   elevenlabs: 'Hosted. Needs an ElevenLabs key; the free tier covers about ten thousand characters a month.',
   fish: 'Hosted. The free tier model works without credit; your own clones are listed once the key is set.',
@@ -28,6 +29,60 @@ function Section({ icon: Icon, title, children }: { icon: LucideIcon; title: str
   )
 }
 
+/** Kokoro v1.0 English voices: a/b = American/British, f/m = female/male. */
+const KOKORO_VOICES = [
+  'af_heart', 'af_bella', 'af_nicole', 'af_sarah', 'af_sky', 'af_nova', 'af_river', 'af_jessica', 'af_kore', 'af_aoede', 'af_alloy',
+  'am_michael', 'am_fenrir', 'am_puck', 'am_adam', 'am_echo', 'am_eric', 'am_liam', 'am_onyx',
+  'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily', 'bm_george', 'bm_fable', 'bm_daniel', 'bm_lewis'
+]
+const kokoroLabel = (id: string): string => {
+  const [tag, name] = id.split('_')
+  const who = { af: 'US female', am: 'US male', bf: 'UK female', bm: 'UK male' }[tag ?? ''] ?? tag
+  return name ? `${name[0]!.toUpperCase()}${name.slice(1)} · ${who}` : id
+}
+
+const SHOWN = 6
+
+const ago = (t: number, now: number): string => {
+  if (!t) return 'never'
+  const m = Math.round((now - t) / 60_000)
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`
+}
+
+/** The ranking behind the automatic Edge route: fastest first, direct always shown, the route in use highlighted. */
+export function RouteTable({ rows, current, onUse }: { rows: ProxyRank[]; current: string; onUse?: (url: string) => void }) {
+  const top = rows.slice(0, SHOWN)
+  const direct = rows.find((r) => !r.url)
+  if (direct && !top.includes(direct)) top.push(direct)
+  const dead = rows.filter((r) => r.firstMs === null).length
+  return (
+    <div className="pb-3 flex flex-col gap-1" data-testid="route-table">
+      {top.map((r) => {
+        const inUse = r.url === current
+        return (
+          <div key={r.url || 'direct'} className="flex items-center gap-3 text-xs" style={{ fontFamily: T.mono, color: inUse ? T.cyan : T.text }}>
+            <span style={{ width: 22, color: T.text3, textAlign: 'right' }}>{rows.indexOf(r) + 1}</span>
+            <span style={{ width: 170 }}>{r.url ? r.label : 'direct (your connection)'}</span>
+            <span className="truncate" title={r.country} style={{ width: 130, whiteSpace: 'nowrap', color: inUse ? T.cyan : T.text2 }}>{r.country ?? ''}</span>
+            <span style={{ width: 70, textAlign: 'right' }}>{r.firstMs === null ? 'failed' : `${r.firstMs} ms`}</span>
+            <span style={{ width: 70, color: T.text3 }}>{inUse ? 'in use' : r.ok < r.runs ? `${r.ok}/${r.runs} ok` : ''}</span>
+            {onUse && r.url && r.firstMs !== null && !inUse && (
+              <Btn small onClick={() => onUse(r.url)}>
+                Use
+              </Btn>
+            )}
+          </div>
+        )
+      })}
+      {rows.length > top.length && (
+        <span className="text-xs" style={{ color: T.text3 }}>
+          {rows.length - top.length} more{dead ? `, ${dead} failed` : ''}.
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function VoiceOutput() {
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
@@ -37,7 +92,14 @@ export function VoiceOutput() {
   const [voices, setVoices] = useState<VoiceInfo[]>([])
   const [catalog, setCatalog] = useState<TtsCatalog | null>(null)
   const [previewing, setPreviewing] = useState<string | null>(null)
+  /** Edge voices timed from here: ms until a new sentence is ready, 'timing' while measuring, 'failed' on error. */
+  const [speeds, setSpeeds] = useState<Record<string, number | 'timing' | 'failed'>>({})
   const [proxyDraft, setProxyDraft] = useState<string | null>(null)
+  const [pocketDraft, setPocketDraft] = useState<string | null>(null)
+  const [listDraft, setListDraft] = useState<string | null>(null)
+  const [showRanking, setShowRanking] = useState(false)
+  const route = useStore((s) => s.edgeRoute)
+  const [now, setNow] = useState(() => Date.now())
   const engine = settings?.voice.engine ?? 'edge'
   const cloud: CloudTtsProvider | null = isCloudTts(engine) ? engine : null
 
@@ -54,6 +116,15 @@ export function VoiceOutput() {
         setVoices(en)
       })
       .catch(() => setVoices([]))
+  }, [])
+
+  useEffect(() => {
+    window.api.speak
+      .route()
+      .then((edgeRoute) => useStore.setState({ edgeRoute }))
+      .catch(() => undefined)
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {
@@ -85,6 +156,16 @@ export function VoiceOutput() {
   const tts = services.tts
   const info = cloud ? TTS_PROVIDERS[cloud] : null
   const choice = cloud ? cloudChoice(v, cloud) : null
+  const timeVoice = async (name: string) => {
+    if (speeds[name] === 'timing') return
+    setSpeeds((s) => ({ ...s, [name]: 'timing' }))
+    try {
+      const ms = await window.api.speak.speed(name)
+      setSpeeds((s) => ({ ...s, [name]: ms }))
+    } catch {
+      setSpeeds((s) => ({ ...s, [name]: 'failed' }))
+    }
+  }
   const setCloud = (patch: Partial<CloudVoiceChoice>) => {
     if (!cloud) return
     void updateSettings({ voice: { ...v, cloud: { ...v.cloud, [cloud]: { ...v.cloud?.[cloud], ...patch } } } })
@@ -96,9 +177,12 @@ export function VoiceOutput() {
   const voiceOptions = cloudVoices.map((x) => ({ id: x.shortName, label: x.name === x.shortName ? x.name : `${x.name} · ${x.gender || x.locale}` }))
   if (choice && !cloudVoices.some((x) => x.shortName === choice.voice)) voiceOptions.unshift({ id: choice.voice, label: `custom · ${choice.voice.slice(0, 24)}` })
   const takesTags = cloud && choice ? modelTakesTags(cloud, choice.model) : false
+  // the account's own list loaded and the saved voice id isn't in it (a voice from another account)
+  const voiceMissing = !!(cloud && choice?.voice && catalog?.voices?.length && !catalog.error && !catalog.voices.some((x) => x.shortName === choice.voice))
   const engineOptions = [
     { id: 'edge', label: TTS_ENGINE_LABELS.edge },
     { id: 'kokoro', label: TTS_ENGINE_LABELS.kokoro },
+    { id: 'pocket', label: TTS_ENGINE_LABELS.pocket },
     { id: 'system', label: TTS_ENGINE_LABELS.system },
     ...CLOUD_TTS_PROVIDERS.map((p) => {
       const locked = keyed !== null && !keyed.has(p)
@@ -109,7 +193,34 @@ export function VoiceOutput() {
     if (proxyDraft !== null && proxyDraft.trim() !== v.proxy.url) void updateSettings({ voice: { ...v, proxy: { ...v.proxy, url: proxyDraft.trim() } } })
     setProxyDraft(null)
   }
-
+  const list = listDraft ?? v.proxy.list ?? ''
+  const proxyCount = list.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#')).length
+  const commitList = () => {
+    if (listDraft !== null && listDraft !== v.proxy.list) void updateSettings({ voice: { ...v, proxy: { ...v.proxy, list: listDraft } } })
+    setListDraft(null)
+  }
+  const auto = v.proxy.auto !== false
+  const testAll = async () => {
+    commitList()
+    try {
+      useStore.setState({ edgeRoute: await window.api.speak.testRoutes() })
+      setShowRanking(true)
+    } catch {
+      /* the state event carries the outcome */
+    }
+  }
+  const routeLine = !route
+    ? ''
+    : route.testing
+      ? 'Testing routes…'
+      : route.proxies === 0
+        ? 'No proxies yet: Edge goes direct.'
+        : `${route.url ? `Now through ${route.label}${route.country ? ` (${route.country})` : ''}` : 'Now direct'}${route.firstMs != null ? ` · ${route.firstMs} ms` : ''}${route.url ? ` (direct ${route.directMs != null ? `${route.directMs} ms` : 'failed'})` : ''} · checked ${ago(route.checkedAt, now)} · ${route.proxies} proxies, all tested ${ago(route.rankedAt, now)}`
+  const pocketState = engine === 'pocket' ? tts?.state : undefined
+  const pocketLoading = pocketState === 'starting' && !!tts?.detail?.includes('loading')
+  const pocketVoice = v.pocketVoice?.trim() || 'cosette'
+  const kokoroState = engine === 'kokoro' ? tts?.state : undefined
+  const kokoroLoading = kokoroState === 'starting' && !!tts?.detail?.includes('loading')
   return (
     <Section icon={Headphones} title="Voice output">
       <Card pad={0}>
@@ -118,7 +229,7 @@ export function VoiceOutput() {
             <span className="inline-flex items-center gap-2 text-xs" style={{ color: T.text2 }}>
               <Dot color={serviceColor(tts?.state)} />
               <span style={{ color: T.text3 }}>{tts?.detail ?? serviceLabel(tts?.state)}</span>
-              <Select value={engine} width={150} onChange={(id) => void updateSettings({ voice: { ...v, engine: id as TtsEngineId } })} options={engineOptions} />
+              <Select value={engine} width={180} onChange={(id) => void updateSettings({ voice: { ...v, engine: id as TtsEngineId } })} options={engineOptions} />
             </span>
           </Row>
           {cloud && info && choice && (
@@ -126,7 +237,18 @@ export function VoiceOutput() {
               <Row label="Model" sub={catalog?.error ? `Couldn't list from ${info.label}: ${catalog.error}` : 'The provider’s models that can speak.'}>
                 <Select value={choice.model} width={230} onChange={(model) => setCloud({ model })} options={modelOptions} />
               </Row>
-              <Row label="Voice" sub={catalog && !catalog.error ? `${cloudVoices.length} listed; your own voices first.` : info.voiceHint}>
+              <Row
+                label="Voice"
+                sub={
+                  voiceMissing ? (
+                    <span style={{ color: T.red }}>This voice isn't on the account this {info.label} key belongs to, so every sentence would fail. Pick one below, or put the owning account's key in Settings &gt; Providers or .env.</span>
+                  ) : catalog && !catalog.error ? (
+                    `${cloudVoices.length} listed; your own voices first.`
+                  ) : (
+                    info.voiceHint
+                  )
+                }
+              >
                 <span className="inline-flex items-center gap-2">
                   <span
                     className="inline-flex items-center gap-1 text-xs"
@@ -162,14 +284,108 @@ export function VoiceOutput() {
               )}
             </>
           )}
-          {engine === 'kokoro' && (
-            <Row label="Kokoro voice" sub="af_ = American female, am_ = male, bf_/bm_ = British.">
-              <Select
-                value={v.kokoroVoice}
-                width={130}
-                onChange={(kokoroVoice) => void updateSettings({ voice: { ...v, kokoroVoice } })}
-                options={['af_heart', 'af_bella', 'af_nicole', 'am_michael', 'am_fenrir', 'bf_emma', 'bm_george'].map((id) => ({ id, label: id }))}
+          {engine === 'pocket' && (
+            <Row
+              label="Pocket TTS"
+              sub={
+                pocketState === 'ready'
+                  ? 'Running on this machine.'
+                  : pocketState === 'error'
+                    ? (tts?.detail ?? 'Failed to start.')
+                    : 'Starts in a few seconds (the first time it downloads the model once). Edge speaks until it is ready.'
+              }
+            >
+              <span className="inline-flex items-center gap-2 text-xs" style={{ color: pocketState === 'ready' ? T.green : pocketState === 'error' ? T.red : T.amber }}>
+                <Dot color={serviceColor(pocketState)} />
+                {pocketState === 'ready' ? 'Ready' : pocketState === 'error' ? 'Failed' : pocketLoading ? <span className="va-pulse">Starting…</span> : 'Not started'}
+                {pocketState !== 'ready' && !pocketLoading && (
+                  <Btn small onClick={() => void window.api.speak.startPocket()}>
+                    {pocketState === 'error' ? 'Retry' : 'Start now'}
+                  </Btn>
+                )}
+              </span>
+            </Row>
+          )}
+          {engine === 'pocket' && (
+            <Row label="Pocket voice" sub="A built-in voice. Changes restart the server and apply from the next sentence.">
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1 text-xs"
+                  style={{ color: previewing === pocketVoice ? T.cyan : T.text3, cursor: pocketState === 'ready' ? 'pointer' : 'default', opacity: pocketState === 'ready' ? 1 : 0.5 }}
+                  onClick={() => pocketState === 'ready' && void preview(pocketVoice, 'pocket')}
+                  role="button"
+                  aria-label="Preview Pocket voice"
+                  title={pocketState === 'ready' ? 'Hear this voice' : 'Available once Pocket TTS is running'}
+                >
+                  <Play size={11} /> preview
+                </span>
+                <Select
+                  value={pocketVoice}
+                  width={190}
+                  onChange={(id) => void updateSettings({ voice: { ...v, pocketVoice: id } })}
+                  options={(POCKET_VOICES.some((x) => x.id === pocketVoice) ? POCKET_VOICES : [{ id: pocketVoice, note: 'custom' }, ...POCKET_VOICES]).map((x) => ({ id: x.id, label: `${x.id[0]!.toUpperCase()}${x.id.slice(1).replace(/_/g, ' ')} · ${x.note}` }))}
+                />
+              </span>
+            </Row>
+          )}
+          {engine === 'pocket' && (
+            <Row label="Pocket server" sub="Empty: pocket-tts on the PATH (or POCKET_TTS_COMMAND in .env). Or the full path to pocket-tts, a command like uvx pocket-tts, or the address of a server you run (http://127.0.0.1:8000).">
+              <TextInput
+                mono
+                value={pocketDraft ?? v.pocketServer ?? ''}
+                onChange={setPocketDraft}
+                onBlur={() => {
+                  if (pocketDraft !== null && pocketDraft.trim() !== (v.pocketServer ?? '')) void updateSettings({ voice: { ...v, pocketServer: pocketDraft.trim() } })
+                  setPocketDraft(null)
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                placeholder="pocket-tts"
+                style={{ width: 300 }}
               />
+            </Row>
+          )}
+          {engine === 'kokoro' && (
+            <Row
+              label="Kokoro"
+              sub={
+                kokoroState === 'ready'
+                  ? 'Loaded on this machine.'
+                  : kokoroState === 'error'
+                    ? (tts?.detail ?? 'Failed to load.')
+                    : 'Loading takes 30 to 60 seconds. Edge speaks until it is ready, then replies switch to Kokoro by themselves.'
+              }
+            >
+              <span className="inline-flex items-center gap-2 text-xs" style={{ color: kokoroState === 'ready' ? T.green : kokoroState === 'error' ? T.red : T.amber }}>
+                <Dot color={serviceColor(kokoroState)} />
+                {kokoroState === 'ready' ? 'Ready' : kokoroState === 'error' ? 'Failed' : kokoroLoading ? <span className="va-pulse">Loading…</span> : 'Not loaded'}
+                {kokoroState !== 'ready' && !kokoroLoading && (
+                  <Btn small onClick={() => void window.api.speak.startKokoro()}>
+                    {kokoroState === 'error' ? 'Retry' : 'Load now'}
+                  </Btn>
+                )}
+              </span>
+            </Row>
+          )}
+          {engine === 'kokoro' && (
+            <Row label="Kokoro voice" sub="Changes take effect from the next sentence. Preview plays it once Kokoro is loaded.">
+              <span className="inline-flex items-center gap-2">
+                <span
+                  className="inline-flex items-center gap-1 text-xs"
+                  style={{ color: previewing === v.kokoroVoice ? T.cyan : T.text3, cursor: kokoroState === 'ready' ? 'pointer' : 'default', opacity: kokoroState === 'ready' ? 1 : 0.5 }}
+                  onClick={() => kokoroState === 'ready' && void preview(v.kokoroVoice, 'kokoro')}
+                  role="button"
+                  aria-label="Preview Kokoro voice"
+                  title={kokoroState === 'ready' ? 'Hear this voice' : 'Available once Kokoro is loaded'}
+                >
+                  <Play size={11} /> preview
+                </span>
+                <Select
+                  value={v.kokoroVoice}
+                  width={170}
+                  onChange={(kokoroVoice) => void updateSettings({ voice: { ...v, kokoroVoice } })}
+                  options={(KOKORO_VOICES.includes(v.kokoroVoice) ? KOKORO_VOICES : [v.kokoroVoice, ...KOKORO_VOICES]).map((id) => ({ id, label: kokoroLabel(id) }))}
+                />
+              </span>
             </Row>
           )}
           <Row label="Rate" sub={`${v.rate > 0 ? '+' : ''}${Math.round(v.rate * 100)}%`}>
@@ -180,7 +396,14 @@ export function VoiceOutput() {
               <input type="range" min={-50} max={50} step={5} value={v.pitch} onChange={(e) => void updateSettings({ voice: { ...v, pitch: Number(e.target.value) } })} />
             </Row>
           )}
-          <Row label="Proxy" sub="http://user:pass@host:port. Microsoft throttles the free Edge voice per IP address; a proxy gets around it. The hosted voices are quick direct, so leave them off unless they are blocked.">
+          <Row
+            label="Proxy"
+            sub={
+              auto && route?.proxies
+                ? 'http://user:pass@host:port. For the hosted voices (Hosted toggle); Edge picks its own route while Automatic is on.'
+                : 'http://user:pass@host:port. Microsoft throttles the free Edge voice per IP address; a proxy gets around it. The hosted voices are quick direct, so leave them off unless they are blocked.'
+            }
+          >
             <span className="inline-flex items-center gap-3 text-xs" style={{ color: T.text2 }}>
               <TextInput
                 mono
@@ -192,7 +415,7 @@ export function VoiceOutput() {
                 onKeyDown={(e) => e.key === 'Enter' && commitProxy()}
                 onBlur={commitProxy}
               />
-              <label className="inline-flex items-center gap-1.5">
+              <label className="inline-flex items-center gap-1.5" style={{ opacity: auto && route?.proxies ? 0.45 : 1 }}>
                 Edge <Toggle on={v.proxy.edge} onChange={(edge) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, edge } } })} />
               </label>
               <label className="inline-flex items-center gap-1.5">
@@ -200,11 +423,63 @@ export function VoiceOutput() {
               </label>
             </span>
           </Row>
+          <Row
+            label="Edge route"
+            sub={
+              auto
+                ? 'Automatic: your own connection while Edge answers quickly, the fastest of your proxies when Microsoft throttles it. Re-checks when Edge slows down or fails, and tests the whole list once a day.'
+                : 'Off: Edge uses the Proxy above when its Edge toggle is on, else your own connection.'
+            }
+          >
+            <span className="inline-flex items-center gap-3 text-xs" style={{ color: T.text2 }}>
+              <label className="inline-flex items-center gap-1.5">
+                Automatic <Toggle on={auto} onChange={(on) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, auto: on } } })} />
+              </label>
+              <Btn small icon={Gauge} onClick={() => void testAll()} disabled={!!route?.testing || (proxyCount === 0 && !route?.proxies)}>
+                {route?.testing ? 'Testing…' : 'Test all'}
+              </Btn>
+            </span>
+          </Row>
+          {route && (
+            <div className="pb-2 flex flex-col gap-1 text-xs" data-testid="route-status">
+              <span style={{ color: route.testing ? T.amber : T.text2 }}>{routeLine}</span>
+              {route.note && !route.testing && (route.proxies === 0 || /^Couldn't/.test(route.note)) && <span style={{ color: T.text3 }}>{route.note}</span>}
+              {route.rows.length > 1 && (
+                <button type="button" onClick={() => setShowRanking((x) => !x)} className="self-start" style={{ color: T.cyan, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                  {showRanking ? 'Hide ranking' : 'Show ranking'}
+                </button>
+              )}
+            </div>
+          )}
+          {route && showRanking && (
+            <RouteTable
+              rows={route.rows}
+              current={auto ? route.url : v.proxy.edge ? v.proxy.url : ''}
+              onUse={auto ? undefined : (url) => void updateSettings({ voice: { ...v, proxy: { ...v.proxy, url, edge: true } } })}
+            />
+          )}
+          <Row label="Proxy list" sub="One per line: host:port:user:pass or a URL. PROXY_LIST_URL in .env (a Webshare download link) adds the list it returns, fetched at most hourly.">
+            <textarea
+              aria-label="Proxy list"
+              value={list}
+              onChange={(e) => setListDraft(e.target.value)}
+              onBlur={commitList}
+              rows={2}
+              spellCheck={false}
+              placeholder="203.0.113.10:8080:user:pass"
+              className="rounded-lg p-2 text-xs resize-y"
+              // the lines carry passwords: hidden like the URL field unless you are editing them
+              style={{ width: 300, background: T.bg, color: T.text, border: `1px solid ${T.border}`, fontFamily: T.mono, ...(listDraft === null ? ({ WebkitTextSecurity: 'disc' } as CSSProperties) : {}) }}
+            />
+          </Row>
         </div>
         {engine === 'edge' && (
           <div className="px-4 py-3 flex flex-col gap-1.5">
             <span className="text-xs font-medium" style={{ color: T.text3 }}>
               Voice
+            </span>
+            <span className="text-xs" style={{ color: T.text3, lineHeight: 1.5 }}>
+              Edge sends nothing until a whole sentence is ready, and how long that takes depends on the voice: the Multilingual ones are several times slower to start than the plain voice of the same name. "speed" times a voice on new text.
             </span>
             {voices.length === 0 && (
               <span className="text-xs" style={{ color: T.text3 }}>
@@ -214,6 +489,8 @@ export function VoiceOutput() {
             {voices.map((voice) => {
               const selected = v.voice === voice.shortName
               const isDefault = voice.shortName === 'en-US-AvaNeural'
+              const speed = speeds[voice.shortName]
+              const slowKind = voice.shortName.includes('Multilingual')
               return (
                 <button
                   key={voice.shortName}
@@ -222,14 +499,25 @@ export function VoiceOutput() {
                   style={{ background: selected ? T.raised : 'transparent', border: `1px solid ${selected ? T.cyanBorder : 'transparent'}`, cursor: 'pointer' }}
                 >
                   <span style={{ width: 14, color: T.cyan }}>{selected ? <Check size={13} /> : null}</span>
-                  <span className="text-sm" style={{ width: 110 }}>
+                  <span className="text-sm" style={{ width: 160 }}>
                     {voice.name}
                   </span>
                   <span className="text-xs" style={{ color: T.text3, fontFamily: T.mono, width: 50 }}>
                     {voice.locale}
                   </span>
                   <span className="text-xs flex-1" style={{ color: T.text2 }}>
-                    {isDefault ? 'Default · warm, quick' : voice.gender}
+                    {isDefault ? 'Default · warm, quick' : slowKind ? `${voice.gender} · slower to start` : voice.gender}
+                  </span>
+                  <span
+                    className="inline-flex items-center gap-1 text-xs"
+                    title="Time this voice on a new sentence (three tries, the middle one shown)"
+                    style={{ width: 76, justifyContent: 'flex-end', fontFamily: typeof speed === 'number' ? T.mono : undefined, color: typeof speed === 'number' ? (speed > 2000 ? T.amber : speed <= 1200 ? T.green : T.text2) : T.text3, cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void timeVoice(voice.shortName)
+                    }}
+                  >
+                    {speed === 'timing' ? 'timing…' : speed === 'failed' ? 'failed' : typeof speed === 'number' ? `${(speed / 1000).toFixed(1)} s` : (<><Gauge size={11} /> speed</>)}
                   </span>
                   <span
                     className="inline-flex items-center gap-1 text-xs"

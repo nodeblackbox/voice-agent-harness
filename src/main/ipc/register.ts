@@ -1,11 +1,13 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { checkRoot } from '@core/explore/roots'
 import { generateText } from 'ai'
 import { IPC } from '@shared/ipc'
-import type { CloudTtsProvider, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
+import type { CloudTtsProvider, KeyName, LogLevel, PlaybookLabel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
 import { withProjectDefaults } from '@core/projects'
+import type { EdgeRouteService } from '../services/edgeRoute'
 import { BUILTIN_STYLES } from '@core/prompts/styles'
 import { ModelFactory } from '@core/providers/factory'
 import type { MemoryStore } from '@core/memory/store'
@@ -14,8 +16,14 @@ import type { SidecarService } from '../services/sidecar'
 import type { SearxngService } from '../services/searxng'
 import type { McpService } from '../services/mcp'
 import type { ClaudeService } from '../services/claude'
+import type { DiagramService } from '../services/diagrams'
+import type { PlaybookService } from '../services/playbooks'
+import type { PlaybookReview } from '../services/playbookReview'
+import { testPlaybook } from '@core/playbooks/test-run'
+import type { JevClient } from '@core/jev/client'
+import type { DiagramCheck } from '@shared/diagram'
 import { CC_MODES, type CcAnswer, type CcMode } from '@shared/claude'
-import { log, logAt } from '../services/log'
+import { consoleHistory, log, logAt } from '../services/log'
 import { diagnosticsReport, lastTurn, listLogs, openLogsFolder, readTrace, sessionAnalysis, suggestTuning, tailLog } from '../services/diagnostics'
 
 const LEVELS = new Set<LogLevel>(['debug', 'info', 'warn', 'error'])
@@ -29,7 +37,14 @@ export interface IpcDeps {
   searxng: SearxngService
   mcp: McpService
   claude: ClaudeService
+  diagrams: DiagramService
+  playbooks: PlaybookService
+  review: PlaybookReview
+  jev: JevClient
   services: () => ServiceStatus[]
+  edgeRoute: EdgeRouteService
+  kokoro: { start(opts?: { force?: boolean }): Promise<boolean> }
+  pocket: { start(opts?: { force?: boolean }): Promise<boolean> }
   broadcastSettings(s: Settings): void
 }
 
@@ -60,7 +75,7 @@ export function registerIpc(d: IpcDeps): void {
   })
   h(IPC.modelsList, () => MODELS)
   h(IPC.keysStatus, () => d.settings.keyStatus())
-  h(IPC.keysSet, (_e, provider: Provider | CloudTtsProvider, key: string) => d.settings.setKey(provider, key))
+  h(IPC.keysSet, (_e, provider: KeyName, key: string) => d.settings.setKey(provider, key))
 
   h(IPC.chatSend, (_e, text: string) => d.agent.send(text))
   h(IPC.chatCancel, () => d.agent.cancel())
@@ -83,6 +98,11 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.speakStop, () => d.agent.stopReading())
   h(IPC.ttsPreview, (_e, voice: string, engine?: TtsEngineId) => d.agent.preview(voice, engine))
   h(IPC.ttsCatalog, (_e, provider: CloudTtsProvider) => d.agent.catalog(provider))
+  h(IPC.ttsRoute, () => d.edgeRoute.state())
+  h(IPC.ttsRouteTest, () => d.edgeRoute.retestAll())
+  h(IPC.ttsVoiceSpeed, (_e, voice: string) => d.agent.voiceSpeed(String(voice)))
+  h(IPC.kokoroStart, () => d.kokoro.start({ force: true }))
+  h(IPC.pocketStart, () => d.pocket.start({ force: true }))
   h(IPC.voicesList, () => d.agent.voices())
 
   ipcMain.on(IPC.playbackStarted, (_e, turnId: string, seq: number, emittedAt?: number) => d.agent.onPlaybackStarted(turnId, seq, typeof emittedAt === 'number' ? emittedAt : undefined))
@@ -113,6 +133,24 @@ export function registerIpc(d: IpcDeps): void {
     d.win()?.webContents.send(IPC.event, { type: 'skills-changed' })
     return skills
   }
+  h(IPC.playbooksList, () => d.playbooks.state())
+  h(IPC.playbooksCheck, (_e, id: string, text: string) => d.playbooks.check(String(id), String(text)))
+  h(IPC.playbooksSave, (_e, id: string, text: string, previousId?: string) => d.playbooks.save(String(id), String(text), previousId ? String(previousId) : undefined))
+  h(IPC.playbooksToggle, (_e, id: string, on: boolean) => d.playbooks.toggle(String(id), !!on))
+  h(IPC.playbooksDelete, (_e, id: string) => d.playbooks.delete(String(id)))
+  // the last 40 things the user said or typed, newest first, against the draft in the editor
+  h(IPC.playbooksTest, (_e, id: string, text: string) => {
+    const t = d.settings.get().playbooks
+    return testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...t }, t.useJev ? { client: d.jev, timeoutMs: t.jevTimeoutMs, intentMin: t.intentMin } : undefined)
+  })
+  h(IPC.playbooksEvaluate, (_e, id: string, text?: string) => d.review.evaluate(String(id), typeof text === 'string' ? text : undefined))
+  h(IPC.playbooksLabel, (_e, id: string, messageId: string, label: PlaybookLabel | null) => d.review.label(String(id), String(messageId), label === 'should' || label === 'should_not' ? label : null))
+  h(IPC.playbooksSuggest, (_e, id: string, text?: string) => d.review.suggest(String(id), typeof text === 'string' ? text : undefined))
+  h(IPC.runbooksRuns, () => d.agent.runbooks.list())
+  h(IPC.runbooksCancel, (_e, runId: string) => d.agent.runbooks.cancel(String(runId)))
+  h(IPC.playbooksOpenFolder, async () => {
+    await shell.openPath(d.playbooks.dir)
+  })
   h(IPC.skillsList, () => d.settings.skills())
   h(IPC.skillsSave, (_e, skill: Skill) => skillsChanged(d.settings.saveSkill(skill)))
   h(IPC.skillsDelete, (_e, id: string) => skillsChanged(d.settings.deleteSkill(id)))
@@ -172,13 +210,30 @@ export function registerIpc(d: IpcDeps): void {
   h(IPC.claudeSetMode, (_e, id: string, mode: CcMode) => (CC_MODES.includes(mode) ? d.claude.manager.setMode(id, mode) : { ok: false, error: 'Unknown mode.' }))
   h(IPC.claudeRename, (_e, id: string, name: string) => d.claude.manager.rename(id, name))
   h(IPC.claudeReset, (_e, id: string) => d.claude.manager.reset(id))
+  h(IPC.claudeCompact, (_e, id: string, focus?: string) => d.claude.manager.compact(id, focus ?? ''))
   h(IPC.claudeRemove, (_e, id: string, deleteFolder?: boolean) => d.claude.manager.remove(id, { deleteFolder: !!deleteFolder }))
   h(IPC.claudeFolders, () => d.claude.manager.folders())
   h(IPC.claudePickFolder, () => d.claude.pickFolder())
   h(IPC.claudeAccount, (_e, fresh?: boolean) => d.claude.account(!!fresh))
+  h(IPC.explorePickFolder, async () => {
+    const win = d.win()
+    const opts = { title: 'Choose a folder the assistant may read', properties: ['openDirectory' as const] }
+    const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+  h(IPC.exploreCheck, (_e, p: string) => checkRoot(String(p ?? '')))
   h(IPC.claudeFiles, (_e, id: string) => d.claude.manager.files(id))
   h(IPC.claudeRead, (_e, id: string, rel: string) => d.claude.manager.readFile(id, rel))
+  h(IPC.claudeWrite, (_e, id: string, rel: string, text: string, expectedMtime?: number) => d.claude.manager.writeFile(id, rel, text, expectedMtime))
   h(IPC.claudeExternal, () => d.claude.manager.external())
+
+  h(IPC.diagramsList, () => d.diagrams.library.list())
+  h(IPC.diagramsGet, (_e, id: string) => d.diagrams.library.get(id) ?? null)
+  // the owner's own edits: a new version, never a replacement
+  h(IPC.diagramsSave, (_e, id: string, x: { code?: string; title?: string; note?: string }) => d.diagrams.library.commit(id, { ...x, by: 'user' })?.doc ?? null)
+  h(IPC.diagramsCreate, (_e, x: { title: string; code: string }) => d.diagrams.library.create({ ...x, by: 'user', sessionId: d.agent.currentSessionId }))
+  h(IPC.diagramsDelete, (_e, id: string) => d.diagrams.library.remove(id))
+  ipcMain.on(IPC.diagramChecked, (_e, id: string, result: DiagramCheck | null) => d.diagrams.checked(id, result))
   h(IPC.claudeExternalEvents, (_e, sessionId: string, cwd?: string) => d.claude.manager.externalEvents(sessionId, cwd))
   h(IPC.claudeAttach, (_e, x: { sessionId: string; title: string; cwd: string }) => d.claude.manager.attach(x))
   h(IPC.claudeOpen, (_e, id: string, rel: string, how: 'default' | 'reveal' | 'code') => d.claude.open(id, rel, how))
@@ -203,6 +258,7 @@ export function registerIpc(d: IpcDeps): void {
   })
   h(IPC.sidecarRestart, () => d.sidecar.restart())
   h(IPC.contextSnapshot, () => d.agent.snapshot())
+  h(IPC.consoleHistory, () => consoleHistory())
   h(IPC.logsList, () => listLogs())
   h(IPC.logsTail, (_e, name: string, lines?: number) => tailLog(String(name), lines))
   h(IPC.logsOpenFolder, () => openLogsFolder())

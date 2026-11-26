@@ -2,6 +2,7 @@ import type { AudioChunk, PlaybackSettings } from '@shared/types'
 import { DEFAULT_TUNING } from '@shared/tuning'
 import { ChunkQueue, isTerminalMarker, type QueuedChunk } from './chunk-queue'
 import { rlog } from '../lib/rlog'
+import { single } from '../lib/single'
 
 interface LiveSource {
   seq: number
@@ -236,8 +237,8 @@ export const playback = {
   },
   subscribe(): () => void {
     if (unsubscribed) return () => undefined
-    const offChunk = window.api.onAudioChunk((c) => void handleChunk(c))
-    const offCancel = window.api.onAudioCancel((id) => cancel(id))
+    const offChunk = single('audio-chunk', () => window.api.onAudioChunk((c) => void handleChunk(c)))
+    const offCancel = single('audio-cancel', () => window.api.onAudioCancel((id) => cancel(id)))
     return () => {
       unsubscribed = true
       offChunk()

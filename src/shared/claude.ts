@@ -41,6 +41,9 @@ export interface CcEvent {
   durationMs?: number
   costUsd?: number
   turns?: number
+  /** result: tokens the run read (cached ones included) and wrote. */
+  tokensIn?: number
+  tokensOut?: number
 }
 
 /** A saved Claude Code session elsewhere on this machine (CLI, IDE, other apps). */
@@ -64,8 +67,12 @@ export interface CcFile {
   skipped?: boolean
 }
 
+/** A save from the in-app editor. `conflict`: the file changed on disk since it was read (nothing was written). */
+export type CcFileSaved = { ok: true; mtime: number; size: number } | { ok: false; error: string; conflict?: boolean }
+
 export type CcFileContent =
-  | { kind: 'text'; text: string; size: number; truncated: boolean }
+  /** `mtime`: the file's change time when read, sent back with a save so an edit made meanwhile is never overwritten unseen. */
+  | { kind: 'text'; text: string; size: number; truncated: boolean; mtime: number }
   | { kind: 'binary'; size: number }
 
 /** Serializable snapshot, safe to send over IPC. */
@@ -104,10 +111,27 @@ export interface CcSession {
   pending?: CcPending
   queued: string[]
   lastSummary: string
+  /** What the runs so far would cost at API prices (on a subscription this is plan usage, not a bill). */
   costUsd: number
+  /** Tokens read (cached ones included) and written across the session's runs. */
+  tokensIn?: number
+  tokensOut?: number
+  /** How full its context window is, from the last turn (the CLI's own count when it gives one). */
+  context?: CcContext
+  /** How many times its conversation was compacted (by the CLI near the limit, or when asked). */
+  compactions?: number
   turns: number
   createdAt: number
   updatedAt: number
+}
+
+/** A session's context window: tokens in use of the most it can hold. */
+export interface CcContext {
+  tokens: number
+  max: number
+  /** 0 to 100, rounded */
+  percent: number
+  at: number
 }
 
 export type CcManagerEvent =
@@ -116,6 +140,11 @@ export type CcManagerEvent =
   | { type: 'needs-input'; id: string; name: string; pending: CcPending }
   | { type: 'finished'; id: string; name: string; summary: string }
   | { type: 'removed'; id: string }
+  | { type: 'started'; id: string; name: string; task: string }
+  /** The context passed another tenth of the window on its way up (`previous` is the percent before). */
+  | { type: 'context'; id: string; name: string; percent: number; previous: number; tokens: number; max: number }
+  | { type: 'compacted'; id: string; name: string; before: number; after?: number; how: 'auto' | 'manual' }
+  | { type: 'error'; id: string; name: string; error: string }
 
 export type CcAnswer =
   | { kind: 'choice'; choices: number[]; text?: undefined } // 1-based option numbers

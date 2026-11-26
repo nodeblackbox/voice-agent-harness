@@ -87,3 +87,39 @@ describe('Agent: waiting for a transcript', () => {
     expect(restartStuck).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('Agent: picking Kokoro', () => {
+  const withKokoro = (ready: boolean) => {
+    const start = vi.fn(async () => true)
+    const agent = new Agent({
+      store,
+      settings: () => DEFAULT_SETTINGS,
+      keys: { keysFor: () => [] },
+      customStyles: () => [],
+      skills: () => [],
+      mcp: { enabled: () => false, tools: () => ({}) } as never,
+      search: { configured: () => false } as never,
+      ears: { agentSpeaking: () => undefined, agentThinking: () => undefined, restartStuck: () => undefined },
+      kokoro: { ready: () => ready, start, synth: async () => Buffer.from('x') },
+      emit: () => undefined,
+      emitAudio: () => undefined,
+      cancelAudio: () => undefined,
+      log: () => undefined,
+      trace: () => undefined
+    })
+    const s = { ...DEFAULT_SETTINGS, voice: { ...DEFAULT_SETTINGS.voice, engine: 'kokoro' as const } }
+    const engineFor = (agent as unknown as { engineFor: (s: unknown) => { name: string } }).engineFor.bind(agent)
+    return { engineFor, s, start }
+  }
+
+  it('Edge speaks while Kokoro is still loading, and the load is kicked off', () => {
+    const { engineFor, s, start } = withKokoro(false)
+    expect(engineFor(s).name).toBe('edge')
+    expect(start).toHaveBeenCalled()
+  })
+
+  it('Kokoro speaks once it is loaded', () => {
+    const { engineFor, s } = withKokoro(true)
+    expect(engineFor(s).name).toBe('kokoro')
+  })
+})

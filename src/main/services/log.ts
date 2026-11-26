@@ -3,7 +3,39 @@ import { join } from 'node:path'
 import { redactTranscript, type TraceEvent } from '@core/trace'
 import { FloodGuard, type FloodGuardOptions, type LogLevel, type LogLine } from './flood-guard'
 
+import type { ConsoleEntry } from '@shared/console'
+
 export type { LogLevel } from './flood-guard'
+
+// ---- the live console: the last few thousand log lines and trace events, for the UI to show as they happen ----
+const CONSOLE_KEEP = 4000
+let consoleSeq = 0
+let consoleRing: ConsoleEntry[] = []
+const consoleListeners = new Set<(e: ConsoleEntry) => void>()
+
+function toConsole(e: Omit<ConsoleEntry, 'id'>): void {
+  const entry: ConsoleEntry = { id: ++consoleSeq, ...e }
+  consoleRing.push(entry)
+  if (consoleRing.length > CONSOLE_KEEP * 1.25) consoleRing = consoleRing.slice(-CONSOLE_KEEP)
+  for (const cb of consoleListeners) {
+    try {
+      cb(entry)
+    } catch {
+      // a console listener must never break logging
+    }
+  }
+}
+
+/** Every log line and trace event from now on, as it is written. */
+export function onConsole(cb: (e: ConsoleEntry) => void): () => void {
+  consoleListeners.add(cb)
+  return () => consoleListeners.delete(cb)
+}
+
+/** What happened before the console was opened (this run, newest last). */
+export function consoleHistory(): ConsoleEntry[] {
+  return consoleRing.slice(-CONSOLE_KEEP)
+}
 
 const ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 
@@ -97,6 +129,7 @@ function writeLine(l: LogLine, data?: unknown): void {
   const line = `${new Date().toISOString()} ${l.level.toUpperCase().padEnd(5)} [${l.scope}] ${l.msg}${data !== undefined ? ' ' + safeJson(data) : ''}`
   if (l.level === 'error') console.error(line)
   else console.log(line)
+  if (ORDER[l.level] >= ORDER[levelFn()]) toConsole({ t: Date.now(), kind: 'log', level: l.level, name: l.scope, msg: l.msg, ...(data && typeof data === 'object' ? { data: data as Record<string, unknown> } : {}) })
   if (!dir) return
   try {
     if (ORDER[l.level] >= ORDER[levelFn()]) appFile?.append(line)
@@ -162,6 +195,8 @@ export function trace(event: TraceEvent): void {
   try {
     for (const e of lines) {
       const body = transcriptsFn() ? e : redactTranscript(e)
+      const { ev, sid: _sid, t: _t, turn, ...data } = body
+      toConsole({ t: Date.now(), kind: 'trace', level: 'info', name: ev, msg: '', data, ...(typeof turn === 'string' ? { turn } : {}) })
       appendFileSync(currentSession!.path, JSON.stringify({ t: new Date().toISOString(), ...body, sid }) + '\n')
     }
   } catch {

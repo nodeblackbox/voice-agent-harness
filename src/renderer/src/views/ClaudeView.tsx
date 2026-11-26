@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, Ban, Check, ClipboardList, Code, Coins, Copy, Ellipsis, Eye, FileCode, FolderGit2, FolderOpen, FolderTree, History, ListChecks, Octagon, Pencil, Play, Plus, RotateCcw, Send,
   ShieldAlert, Square, Trash2, Undo2, Wrench, X, Zap, type LucideIcon
@@ -13,8 +13,10 @@ import { AccountBadge, costNote, useClaudeAccount } from './claude/Account'
 import { Activity as ActivityFeed } from './claude/Activity'
 import { Browse } from './claude/Browse'
 import { ClaudeMark, CLAUDE_ORANGE } from './claude/ClaudeMark'
+import { FileMenuProvider } from './claude/FileMenu'
 import { Files, RestartNotice, useWorkspaceFiles } from './claude/Files'
 import { Inspector } from './claude/Inspector'
+import { ContextBar, ContextMeter } from './claude/Context'
 import { Markdown } from './claude/Markdown'
 import { MODES, ModeBadge, ModeChooser, ModeMenu, modeOf } from './claude/Mode'
 import { Preview } from './claude/Preview'
@@ -274,6 +276,7 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
         <span title="Files changed" className="inline-flex items-center gap-1"><FileCode size={11} />{touched}</span>
         <span title="Tool calls" className="inline-flex items-center gap-1"><Wrench size={11} />{toolCalls}</span>
       </div>
+      <ContextMeter session={session} />
       <ModeMenu session={session} fallback={fallback} />
       <Btn small danger icon={Octagon} disabled={!isBusy(session)} onClick={() => void check(window.api.claude.interrupt(session.id, false))}>Interrupt</Btn>
       <Btn small icon={Square} disabled={session.status === 'stopped'} onClick={() => void check(window.api.claude.stop(session.id))}>Stop</Btn>
@@ -287,9 +290,21 @@ function Header({ session, touched, toolCalls }: { session: CcSession; touched: 
   )
 }
 
-function Composer({ session }: { session: CcSession }) {
+function Composer({ session, insert }: { session: CcSession; insert?: { text: string; n: number } | null }) {
   const check = useCheck()
   const [text, setText] = useState('')
+  const box = useRef<HTMLTextAreaElement>(null)
+  // "Mention in message" from a file's right-click menu: add the path to the draft and put the cursor after it
+  useEffect(() => {
+    if (!insert) return
+    setText((t) => (t && !/\s$/.test(t) ? `${t} ` : t) + insert.text + ' ')
+    requestAnimationFrame(() => {
+      const el = box.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }, [insert])
   const busy = isBusy(session)
   const send = (now: boolean) => {
     const t = text.trim()
@@ -313,6 +328,8 @@ function Composer({ session }: { session: CcSession }) {
       )}
       <form className="flex gap-2 items-end rounded-xl p-2" style={{ background: T.surface, border: `1px solid ${busy ? alpha(T.claude, 35) : T.border}` }} onSubmit={(e) => { e.preventDefault(); send(false) }}>
         <textarea
+          ref={box}
+          aria-label="Message to this session"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false) } }}
@@ -343,6 +360,9 @@ function Detail({ session }: { session: CcSession }) {
   const pulse = useMemo(() => events.filter((e) => e.kind === 'tool_result' || e.kind === 'result').length, [events])
   const { files, refresh, unavailable } = useWorkspaceFiles(session.id, pulse)
   const openFile = (rel: string) => { setFile(rel); setTab('files') }
+  const [insert, setInsert] = useState<{ text: string; n: number } | null>(null)
+  const mention = useCallback((rel: string) => setInsert((p) => ({ text: `\`${rel}\``, n: (p?.n ?? 0) + 1 })), [])
+  const preview = useCallback((rel: string) => { setPage(rel); setTab('preview') }, [])
   const fileCount = (files ?? []).filter((f) => !f.dir).length
   const hasPage = (files ?? []).some((f) => !f.dir && isHtml(f.path))
   const tabs: Array<{ id: Tab; label: string; icon: LucideIcon; badge?: string }> = [
@@ -351,6 +371,7 @@ function Detail({ session }: { session: CcSession }) {
     { id: 'preview', label: 'Preview', icon: Eye, badge: hasPage ? 'live' : undefined }
   ]
   return (
+    <FileMenuProvider id={session.id} workspace={session.workspace} onPreview={preview} onMention={mention}>
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       <Header session={session} touched={touched.length} toolCalls={toolCalls} />
       {session.pending && <div className="px-5 pt-3"><PendingCard session={session} pending={session.pending} /></div>}
@@ -390,13 +411,14 @@ function Detail({ session }: { session: CcSession }) {
             touched={touched}
             selected={file}
             onSelect={setFile}
-            onPreview={(rel) => { setPage(rel); setTab('preview') }}
+            onPreview={preview}
           />
         )}
         {tab === 'preview' && (unavailable ? <RestartNotice what="the live preview" /> : <Preview id={session.id} files={files} page={page} onPage={setPage} pulse={pulse} />)}
       </div>
-      <Composer session={session} />
+      <Composer session={session} insert={insert} />
     </div>
+    </FileMenuProvider>
   )
 }
 
@@ -439,6 +461,7 @@ function SessionCard({ s, active, picked, onClick }: { s: CcSession; active: boo
         <ModeBadge mode={modeOf(s, fallback)} />
         {s.queued.length > 0 && <span className="rounded-full px-1.5" style={{ background: T.bg, color: T.text2, flexShrink: 0 }}>+{s.queued.length}</span>}
       </div>
+      <ContextBar session={s} />
     </button>
   )
 }
@@ -532,6 +555,16 @@ function ClaudeSettingsCard({ s }: { s: ClaudeSettings }) {
       <div className="flex flex-col gap-1.5">
         <SectionTitle>Default mode for new sessions (switch any session from its header)</SectionTitle>
         <ModeChooser value={s.defaultMode ?? 'auto'} onChange={(v) => set({ defaultMode: v })} label="Default mode" />
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm" style={{ color: T.text }}>Open sessions at once</div>
+          <div className="text-xs" style={{ color: T.text3 }}>Counts the ones that are idle, working or waiting on you; stopped ones stay in the list and don't count. Each open session is a running Claude Code process.</div>
+        </div>
+        <span className="inline-flex items-center gap-2 shrink-0">
+          <input type="range" aria-label="Open sessions at once" min={1} max={24} step={1} value={s.maxSessions} onChange={(e) => set({ maxSessions: Number(e.target.value) })} style={{ width: 140 }} />
+          <span className="text-sm" style={{ color: T.text, fontFamily: T.mono, width: 22, textAlign: 'right' }}>{s.maxSessions}</span>
+        </span>
       </div>
     </Card>
   )

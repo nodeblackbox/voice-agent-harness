@@ -166,6 +166,7 @@ Each session is fenced to its own folder. Anything outside it, any delete, any p
 | 🗂️ **Memory and projects** | SQLite with full-text search, global and per-project, with a history and undo. Projects carry a folder, notes and a default prompt style. |
 | 🧩 **Styles, skills, MCP** | Prompt styles drafted with AI, trigger-and-procedure skills, any MCP server (stdio or streamable HTTP) added from Settings. |
 | 🔎 **Local web search** | SearXNG started on demand, with `web_search`, `read_page` and `research` tools. |
+| 📂 **PC explorer** | Hand it a goal ("find my lemon AI project on the D drive") and it searches, retries and reads until it is done, inside the folders you approve, within 12 steps and 45 seconds. It can make a small text edit when asked (backup kept) and run an allowlist of read-only commands (`ls`, `cat`, `grep`, `find`, `git status`, `git log`). It can never delete, move, create, install or go online; secrets files are never opened; every action is logged. |
 | 🎛️ **Tuning and diagnostics** | Every timing parameter documented in-app, an advisor that reads your session and suggests values, a per-turn latency timeline. |
 | 🌗 **Light and dark** | Both themes, or follow the system. |
 

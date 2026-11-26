@@ -52,6 +52,10 @@ export const realSdk: CcSdk = (o) => {
     messages: q,
     interrupt: async () => { await q.interrupt() },
     setPermissionMode: (mode) => q.setPermissionMode(mode),
+    contextUsage: async () => {
+      const u = await q.getContextUsage({ detail: 'summary' })
+      return { totalTokens: u.totalTokens, maxTokens: u.maxTokens, percentage: u.percentage }
+    },
     close: () => q.close(),
   }
 }

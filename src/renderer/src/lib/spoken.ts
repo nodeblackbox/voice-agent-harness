@@ -74,6 +74,21 @@ function mergeAdjacent(spans: Span[]): Span[] {
   return out
 }
 
+/**
+ * How reply text is shown: a line starting "- " or "* " becomes a bullet, and bold stars are dropped (the chat
+ * draws plain text). Works on consecutive pieces of one reply: `atLineStart` says whether the piece before ended
+ * a line, so a bullet split across two highlight spans still turns into one.
+ */
+export function displayText(piece: string, atLineStart: boolean): string {
+  let out = piece.replace(/\*\*([^*\n]+)\*\*/g, '$1')
+  // "(?=\S|$)": the highlight can start right after the marker, leaving "- " at the end of the piece before
+  out = out.replace(/(^|\n)([ \t]*)[-*] (?=\S|$)/g, (m, nl: string, indent: string, offset: number) => (offset === 0 && nl === '' && !atLineStart ? m : `${nl}${indent}•  `))
+  return out
+}
+
+/** Whether a piece ends a line (the next piece starts on a new one). */
+export const endsLine = (piece: string): boolean => /\n[ \t]*$/.test(piece)
+
 /** After an interruption: the heard prefix and the never-played remainder. */
 export function splitInterrupted(text: string, spokenText: string | undefined, unspokenText: string | undefined): { heard: string; rest: string } | null {
   if (!text) return null

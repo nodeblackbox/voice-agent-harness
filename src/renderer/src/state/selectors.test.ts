@@ -18,5 +18,8 @@ describe('key selectors', () => {
     useStore.setState({ keys: [{ provider: 'anthropic', set: false }] })
     expect(selectHasAnyKey(useStore.getState())).toBe(false)
     expect(keyedProviders(useStore.getState().keys)?.size).toBe(0)
+    // a voice key or the playbooks' TypeSafe key alone cannot answer a message
+    useStore.setState({ keys: [{ provider: 'anthropic', set: false }, { provider: 'typesafe', set: true }, { provider: 'inworld', set: true }] })
+    expect(selectHasAnyKey(useStore.getState())).toBe(false)
   })
 })

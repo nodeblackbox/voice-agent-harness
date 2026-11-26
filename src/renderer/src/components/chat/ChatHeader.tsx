@@ -1,15 +1,16 @@
-import { Folder, Headphones, PanelLeft, PanelRight, Volume2, VolumeX } from 'lucide-react'
+import { Folder, Headphones, PanelLeft, PanelRight, SquareTerminal, Volume2, VolumeX } from 'lucide-react'
 import type { VoiceSettings } from '@shared/types'
 import { TTS_ENGINE_LABELS, isCloudTts, requestFields } from '@shared/tts'
 import { T } from '../../theme'
 import { selectActiveProject, selectActiveSession, useStore } from '../../state/store'
 import { IconBtn } from '../primitives'
 import { StateIndicator } from './StateIndicator'
-import { formatTokens } from '../../lib/format'
+import { formatTokens, usageTitle } from '../../lib/format'
 
 export function friendlyVoice(name: string | undefined): string {
   if (!name) return 'Ava'
-  return name.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/(Multilingual)?Neural$/, '')
+  // "Ava Multilingual" and "Ava" are different voices (the Multilingual one is several times slower to start)
+  return name.replace(/^[a-z]{2}-[A-Z]{2}-/, '').replace(/Neural$/, '').replace(/(.)Multilingual$/, '$1 Multilingual')
 }
 
 /** What the header calls the current voice: the Edge voice's short name, a hosted voice's name, or the engine when the voice is an opaque id. */
@@ -31,6 +32,8 @@ export function ChatHeader() {
   const rightOpen = useStore((s) => s.rightOpen)
   const setLeftOpen = useStore((s) => s.setLeftOpen)
   const setRightOpen = useStore((s) => s.setRightOpen)
+  const rightTab = useStore((s) => s.rightTab)
+  const setRightTab = useStore((s) => s.setRightTab)
   const muted = useStore((s) => s.muted)
   const setMuted = useStore((s) => s.setMuted)
   const agentState = useStore((s) => s.agentState)
@@ -76,12 +79,37 @@ export function ChatHeader() {
           </span>
         )}
         {tokens && (
-          <span className="text-xs mr-2" style={{ color: T.text3, fontFamily: T.mono }} title="tokens in / out for the last turn">
+          <span className="text-xs mr-2" style={{ color: T.text3, fontFamily: T.mono }} title={`Last reply: ${usageTitle(tokens)}`}>
             {formatTokens(tokens.inputTokens ?? 0)}/{formatTokens(tokens.outputTokens ?? 0)}
           </span>
         )}
         <IconBtn icon={muted ? VolumeX : Volume2} label={muted ? 'Unmute her voice' : 'Mute her voice'} onClick={() => setMuted(!muted)} size={15} color={muted ? T.amber : undefined} />
-        <IconBtn icon={PanelRight} label="Quick panel" active={rightOpen} onClick={() => setRightOpen(!rightOpen)} size={15} />
+        <IconBtn
+          icon={SquareTerminal}
+          label="Live console beside the chat"
+          active={rightOpen && rightTab === 'console'}
+          onClick={() => {
+            if (rightOpen && rightTab === 'console') setRightOpen(false)
+            else {
+              setRightTab('console')
+              setRightOpen(true)
+            }
+          }}
+          size={15}
+        />
+        <IconBtn
+          icon={PanelRight}
+          label="At a glance"
+          active={rightOpen && rightTab === 'glance'}
+          onClick={() => {
+            if (rightOpen && rightTab === 'glance') setRightOpen(false)
+            else {
+              setRightTab('glance')
+              setRightOpen(true)
+            }
+          }}
+          size={15}
+        />
       </div>
     </header>
   )

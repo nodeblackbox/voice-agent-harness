@@ -1,11 +1,13 @@
-import type { ToolSet } from 'ai'
+import { generateText, type ToolSet } from 'ai'
 import type {
   AgentEvent,
   AudioChunk,
   ChatMessage,
   CloudTtsProvider,
   ContextSnapshot,
+  ModelInfo,
   PendingMemorySave,
+  Project,
   PromptStyle,
   Session,
   SessionSummary,
@@ -26,7 +28,7 @@ import { SpeakableFilter } from './prompts/speakable'
 import { ModelFactory } from './providers/factory'
 import type { KeySource } from './providers/keys'
 import { DEFAULT_FALLBACK_MODEL_ID, findModel } from './providers/models'
-import { resolveModel, spareModels } from './providers/resolve'
+import { chatModelLabel, resolveModel, spareModels } from './providers/resolve'
 import { SentenceChunker } from './speech/chunker'
 import { toolLabel } from './speech/fillers'
 import { describeInput, describeOutput, mcpServerOf, toolKind } from './tools/describe'
@@ -37,10 +39,14 @@ import { Speaker } from './speech/speaker'
 import { LatencyEstimate, firstChunkWords } from './speech/pace'
 import { EdgeHealth } from './speech/edge-health'
 import { EdgeTtsEngine, KokoroTtsEngine, SystemTtsEngine, edgeTtsStats, type AgentSource, type KokoroBackend, type TtsEngine } from './speech/tts'
+import { voiceSpeed } from './speech/voiceSpeed'
 import { TTS_ENGINE_LABELS, expressiveGuide, isCloudTts, requestFields } from '@shared/tts'
 import { currentTimeTool } from './tools/time'
 import { memoryTools } from './tools/memory'
+import { diagramContextBlock, diagramTools, type DiagramDeps } from './tools/diagram'
 import { searchTools, type SearchDeps } from './tools/search'
+import { exploreTools } from './tools/explore'
+import { EXPLORER_MAX_MS, ExplorerModule, type ExploreAction } from './explore'
 import { mcpTools, type McpBridge } from './tools/mcp-adapter'
 import { StateMachine } from './turn/state-machine'
 import { TurnRunner } from './turn/runner'
@@ -48,6 +54,16 @@ import { buildModelMessages, compactToolResult } from './turn/history'
 import { splitSpoken, type CutPoint, type SpokenChunk } from './turn/spoken'
 import { mergeTexts, parseFillerWords, unfinishedReason } from './turn/continuation'
 import { Coalescer } from './turn/coalesce'
+import { PocketTtsEngine, POCKET_DEFAULT_VOICE, type PocketBackend } from './speech/pocket'
+import { PlaybookEngine, listensTo, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
+import { JevError, type JevClient } from './jev/client'
+import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
+import { playbookTools, type PlaybookAdmin } from './tools/playbooks'
+import { draftPlaybook, type DraftResult } from './playbooks/author'
+import type { PlaybookTestRow, RunbookRun } from '@shared/types'
+import { RunbookRunner } from './runbooks/runner'
+import { RUNBOOK_TOOLS, toolsDoneBy } from './runbooks/steps'
+import type { Playbook } from './playbooks/schema'
 import { classifyAfterCut, resumeText } from './turn/resume'
 
 /** Why an interrupted reply is being replayed: asked for, acknowledged, or cut by a wordless interruption. */
@@ -68,13 +84,29 @@ export interface AgentDeps {
   keys: KeySource
   customStyles: () => PromptStyle[]
   skills: () => Skill[]
+  /** The loaded playbooks (docs/TRIGGERS.md); none when unset. */
+  playbooks?: () => Playbook[]
+  /** Jev, for playbooks that read the message's intent or ask their own question; none when unset. */
+  jev?: JevClient
+  /** Creating, changing and deleting playbooks by voice (the playbook_* tools); none when unset. */
+  playbookAdmin?: PlaybookAdmin & { replay?(id: string, text: string): Promise<PlaybookTestRow[] | null> }
+  /** Where runbook runs are kept between steps and across restarts; runs are not saved when unset. */
+  runbookStore?: { save(run: RunbookRun): void; load(): RunbookRun[] }
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
   claude?: ClaudeSessionManager
+  /** The diagram library and Mermaid's parser; the diagram_* tools exist only when this is set. */
+  diagrams?: DiagramDeps
+  /** The folder this app's own source code is in, when it runs from source; the active project when none is picked. */
+  appDir?: () => string | null
+  /** For the explorer module: where a file's copy goes before an edit (no folder, no edits), and the action log. */
+  explore?: { backupDir?: string; log?(a: ExploreAction): void }
   ears: EarsControl
   /** Local Kokoro voice, the contingency when Edge TTS is unreachable. */
   kokoro?: KokoroBackend
+  /** Local Pocket TTS server (Kyutai), started when it is the chosen voice. */
+  pocket?: PocketBackend
   /** Hosted voices (ElevenLabs, Fish, Inworld, Qwen), built by the main process with its keys and proxy. */
   cloudTts?: Partial<Record<CloudTtsProvider, CloudTtsEngine>>
   /** Proxy agent for the Edge socket, when the user routes Edge through one. */
@@ -150,6 +182,14 @@ export function wordOverlap(a: string, b: string): number {
   return wa.filter((w) => wb.has(w)).length / wa.length
 }
 
+/** Size of a tool result as the model will read it (it goes back into the prompt, so it costs input tokens). */
+const resultChars = (output: unknown): number => {
+  try {
+    return typeof output === 'string' ? output.length : (JSON.stringify(output)?.length ?? 0)
+  } catch {
+    return 0
+  }
+}
 const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s)
 
 /** A cut with an empty transcript resumes the reply at most this often per message (guards a self-cut loop). */
@@ -158,12 +198,23 @@ const MAX_EMPTY_RESUMES = 2
 export const FINAL_OVERDUE_MS = 25_000
 /** How long turns stay on the fallback voice after Edge failed before Edge is tried again. */
 
+/** The idle times cc.idle reports at, in minutes (then every 30 past an hour). */
+const IDLE_MARKS = new Set([5, 10, 15, 20, 30, 45, 60])
+
 export class Agent {
   readonly sm: StateMachine
   private factory: ModelFactory
+  /** Read-only access to the folders approved in Settings > PC access; reads the list fresh on every call. */
+  private readonly explorer = new ExplorerModule({
+    roots: () => this.deps.settings().explore?.roots ?? [],
+    permissions: () => ({ edit: !!this.deps.settings().explore?.edit, terminal: !!this.deps.settings().explore?.terminal }),
+    backupDir: () => this.deps.explore?.backupDir,
+    log: (a) => this.deps.explore?.log?.(a)
+  })
   private edge: EdgeTtsEngine
   private system = new SystemTtsEngine()
   private kokoro: KokoroTtsEngine | null = null
+  private pocket: PocketTtsEngine | null = null
   /** Health per remote voice (Edge and the hosted ones): once one fails the local voice is kept until a background probe succeeds. */
   private ttsHealth = new Map<TtsEngineId, EdgeHealth>()
   /** Measured request -> first audio per engine; sizes the first chunk so a slow engine does not stutter. */
@@ -172,6 +223,13 @@ export class Agent {
   private sessionId = ''
   private messages: ChatMessage[] = []
   private turn: ActiveTurn | null = null
+  /** Its events are held until `turn.start` is traced, so they sit under that turn in the Console. */
+  private playbookEvents: Array<[string, Record<string, unknown>]> = []
+  private readonly playbookEngine = new PlaybookEngine((ev, data) => this.playbookEvents.push([ev, data]))
+  /** playbook_delete's "asked, waiting for a yes", kept across turns (the tools themselves are rebuilt each turn). */
+  private readonly playbookDeletes = new Map<string, number>()
+  /** Runbooks fired by a message run here, in the background. */
+  readonly runbooks: RunbookRunner
   /** The last cancelled turn, kept until the renderer reports where the cut landed. */
   private cancelled: { turn: ActiveTurn; assistant: ChatMessage } | null = null
   private readTurn: { id: string; controller: AbortController } | null = null
@@ -205,8 +263,22 @@ export class Agent {
       deps.emit({ type: 'state', state })
     })
     this.factory = new ModelFactory(deps.keys)
+    this.runbooks = new RunbookRunner({
+      generate: (prompt, signal) => this.backgroundGenerate(prompt, signal),
+      jev: () => {
+        const s = this.deps.settings()
+        return this.deps.jev && s.playbooks.useJev ? { client: this.deps.jev, timeoutMs: s.playbooks.jevTimeoutMs } : null
+      },
+      say: (text) => this.announce(text),
+      tool: (name, args, signal) => this.runbookTool(name, args, signal),
+      claude: (target, prompt, folder) => this.runbookClaude(target, prompt, folder),
+      save: (run) => this.deps.runbookStore?.save(run),
+      trace: (ev, data) => this.tr(ev, data),
+      changed: () => this.deps.emit({ type: 'runbooks-changed' })
+    })
     this.edge = new EdgeTtsEngine(deps.settings().speech.ttsPoolSize, () => deps.settings().speech.ttsTimeoutMs, deps.edgeAgent)
     if (deps.kokoro) this.kokoro = new KokoroTtsEngine(deps.kokoro, () => deps.settings().voice.kokoroVoice, deps.log)
+    if (deps.pocket) this.pocket = new PocketTtsEngine(deps.pocket, () => deps.settings().voice.pocketVoice?.trim() || POCKET_DEFAULT_VOICE, deps.log)
     const sessions = deps.store.sessions()
     const latest = sessions[0]
     if (latest && latest.messageCount === 0) this.selectSession(latest.id)
@@ -224,6 +296,7 @@ export class Agent {
     this.deps.store.createSession(s)
     this.sessionId = s.id
     this.messages = []
+    this.playbookEngine.resetSession()
     this.tr('session.start', { projectId: s.projectId })
     this.deps.emit({ type: 'sessions-changed' })
     return s
@@ -231,7 +304,10 @@ export class Agent {
 
   selectSession(id: string): ChatMessage[] {
     this.cancelTurn('session-switch')
-    if (id !== this.sessionId) this.closeSession()
+    if (id !== this.sessionId) {
+      this.closeSession()
+      this.playbookEngine.resetSession()
+    }
     this.sessionId = id
     this.messages = this.deps.store.messages(id)
     this.tr('session.select', { messages: this.messages.length })
@@ -250,6 +326,8 @@ export class Agent {
 
   /** Called on quit: cancel what is running and write the session summary. */
   shutdown(): void {
+    this.stopClock()
+    this.runbooks.dispose()
     this.clearFinalWatch()
     this.cancel()
     this.closeSession()
@@ -612,6 +690,7 @@ export class Agent {
         voice: settings.voice,
         attempts: settings.speech.ttsAttempts,
         degradeAfter: settings.speech.ttsDegradeAfter,
+        raceFirst: settings.speech.ttsRaceFirst,
         emit: (chunk) => {
           if (this.turn?.id !== turnId) return
           this.turn.chunks.set(chunk.seq, { seq: chunk.seq, text: chunk.text, kind: chunk.kind })
@@ -639,6 +718,12 @@ export class Agent {
       ? { ...existing, turnId, text, timing, streaming: false }
       : { id: crypto.randomUUID(), turnId, sessionId: this.sessionId, role: 'user', text, via, timing, createdAt: Date.now() }
     this.upsert(user)
+    // Jev reads the message now, in parallel with the rest of the turn's setup; the playbooks wait for it later, capped
+    this.playbookEvents = []
+    const recentText = this.recentText()
+    // a background run waiting for an answer takes this message as its reply (the reply below still answers it normally)
+    const runReply = this.runbooks.deliverReply(text)
+    const jevTurn = this.startJev(text, via, settings)
     if (this.messages.filter((m) => m.role === 'user').length === 1) {
       this.deps.store.renameSession(this.sessionId, text.split(/\s+/).slice(0, 7).join(' ').slice(0, 60))
       this.deps.emit({ type: 'sessions-changed' })
@@ -652,12 +737,13 @@ export class Agent {
     this.probeEngine(settings)
     if (speakThisTurn && engine === this.edge) {
       const t0 = Date.now()
-      void this.edge.warm(settings.voice.voice).then((ok) => {
+      void this.edge.warm(settings.voice.voice, settings.speech.ttsRaceFirst).then((ok) => {
         if (ok) this.tr('tts.warm', { turnId, ms: Date.now() - t0 })
         // Edge can't even open a socket: get the contingency voice loading before the sentences fail
         else void this.deps.kokoro?.start()
       })
     } else if (speakThisTurn && engine === this.kokoro) void this.deps.kokoro?.start()
+    else if (speakThisTurn && engine === this.pocket) void this.deps.pocket?.start()
     const turn: ActiveTurn = {
       id: turnId,
       controller,
@@ -713,8 +799,27 @@ export class Agent {
     const named = [fallback, lastResort].filter((m): m is NonNullable<typeof m> => !!m)
     // then one model from every other keyed provider: a stale or rejected key on one provider is not the end of the turn
     const fallbacks = [...named, ...spareModels(this.deps.keys, [model.provider, ...named.map((m) => m.provider)])]
-    const tools = this.tools(settings)
+    const tools = this.tools(settings, model)
     const memory = this.memoryBlock(text, settings)
+    const playbooks = await this.playbooksFor(text, via, settings, jevTurn)
+    if (this.turn !== turn) return
+    // the reply must not do a background job's work a second time: leave out the tools its steps use
+    const jobs = [...playbooks.fired.filter((f) => f.kind === 'runbook').map((f) => f.id), ...(runReply ? [runReply.runbookId] : [])]
+    const withheld = new Set(jobs.flatMap((id) => toolsDoneBy(this.deps.playbooks?.().find((p) => p.id === id)?.runbook?.steps ?? [])))
+    // seen live: told a job had started, the reply tried to rewrite the runbook itself. Editing playbooks on such a
+    // turn only happens when the user actually talked about playbooks.
+    if (jobs.length && !/\b(play|run)\s?books?\b/i.test(text)) for (const n of ['playbook_write', 'playbook_switch', 'playbook_delete', 'playbook_undo']) if (n in tools) withheld.add(n)
+    for (const name of withheld) delete tools[name]
+    if (withheld.size) this.playbookEvents.push(['runbook.withheld', { tools: [...withheld], jobs }])
+    if (runReply) {
+      const note = `- This message may be the answer to a question from the background job "${runReply.title}"${runReply.question ? `, which asked: "${runReply.question}"` : ''}. The job has their answer and carries on by itself, and follows up itself if the answer is unclear. If it is an answer, acknowledge it in a few words ("got it") without asking that question again and without doing the job's work; if it is about something else, answer it normally.`
+      playbooks.block = playbooks.block ? `${note}\n\n${playbooks.block}` : note
+    }
+    {
+      // the chips under the message; cleared when a merged or retried message no longer fires anything
+      const current = this.messages.find((m) => m.id === user.id) ?? user
+      if (playbooks.fired.length || current.playbooks?.length) this.upsert({ ...current, playbooks: playbooks.fired.length ? playbooks.fired : undefined })
+    }
     const system = composeSystemParts(style, {
       agentName: settings.agentName,
       userName: settings.userName,
@@ -722,11 +827,19 @@ export class Agent {
       ...timeContext(),
       location: await this.location.resolve(settings.location),
       projectName: this.projectName(settings),
+      appDir: this.pickedProject(settings) ? (this.deps.appDir?.() ?? undefined) : undefined,
       memoryBlock: memory.block,
       skillsBlock: skillsBlock(this.deps.skills()),
       claudeBlock: this.claudeOn(settings) ? claudeContextBlock(this.deps.claude!) : undefined,
       expressiveBlock: this.expressiveBlock(settings),
       voiceLine: this.voiceLine(settings),
+      diagramsBlock: this.deps.diagrams ? diagramContextBlock(this.deps.diagrams.library, this.sessionId) : undefined,
+      playbookBlock: playbooks.block,
+      models: {
+        chat: chatModelLabel(settings.modelId, model, resolved, fallbacks[0]),
+        stt: `${settings.stt.model}, running locally on this computer`,
+        tts: this.ttsSummary(settings)
+      },
       toolNames: Object.keys(tools),
       fillerEnabled: settings.behaviour.fillerBeforeTools
     })
@@ -752,8 +865,16 @@ export class Agent {
       memoryProfile: memory.profile,
       memoryRelevant: memory.relevant,
       memoryHistory: memory.history,
+      playbooks: playbooks.fired.map((f) => f.id),
       systemChars: system.stable.length + system.live.length
     })
+    for (const [ev, data] of this.playbookEvents.splice(0)) this.tr(ev, data)
+    // runbooks that fired start now, in the background (after turn.start, so their trace sits under this turn)
+    for (const f of playbooks.fired) {
+      if (f.kind !== 'runbook') continue
+      const rb = this.deps.playbooks?.().find((p) => p.id === f.id)
+      if (rb) this.runbooks.start(rb, { text, recent: recentText })
+    }
 
     const metrics: TurnMetrics = {}
     if (voiceMeta.asrMs !== undefined) metrics.asrMs = voiceMeta.asrMs
@@ -794,6 +915,8 @@ export class Agent {
       firstTokenTimeoutMs: settings.brain.firstTokenTimeoutMs,
       stallTimeoutMs: settings.brain.stallTimeoutMs,
       toolStallTimeoutMs: settings.brain.toolStallTimeoutMs,
+      // the explorer works on a goal for up to its own time cap; give it that, and a little to hand the answer back
+      toolStallMsFor: (name) => (name === 'pc_explore' ? EXPLORER_MAX_MS + 5000 : undefined),
       onDelta: (delta) => {
         assistant.text += delta
         this.upsert(assistant)
@@ -834,8 +957,10 @@ export class Agent {
             m.tool.resultText = compactToolResult(output, settings.brain.toolResultKeepChars)
             const o = output as { before?: unknown; after?: unknown } | null
             if (o && typeof o.before === 'string' && typeof o.after === 'string') m.tool.diff = { before: o.before, after: o.after }
+            const d = output as { status?: unknown; id?: unknown; version?: unknown } | null
+            if ((name === 'diagram_create' || name === 'diagram_edit') && d && (d.status === 'shown' || d.status === 'updated') && typeof d.id === 'string' && typeof d.version === 'number') m.tool.diagram = { id: d.id, version: d.version }
           } else m.tool.detail = error
-          this.tr('turn.tool_end', { id, name, ok, ms: m.tool.endedAt - m.tool.startedAt, detail: m.tool.detail })
+          this.tr('turn.tool_end', { id, name, ok, ms: m.tool.endedAt - m.tool.startedAt, detail: m.tool.detail, resultChars: ok ? resultChars(output) : undefined })
           this.upsert(m)
         }
         if ([...toolMessages.values()].every((x) => x.tool?.status !== 'running')) this.sm.tool(false)
@@ -1029,12 +1154,25 @@ export class Agent {
       ? { ...s.voice, engine, cloud: { ...s.voice.cloud, [engine]: { ...s.voice.cloud?.[engine], voice } } }
       : engine === 'kokoro'
         ? { ...s.voice, engine, kokoroVoice: voice }
-        : { ...s.voice, engine, voice }
+        : engine === 'pocket'
+          ? { ...s.voice, engine, pocketVoice: voice }
+          : { ...s.voice, engine, voice }
     await this.readText(`Hi, I'm ${s.agentName}. This is how I sound with this voice.`, 'plain', v)
   }
 
   async voices() {
     return this.edge.listVoices()
+  }
+
+  /** How long the Edge voice `voice` takes to answer new text right now, in ms (see voiceSpeed). */
+  voiceSpeed(voice: string, runs = 3): Promise<number> {
+    const v = this.deps.settings().voice
+    return voiceSpeed(this.edge, voice, { runs, rate: v.rate, pitch: v.pitch })
+  }
+
+  /** True while a reply is being produced or spoken. */
+  get busy(): boolean {
+    return this.turn !== null
   }
 
   /** Voices and models a hosted provider offers (live listing where it has one). */
@@ -1114,11 +1252,12 @@ export class Agent {
       now: t.now,
       timezone: t.timezone,
       location: s.location.mode === 'manual' ? s.location.manual || 'not set' : s.location.mode === 'ip' ? 'from IP (resolved each turn)' : 'off',
-      project: this.projectName(s),
+      project: this.pickedProject(s)?.name ?? (this.deps.appDir?.() ? 'this app' : 'none'),
       style: this.style(s).label,
       memoryEntries: this.deps.store.profile(this.scopeIds(s), s.memory.profileLimit).length,
       skills: this.deps.skills().filter((k) => k.enabled).map((k) => k.name),
-      tools: Object.keys(this.tools(s))
+      // only the names are used here; the model is what pc_explore would run on if it were called
+      tools: Object.keys(this.tools(s, findModel(s.modelId) ?? findModel(DEFAULT_FALLBACK_MODEL_ID)!))
     }
   }
 
@@ -1126,14 +1265,35 @@ export class Agent {
   /** The engine the settings name, unless it is a remote one that is currently down (then the local fallback). */
   private engineFor(s: Settings): TtsEngine {
     const chosen = this.chosenEngine(s)
-    if (chosen === this.system || chosen === this.kokoro) return chosen
+    if (chosen === this.system) return chosen
+    if (chosen === this.kokoro) return this.kokoroCover() ?? chosen
+    if (chosen === this.pocket) return this.pocketCover() ?? chosen
     return this.health(chosen.name).down ? this.fallbackEngine() : chosen
+  }
+
+  /**
+   * Kokoro is picked but still loading (30-60 s): Edge speaks until it is ready, rather than the Windows
+   * voice. Null once Kokoro is up, or when Edge is down too (then Kokoro's own null-while-loading
+   * hands the sentence to the Windows voice).
+   */
+  private kokoroCover(): TtsEngine | null {
+    if (!this.deps.kokoro || this.deps.kokoro.ready()) return null
+    void this.deps.kokoro.start()
+    return this.health('edge').down ? null : this.edge
+  }
+
+  /** Pocket TTS is picked but its server is still starting: Edge speaks until it answers, as for Kokoro. */
+  private pocketCover(): TtsEngine | null {
+    if (!this.deps.pocket || this.deps.pocket.ready()) return null
+    void this.deps.pocket.start()
+    return this.health('edge').down ? null : this.edge
   }
 
   private chosenEngine(s: Settings): TtsEngine {
     const id = s.voice.engine
     if (id === 'system') return this.system
     if (id === 'kokoro') return this.kokoro ?? this.system
+    if (id === 'pocket') return this.pocket ?? this.edge
     if (isCloudTts(id)) return this.deps.cloudTts?.[id] ?? this.edge
     return this.edge
   }
@@ -1155,17 +1315,28 @@ export class Agent {
     return { ...s.speech, firstMinWords }
   }
 
-  /** One line for the prompt about the voice actually speaking this turn, so the model never guesses. */
-  private voiceLine(s: Settings): string {
+  /** The engine and voice actually speaking this turn, e.g. `Inworld, voice "Hana" (inworld-tts-2-flash)`. */
+  private ttsSummary(s: Settings): string {
     const engine = this.engineFor(s)
     const chosen = this.chosenEngine(s)
     const fields = requestFields(s.voice, engine.name)
     let line = TTS_ENGINE_LABELS[engine.name]
     if (fields.voice && engine.name !== 'system') line += `, voice "${fields.voice.length > 40 ? `${fields.voice.slice(0, 38)}…` : fields.voice}"`
     if (fields.model) line += ` (${fields.model})`
-    if (engine !== chosen) line += `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    if (engine !== chosen) line += chosen === this.kokoro || chosen === this.pocket ? `, covering while ${TTS_ENGINE_LABELS[chosen.name]} loads` : `; the local fallback, because ${TTS_ENGINE_LABELS[chosen.name]} is down right now`
+    return line
+  }
+
+  /** One line for the prompt about the voice actually speaking this turn, so the model never guesses. */
+  private voiceLine(s: Settings): string {
+    const engine = this.engineFor(s)
+    const fields = requestFields(s.voice, engine.name)
+    let line = this.ttsSummary(s)
     const cues = s.voice.expressive && isCloudTts(engine.name) && engine.acceptsTags?.(fields)
-    line += cues ? '; delivery cues are on' : '; it reads plain text, no cue tags'
+    line += cues
+      ? '; delivery cues are on'
+      : // without cues the voice reads every character: "*sigh*" or "heh heh" come out as words
+        "; it reads plain text, no cue tags. This voice can't laugh, sigh, breathe or whisper, so never write sounds or actions (*sigh*, heh heh, *giggles*): they would be read out as words. If asked for one, say this voice can't, and that Inworld, Fish Audio or ElevenLabs v3/v4 can once Expressive cues is on in Settings > Voice output"
     return line
   }
 
@@ -1178,14 +1349,14 @@ export class Agent {
   }
 
   private engineDegraded(name: TtsEngineId, reason: string): void {
-    if (name === 'system' || name === 'kokoro') return
+    if (name === 'system' || name === 'kokoro' || name === 'pocket') return
     const health = this.health(name)
     if (health.down) return // a turn that started on it just before a probe marked it down again
     const retryInMs = health.fail(reason)
     this.tr('tts.engine_down', { engine: name, retryInMs, reason: reason.slice(0, 120), fallback: this.fallbackEngine().name })
     if (this.kokoro) void this.deps.kokoro?.start()
     const label = TTS_ENGINE_LABELS[name]
-    const why = /\b429\b/.test(reason) ? `${label} is rate-limiting us` : name === 'edge' ? 'Edge TTS is unreachable' : `${label} failed (${reason.slice(0, 80)})`
+    const why = /\b429\b/.test(reason) ? `${label} is rate-limiting us` : name === 'edge' ? 'Edge TTS is unreachable' : `${label} failed (${reason.slice(0, 220)})`
     this.toast('warn', this.kokoro
       ? `${why}; using the local Kokoro voice until it recovers (the Windows voice covers while Kokoro loads).`
       : `${why}; using the system voice until it recovers.`)
@@ -1194,7 +1365,7 @@ export class Agent {
   /** Between turns: check quietly whether the chosen remote voice works again, and switch back for the NEXT reply if so. */
   private probeEngine(s: Settings): void {
     const chosen = this.chosenEngine(s)
-    if (chosen === this.system || chosen === this.kokoro) return
+    if (chosen === this.system || chosen === this.kokoro || chosen === this.pocket) return
     const health = this.health(chosen.name)
     if (!health.probeDue()) return
     const check = async () => {
@@ -1216,9 +1387,269 @@ export class Agent {
     return s.projectId && s.projectId !== GLOBAL_SCOPE ? [GLOBAL_SCOPE, s.projectId] : [GLOBAL_SCOPE]
   }
 
+  private pickedProject(s: Settings): Project | undefined {
+    if (!s.projectId || s.projectId === GLOBAL_SCOPE) return undefined
+    return this.deps.store.projects().find((p) => p.id === s.projectId)
+  }
+
+  /** The active project for the prompt, with its folder: the picked one, else this app's own code when it runs from source. */
+  /** The last few messages before the current one, for runbooks that need "that thing" filled in. */
+  private recentText(): string {
+    return this.messages
+      .slice(0, -1)
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.text.trim())
+      .slice(-3)
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text.replace(/\s+/g, ' ').slice(0, 400)}`)
+      .join('\n')
+  }
+
+  /**
+   * Something happened that is not a user message (a Claude Code session finished, the clock ticked): the runbook
+   * that reacts to it, if any, starts in the background. `text` is a one-line description for {{text}}.
+   */
+  onEvent(type: string, fields: Record<string, unknown>, text: string): void {
+    try {
+      const s = this.deps.settings()
+      const list = this.deps.playbooks?.() ?? []
+      if (!list.length || s.playbooks.maxInjected <= 0) return
+      const fired = this.playbookEngine.onEvent(list, type, fields, { ...s.playbooks }, (ev, data) => this.tr(ev, data))
+      if (!fired) return
+      const rb = list.find((p) => p.id === fired.id)
+      if (rb) this.runbooks.start(rb, { text, recent: '', fields })
+    } catch (e) {
+      this.deps.log(`runbook event ${type} failed: ${(e as Error).message}`)
+    }
+  }
+
+  private clock: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * Every whole minute, for the runbooks that listen: clock.tick, the schedule event (each runbook takes the
+   * minutes its schedule names) and cc.idle for sessions that have sat finished for a while.
+   */
+  startClock(now: () => Date = () => new Date()): void {
+    if (this.clock) return
+    const schedule = (): void => {
+      const d = now()
+      this.clock = setTimeout(tick, 60_000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 50)
+      this.clock.unref?.()
+    }
+    const tick = (): void => {
+      try {
+        const list = (this.deps.playbooks?.() ?? []).filter((p) => p.enabled && p.kind === 'runbook')
+        const d = now()
+        if (list.some((p) => listensTo(p, 'clock.tick'))) {
+          const fields = this.clockFields(d)
+          this.onEvent('clock.tick', fields, `It is ${fields.time} on ${fields.weekday}.`)
+        }
+        if (list.some((p) => listensTo(p, 'schedule'))) {
+          const fields = this.clockFields(d)
+          this.onEvent('schedule', fields, `It is ${fields.time} on ${fields.weekday}.`)
+        }
+        if (list.some((p) => listensTo(p, 'cc.idle'))) {
+          for (const s of this.deps.claude?.list() ?? []) {
+            if (s.status !== 'idle' || !s.sdkSessionId) continue
+            const idleMinutes = Math.floor((d.getTime() - s.updatedAt) / 60_000)
+            if (!IDLE_MARKS.has(idleMinutes) && !(idleMinutes > 60 && idleMinutes % 30 === 0)) continue
+            this.onEvent('cc.idle', { session: s.name, sessionId: s.id, idleMinutes, summary: s.lastSummary.slice(0, 2000) }, `The Claude Code session "${s.name}" has been idle for ${idleMinutes} minutes.`)
+          }
+        }
+      } finally {
+        schedule()
+      }
+    }
+    schedule()
+  }
+
+  /** Once, when the app has started and the playbooks are loaded: the app.start event. */
+  appStarted(d: Date = new Date()): void {
+    const c = this.clockFields(d)
+    const sessions = this.deps.claude?.list() ?? []
+    this.onEvent('app.start', { time: c.time, hour: c.hour, minute: c.minute, weekday: c.weekday, sessions: sessions.length, sessionsWaiting: c.sessionsWaiting }, `The app started at ${String(c.time)} on ${String(c.weekday)}.`)
+  }
+
+  stopClock(): void {
+    if (this.clock) clearTimeout(this.clock)
+    this.clock = null
+  }
+
+  /** What a clock.tick carries: the time, and how the Claude Code sessions stand. */
+  clockFields(d: Date): Record<string, unknown> {
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    const sessions = this.deps.claude?.list() ?? []
+    const waiting = sessions.filter((x) => x.status === 'needs_input' || x.status === 'needs_permission')
+    const names = waiting.map((x) => x.name)
+    return {
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+      weekday: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()],
+      sessionsWaiting: waiting.length,
+      waitingNames: names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? ''),
+      oldestWaitMinutes: waiting.length ? Math.floor((d.getTime() - Math.min(...waiting.map((x) => x.updatedAt))) / 60_000) : 0,
+      sessionsWorking: sessions.filter((x) => x.status === 'running').length
+    }
+  }
+
+  /** Runs saved on disk pick up again: one waiting for a reply waits on, one cut off mid-step is marked so. */
+  resumeRunbooks(): void {
+    const saved = this.deps.runbookStore?.load() ?? []
+    if (saved.length) this.runbooks.resume(saved, (id) => this.deps.playbooks?.().find((p) => p.id === id))
+  }
+
+  /** The background model for runbook steps: the chat model when its provider has a key, else any keyed one. */
+  private async backgroundGenerate(prompt: string, signal: AbortSignal): Promise<{ text: string; inputTokens?: number; outputTokens?: number }> {
+    const s = this.deps.settings()
+    const model = resolveModel(s.modelId, this.deps.keys)?.model ?? findModel(DEFAULT_FALLBACK_MODEL_ID)
+    if (!model) throw new Error('no chat model has a key')
+    const r = await generateText({ model: this.factory.create(model).model, prompt, maxOutputTokens: 800, temperature: 0.2, abortSignal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]) })
+    return { text: r.text, inputTokens: r.usage.inputTokens, outputTokens: r.usage.outputTokens }
+  }
+
+  /** A runbook's tool step: only the allowed tools, run the way a turn runs them. */
+  private async runbookTool(name: string, args: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {
+    if (!(RUNBOOK_TOOLS as readonly string[]).includes(name)) throw new Error(`${name} is not allowed in a runbook`)
+    const s = this.deps.settings()
+    const model = resolveModel(s.modelId, this.deps.keys)?.model ?? findModel(DEFAULT_FALLBACK_MODEL_ID)!
+    const t = this.tools(s, model)[name] as unknown as { execute?: (a: unknown, o: unknown) => Promise<unknown> } | undefined
+    if (!t?.execute) throw new Error(`${name} is not available right now`)
+    return t.execute(args, { toolCallId: `runbook-${crypto.randomUUID()}`, messages: [], abortSignal: signal })
+  }
+
+  /**
+   * A runbook's claude step: a new session in plan mode, so it changes nothing until its plan is approved, or a
+   * message to one that exists (it works in that session's own mode, behind the fence as always).
+   */
+  private runbookClaude(target: { name?: string; session?: string }, prompt: string, folder: 'app' | 'sandbox'): { ok: boolean; note: string } {
+    const s = this.deps.settings()
+    if (!this.claudeOn(s)) return { ok: false, note: 'Claude Code sessions are switched off in Settings' }
+    if (target.session) {
+      const want = target.session.trim().toLowerCase()
+      const found = this.deps.claude!.list().find((x) => x.id === target.session || x.name.toLowerCase() === want)
+      if (!found) return { ok: false, note: `there is no Claude Code session called "${target.session}"` }
+      const sent = this.deps.claude!.send(found.id, prompt)
+      return sent.ok ? { ok: true, note: `told "${found.name}"${sent.queued ? ' (queued behind its current work)' : ''}` } : { ok: false, note: sent.error }
+    }
+    const name = target.name ?? 'job'
+    const appDir = folder === 'app' ? (this.deps.appDir?.() ?? null) : null
+    if (folder === 'app' && !appDir) return { ok: false, note: "this app's own folder is not known (it is not running from source)" }
+    const r = this.deps.claude!.start(name, prompt, { folder: appDir ?? undefined, mode: 'plan' })
+    return r.ok ? { ok: true, note: `started "${r.session.name}" in plan mode` } : { ok: false, note: r.error }
+  }
+
+  private turnFacts(text: string, via: string, s: Settings): TurnFacts {
+    const picked = this.pickedProject(s)
+    return {
+      text,
+      via: via === 'voice' ? 'voice' : 'typed',
+      project: picked?.name ?? '',
+      projectId: picked?.id ?? '',
+      turnIndex: Math.max(0, this.messages.filter((m) => m.role === 'user').length - 1),
+      fromSplit: false
+    }
+  }
+
+  /**
+   * Ask Jev what the playbooks need to know about this message, when any enabled playbook needs it and there is a
+   * key. One request; the answers, a timeout or an error are traced under the turn. Resolves to null without answers.
+   */
+  private startJev(text: string, via: string, s: Settings): Promise<JevFacts | null> | null {
+    try {
+      const jev = this.deps.jev
+      if (!jev || !s.playbooks.useJev || s.playbooks.maxInjected <= 0 || !jev.configured()) return null
+      const list = this.deps.playbooks?.() ?? []
+      const plan = planJev(list, this.turnFacts(text, via, s), { ...s.playbooks })
+      if (!plan.root && !plan.asks.length) return null
+      const questions = turnQuestions(plan)
+      // this turn's buffer: a late answer for a turn that was cancelled must not land under the next one
+      const buf = this.playbookEvents
+      const earlier = this.messages.slice(0, -1)
+      const timeoutMs = s.playbooks.jevTimeoutMs
+      return jev.ask(turnState(text, earlier), questions, { timeoutMs }).then(
+        (r) => {
+          buf.push(['jev.request', { questions: Object.keys(questions), ms: r.ms, inputTokens: r.inputTokens, costUsd: r.usd, model: r.model }])
+          for (const a of describeAnswers(r.answers)) buf.push(['jev.answer', a])
+          return readAnswers(r.answers, plan, s.playbooks.intentMin)
+        },
+        (e: unknown) => {
+          const err = e instanceof JevError ? e : new JevError((e as Error)?.message ?? String(e), 'network')
+          if (err.kind === 'timeout') buf.push(['jev.timeout', { ms: timeoutMs, questions: Object.keys(questions) }])
+          else buf.push(['jev.error', { kind: err.kind, status: err.status, message: err.message }])
+          return null
+        }
+      )
+    } catch (e) {
+      this.deps.log(`jev failed: ${(e as Error).message}`)
+      return null
+    }
+  }
+
+  /** Which playbooks fire on this message, and the instructions they add to the reply's prompt. */
+  private async playbooksFor(text: string, via: string, s: Settings, jevTurn: Promise<JevFacts | null> | null): Promise<ReturnType<PlaybookEngine['onUserTurn']>> {
+    try {
+      const list = this.deps.playbooks?.() ?? []
+      if (!list.length || s.playbooks.maxInjected <= 0) return { block: '', fired: [] }
+      const jev = (await jevTurn) ?? undefined
+      return this.playbookEngine.onUserTurn(list, this.turnFacts(text, via, s), { maxInjected: s.playbooks.maxInjected, injectMaxChars: s.playbooks.injectMaxChars, tuning: { ...s.playbooks } }, jev)
+    } catch (e) {
+      // a playbook must never cost the user a reply
+      this.deps.log(`playbooks failed: ${(e as Error).message}`)
+      return { block: '', fired: [] }
+    }
+  }
+
   private projectName(s: Settings): string {
-    if (!s.projectId || s.projectId === GLOBAL_SCOPE) return 'none'
-    return this.deps.store.projects().find((p) => p.id === s.projectId)?.name ?? 'none'
+    const picked = this.pickedProject(s)
+    if (picked) return picked.path ? `${picked.name}, in the folder ${picked.path}` : picked.name
+    const app = this.deps.appDir?.()
+    return app ? `this app itself (your own source code), in the folder ${app}` : 'none'
+  }
+
+  /** The read-only PC tools are offered when they are on and at least one folder is approved. */
+  private exploreOn(s: Settings): boolean {
+    return !!s.explore?.enabled && this.explorer.roots().length > 0
+  }
+
+  /** pc_explore: hand the goal to the explorer module, on the model this turn runs on. The module has its own caps. */
+  private async exploreWith(goal: string, mayEdit: boolean, model: ModelInfo, s: Settings, signal?: AbortSignal): Promise<unknown> {
+    let lm
+    try {
+      lm = this.factory.create(model).model
+    } catch (e) {
+      return { status: 'error', note: `The explorer has no model to run on (${(e as Error).message}). Use pc_find, pc_list and pc_read yourself.` }
+    }
+    return this.explorer.run({
+      goal,
+      mayEdit,
+      model: lm,
+      context: `The user's active project: ${this.projectName(s)}.`,
+      signal,
+      trace: (ev, data) => this.tr(ev, { ...data, ...(ev === 'explore.start' ? { model: model.id, mayEdit } : {}) })
+    })
+  }
+
+  /** The drafter for playbook_write: the turn's own model writes the file; tokens are traced like the explorer's. */
+  private async draftPlaybook(brief: string, current: { id: string; source: string } | undefined, model: ModelInfo): Promise<DraftResult> {
+    const admin = this.deps.playbookAdmin!
+    const lm = this.factory.create(model).model
+    const state = admin.state()
+    const ok = state.playbooks.filter((p) => p.ok)
+    // two examples to imitate: ideally one with a condition and one with phrases, never the one being changed
+    const pool = ok.filter((p) => p.id !== current?.id)
+    const examples = [pool.find((p) => p.when), pool.find((p) => p.said?.length) ?? pool.find((p) => !p.when)].filter((p, i, a): p is NonNullable<typeof p> => !!p && a.indexOf(p) === i).map((p) => p.source)
+    let inputTokens = 0
+    let outputTokens = 0
+    const generate = async (system: string, prompt: string): Promise<string> => {
+      const r = await generateText({ model: lm, system, prompt, maxOutputTokens: 1200, temperature: 0.2, abortSignal: AbortSignal.timeout(45_000) })
+      inputTokens += r.usage.inputTokens ?? 0
+      outputTokens += r.usage.outputTokens ?? 0
+      return r.text
+    }
+    try {
+      return await draftPlaybook({ brief, current, taken: state.playbooks.map((p) => p.id), examples, jev: state.jev === 'ready' }, generate)
+    } finally {
+      this.tr('playbook.usage', { model: model.id, inputTokens, outputTokens })
+    }
   }
 
   /** Profile entries, BM25-relevant entries and matching lines from past sessions, as prompt lines. */
@@ -1248,7 +1679,7 @@ export class Agent {
     return { block: lines.join('\n'), profile: profile.length, relevant: relevantCount, history: history.length }
   }
 
-  private tools(s: Settings): ToolSet {
+  private tools(s: Settings, model: ModelInfo): ToolSet {
     const tools: ToolSet = {
       current_time: currentTimeTool,
       ...memoryTools({
@@ -1265,8 +1696,25 @@ export class Agent {
       })
     }
     if (this.deps.search.configured()) Object.assign(tools, searchTools(this.deps.search))
+    if (this.exploreOn(s)) {
+      Object.assign(tools, exploreTools({ module: this.explorer, run: s.explore.agent ? (goal, mayEdit, signal) => this.exploreWith(goal, mayEdit, model, s, signal) : undefined }))
+    }
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
     if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))
+    if (this.deps.diagrams) Object.assign(tools, diagramTools(this.deps.diagrams, () => this.sessionId))
+    const admin = this.deps.playbookAdmin
+    if (admin) {
+      Object.assign(
+        tools,
+        playbookTools({
+          admin,
+          draft: (brief, current) => this.draftPlaybook(brief, current, model),
+          replay: admin.replay?.bind(admin),
+          trace: (ev, data) => this.tr(ev, data),
+          pendingDeletes: this.playbookDeletes
+        })
+      )
+    }
     return tools
   }
 
@@ -1291,7 +1739,7 @@ export class Agent {
     if (this.announceTimer || !this.announceQueue.length) return
     const quiet = !this.turn && (this.sm.state === 'idle' || this.sm.state === 'listening')
     if (quiet) {
-      void this.speakAnnouncement(this.announceQueue.splice(0).join(' '))
+      void this.speakAnnouncement(this.announceQueue.splice(0).join('\n\n'))
       return
     }
     this.announceTimer = setTimeout(() => {

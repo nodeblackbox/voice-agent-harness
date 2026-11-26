@@ -10,7 +10,7 @@ Where values apply:
 | group | consumed by | takes effect |
 |---|---|---|
 | `endpoint`, `runtime.levelEveryFrames` | ear sidecar (`config.endpoint` message) | live |
-| `brain`, `speech`, `memory` | agent core | next turn (`ttsPoolSize`: next launch) |
+| `brain`, `speech`, `memory`, `playbooks` | agent core | next turn (`ttsPoolSize`: next launch) |
 | `playback` | renderer | live |
 | `runtime` (rest) | main process | live |
 
@@ -112,6 +112,7 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `temperature` | 0.6 | 0.6 | Sampling temperature. |
 | `maxTokens` | 1000 | 300 | Output cap per call. The old agent was voice-only and short; comprehensive styles need headroom. |
 | `claudeEffort` | low | — | How hard Sonnet 5+, Opus 5+ and Haiku 5.5 think before answering (`output_config.effort`). They think on every turn by default, silently; with a 13k-token voice prompt that pushed the first word past the 8 s first-token timeout. Haiku 4.5 takes no effort and is left alone. |
+| `openaiReasoningEffort` | minimal | — | Thinking budget for OpenAI reasoning models (GPT-5, GPT-5 mini). Unbounded, they used the whole token cap thinking and answered with nothing after 10-16 s. |
 | `groqReasoningEffort` | low | low | Reasoning budget for Groq reasoning models. Voice cannot wait for long thinking. |
 | `continuationWindowMs` | 2500 | — | A transcript that looks unfinished (ends on a filler word, fewer than `mergeMinWords`, a timeout on a low score, or dangling punctuation) is still answered, but if you start speaking again within this long the reply is cancelled silently and the two pieces become one turn ("and then I'll." + "finish it off."). In the stress test 36 turns were followed by a continuation within 4 s. 0 disables. Trace: `turn.mergeable`, `turn.continuation`, `turn.merged`. |
 | `mergeMinWords` | 4 | — | Transcripts shorter than this always count as unfinished ("Yeah, so basically"). |
@@ -125,10 +126,13 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `maxChars` | 220 | 220 | Run-on sentences are force-cut at the last comma/space past this so a long sentence cannot stall first audio. |
 | `fillerAfterMs` | 1500 | 1500 | If a tool is still running and nothing has played for this long, say one continuation filler ("Still looking."). Once per tool call. |
 | `fillerMinGapMs` | 4000 | — | Skip the lead-in filler ("Let me check.") if another filler was spoken more recently than this, so back-to-back tool calls do not chatter. |
-| `ttsPoolSize` | 3 | — | Edge TTS sockets kept open = sentences synthesized ahead of playback. Next launch. |
+| `ttsPoolSize` | 4 | — | Edge TTS sockets kept open = sentences synthesized ahead of playback. Next launch. |
+| `ttsRaceFirst` | 3 | — | Copies of a reply's first sentence sent to Edge at once; the quickest is spoken, the rest cancelled. Measured 2026-11-24 on plain Ava, 20 new sentences each: one request mean 1.37 s / worst 2.2 s, two copies 1.22 s / 2.3 s, three 0.93 s / 1.45 s. Costs that many requests for one sentence per reply: lower it if Edge starts refusing (429). 1 = one request. |
 | `ttsTimeoutMs` | 12000 | — | Per-sentence Edge TTS timeout. |
 | `ttsAttempts` | 2 | — | Tries per sentence before it is skipped (the text stays in the transcript). |
 | `ttsDegradeAfter` | 3 | — | Consecutive failures before the rest of the turn uses the system voice (one toast). |
+| `edgeSlowMs` | 2000 | — | Two Edge sentences in a row slower than this to first audio make the automatic route re-check direct against the best few proxies (at most every 2 min; the wait doubles, up to 30 min, each time a re-check changes nothing). A route cannot fix a slow voice: Multilingual voices take 3-5 s on every route, the plain voice of the same name about 1 s. |
+| `proxyRankParallel` | 4 | — | Proxies the automatic Edge route tests at once in its daily full test (one run each). Fifty at 4 take about 15 s; much higher and the tests slow each other down, which skews the ranking. |
 
 ## Playback (`playback`)
 
@@ -146,6 +150,25 @@ staged mode:  credit ≥ duckChunks     → duck playback to duckGain      (a "m
 | `relevantMinScore` | 0 | — | Floor on \|bm25\| for a hit to be injected; 0 = always inject the top hits. Raise (try 2-4) if unrelated memories keep appearing in `turn.start.memoryHints`. |
 | `historyHits` | 3 | 3 | Matching messages from *other* sessions injected as hints. |
 | `hintMaxChars` | 200 | 200 | Truncation per hint. |
+
+## Playbooks (`playbooks`)
+
+See [TRIGGERS.md](TRIGGERS.md). Conditions read these as `tuning.<key>`.
+
+| key | default | what it does |
+|---|---|---|
+| `longMessageChars` | 1200 | A message longer than this counts as long (about a minute and a half of talking). The "Break down long messages" playbook fires above it. |
+| `maxInjected` | 3 | Most playbooks that may shape one reply; the highest priorities win, the rest show as `trigger.dropped` with reason `cap`. 0 switches playbooks off. |
+| `injectMaxChars` | 1200 | Each fired playbook's instruction is cut to this many characters in the prompt. |
+| `useJev` | true | Let playbooks ask Jev (needs the TypeSafe key) for the message's `intent` or their own `ask` question. Jev is only called when an enabled playbook needs it. |
+| `jevTimeoutMs` | 600 | The longest a reply waits for Jev. The request starts when the message arrives, so it overlaps the rest of turn setup; past this the reply goes ahead (`jev.timeout`) and Jev-based playbooks do not fire. |
+| `intentMin` | 0.5 | Below this confidence `intent` is `unsure`. |
+
+Measured on 2026-11-26 from the owner's connection, root question only (`jev-1.14.0`, about 475 input tokens,
+roughly $0.00002 a call): the first call of a run 400-460 ms (connection setup, which `jev.warm` now pays at
+start), then 111-171 ms, also after 20 s idle. In the app the wait added about 150 ms before the reply on a
+typed message. All ten test messages were read as intended (idea, task, question, chat, feedback), most at
+0.94-1.00; "yo, thanks, that was great" was chat at 0.69. The 600 ms timeout leaves room for a slow call.
 
 ## Runtime and logging (`runtime`)
 
