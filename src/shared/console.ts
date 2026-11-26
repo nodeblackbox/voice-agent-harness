@@ -321,7 +321,14 @@ export function describe(e: ConsoleEntry): ConsoleRow {
     case 'jev.error':
       return row(`Jev failed: ${str(d.message)}`, str(d.kind), d.kind === 'no_key' ? 'dim' : 'warn')
     case 'playbooks.changed':
-      return row(`Playbook ${CHANGE[str(d.action)] ?? str(d.action)}: ${str(d.id)}`, d.by === 'ui' ? 'from the Playbooks view' : str(d.by), 'plain')
+      if (d.action === 'undo') return row(`Undid a playbook change: ${str(d.id)}`, d.by === 'voice' ? 'asked by voice' : 'from the Playbooks view', 'plain')
+      return row(`Playbook ${CHANGE[str(d.action)] ?? str(d.action)}: ${str(d.id)}`, d.by === 'ui' ? 'from the Playbooks view' : d.by === 'voice' ? 'asked by voice' : str(d.by), 'plain')
+    case 'playbook.draft':
+      return d.ok
+        ? row(`Drafted the playbook ${str(d.id)}`, join(ms(d.ms), d.repaired ? 'needed one fix' : ''), 'plain')
+        : row('Could not draft a playbook that loads; nothing saved', join(Array.isArray(d.errors) ? (d.errors as unknown[]).map(str)[0] ?? '' : str(d.error), ms(d.ms)), 'warn')
+    case 'playbook.usage':
+      return row('Playbook drafter token use', `${fmtTokens(num(d.inputTokens) ?? 0)} in / ${fmtTokens(num(d.outputTokens) ?? 0)} out tokens`, 'dim', { noisy: true })
     case 'playbooks.invalid': {
       const errs = Array.isArray(d.errors) ? (d.errors as unknown[]).map(str) : []
       return row(`Playbook file not loaded: ${str(d.id)}.md`, join(errs[0] ?? '', errs.length > 1 ? `${errs.length - 1} more problem${errs.length > 2 ? 's' : ''}` : ''), 'bad')

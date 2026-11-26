@@ -1,4 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -6,8 +7,11 @@ import { TEMPLATES } from '@core/playbooks/templates'
 import { PlaybookService } from './playbooks'
 
 const dirs: string[] = []
-afterEach(() => {
-  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true })
+const services: PlaybookService[] = []
+afterEach(async () => {
+  // git may still be committing in the folder; let it finish before the folder goes
+  await Promise.all(services.splice(0).map((s) => s.settled().catch(() => undefined)))
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 function service() {
@@ -16,6 +20,7 @@ function service() {
   const traces: Array<{ ev: string; data: Record<string, unknown> }> = []
   const logs: string[] = []
   const s = new PlaybookService(join(dir, 'playbooks'), { log: (_l, m) => logs.push(m), trace: (ev, data) => traces.push({ ev, data }) })
+  services.push(s)
   return { s, dir: join(dir, 'playbooks'), traces, logs }
 }
 
@@ -90,4 +95,56 @@ describe('PlaybookService', () => {
     expect(st.playbooks.find((p) => p.id === TEMPLATES[0]!.id)).toMatchObject({ firedCount: 2 })
     expect(st.playbooks.find((p) => p.id === 'broken')).toMatchObject({ ok: false, source: 'no header', firedCount: 0 })
   })
+
+  describe('history', () => {
+    const hasGit = (() => {
+      try {
+        execFileSync('git', ['--version'], { stdio: 'ignore' })
+        return true
+      } catch {
+        return false
+      }
+    })()
+    const log = (dir: string) => execFileSync('git', ['log', '--format=%s'], { cwd: dir, encoding: 'utf8' }).trim().split('\n')
+    const GOOD = '---\ntitle: Push\ngoal: Push after work.\ntriggers:\n  said: ["push the changes"]\n---\nOffer to push.\n'
+
+    it.skipIf(!hasGit)('commits every change, and undo reverses the last one, a delete included', async () => {
+      const { s, dir } = service()
+      s.seed()
+      s.load()
+      // as start() does: the history exists before the first change
+      await s.settled()
+      s.save('push', GOOD, undefined, 'voice')
+      await s.settled()
+      s.toggle('push', false)
+      await s.settled()
+      expect(log(dir)).toEqual(['Switch push off (ui)', 'Save push (voice)', 'Start the playbook history'])
+      expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toBe('.trash/\n')
+
+      expect(await s.undo()).toEqual({ ok: true, message: 'Undid: Switch push off.' })
+      expect(s.playbooks().find((p) => p.id === 'push')!.enabled).toBe(true)
+
+      s.delete('push', 'voice')
+      await s.settled()
+      expect(existsSync(join(dir, 'push.md'))).toBe(false)
+      expect((await s.undo()).ok).toBe(true)
+      expect(readFileSync(join(dir, 'push.md'), 'utf8')).toBe(GOOD)
+      expect(s.playbooks().map((p) => p.id)).toContain('push')
+    }, 30_000)
+
+    it('works without git: changes still save, and undo says there is no history', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'va-playbooks-nogit-'))
+      dirs.push(dir)
+      const logs: string[] = []
+      const s = new PlaybookService(join(dir, 'playbooks'), { log: (_l, m) => logs.push(m), trace: () => undefined, git: async () => Promise.reject(new Error('git not found')) })
+      s.seed()
+      s.load()
+      expect(s.save('push', GOOD)).toEqual({ ok: true, id: 'push' })
+      await s.settled()
+      expect(s.hasHistory()).toBe(false)
+      expect(await s.undo()).toEqual({ ok: false, message: expect.stringContaining('no history') })
+      expect(logs.some((l) => l.includes('no history for undo'))).toBe(true)
+    })
+  })
 })
+

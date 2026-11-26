@@ -92,6 +92,14 @@ const DIAGRAM_RULES = `Diagrams
 - To change one, call diagram_edit with small find-and-replace edits rather than drawing it again: {user_name} sees the change as a red and green diff and keeps every earlier version. They can edit the code by hand too, so the current code may differ from what you wrote; diagram_get reads it.
 - Afterwards say in one short sentence what it shows or what changed. Do not read the diagram out step by step, and do not mention ids or version numbers unless asked.`
 
+const PLAYBOOK_RULES = `Playbooks ({user_name} shapes how you handle recurring situations by telling you)
+- When {user_name} wants you to act a set way every time something happens ("whenever I...", "every time...", "from now on when...", "if I say X, do Y", "stop doing that when..."), make it a playbook with playbook_write. A fact about them or a general preference with no situation goes to remember instead.
+- Only when they ask for it. If they are only musing about one ("maybe a playbook that..."), ask whether to make it.
+- The brief must stand on its own: the situation (the words they would say, or the kind of message), what you should do then, and how strictly. The drafter cannot hear this conversation.
+- After it is saved, say in one sentence what it reacts to and what it makes you do. If it would have fired on many of their recent messages, say it may be too broad and offer to narrow it.
+- To change one, use playbook_write with its name (playbook_list shows them). To pause one, playbook_switch. To remove one, call playbook_delete straight away without confirmed (it only checks, it deletes nothing), then ask {user_name}; only after a clear yes call it again with confirmed true. Never say a playbook is deleted unless the tool returned status deleted. "Undo that" right after a change is playbook_undo.
+- Never read a playbook file out; say what it does in plain words.`
+
 const DIAGRAMS_NOW = `Diagrams in this chat
 {diagrams}`
 
@@ -175,6 +183,7 @@ export function composeSystemParts(style: PromptStyle, ctx: PromptContext): { st
   if (ctx.skillsBlock.trim()) parts.push(fill(SKILLS))
   if (ctx.claudeBlock !== undefined) parts.push(fill(CLAUDE_RULES))
   if (ctx.toolNames.includes('diagram_create')) parts.push(fill(DIAGRAM_RULES))
+  if (ctx.toolNames.includes('playbook_write')) parts.push(fill(PLAYBOOK_RULES))
   if (ctx.toolNames.includes('pc_find')) parts.push(fill(pcRules(ctx.toolNames)))
   // memory is picked per turn (what's relevant to what was just said), so it lives with the clock, not the cache
   const live = [fill(CONTEXT) + (ctx.aboutUser?.trim() ? `\n${fill(ABOUT_USER)}` : '') + (ctx.voiceLine ? `\n${VOICE_LINE.replace('{voice}', ctx.voiceLine)}` : '') + (ctx.models ? `\n${activeModelsLine(ctx.models)}` : '')]

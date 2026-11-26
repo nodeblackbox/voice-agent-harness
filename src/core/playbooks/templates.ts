@@ -112,5 +112,8 @@ comparisons == != < <= > >=, in, + - * /, lists like ["a", "b"], and the functio
 lower, has(text, "word") and any_of(text, ["a", "b"]). A name that does not exist is empty, so a condition
 on a missing field is simply false.
 
+You can also ask the assistant to make or change one by voice ("from now on, whenever I..."), switch one off,
+delete one, or undo the last change: the folder keeps its own git history.
+
 Every firing, and every playbook that matched but was held back, shows in the Console.
 `

@@ -183,8 +183,12 @@ this is the "why" and the bar each part has to meet.
   (task, question, chat, idea, feedback) and a playbook's own yes/no question. It is asked only when an enabled
   playbook needs it, once per message, and the reply never waits longer than the Jev timeout. Thinking out loud
   must not start work (the "Idea, not instruction" playbook). The TypeSafe key is the owner's to enter.
- phase 1 is code-only checks that take microseconds, and a
-  failure inside them is logged and the reply goes ahead.
+- The owner makes and changes playbooks **by talking**: "from now on, whenever I say push the changes, offer to
+  push", "stop breaking my messages down", "undo that". The assistant drafts the file, checks it, saves it, and
+  says in a sentence what it reacts to; deleting needs a yes. Every change can be undone (the folder keeps its
+  own git history).
+- Playbooks must never slow a reply down or cost one: code checks take microseconds, Jev is capped by its
+  timeout, and a failure inside either is logged and the reply goes ahead.
 
 ## Claude Code sessions
 

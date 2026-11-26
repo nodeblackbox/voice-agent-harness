@@ -24,6 +24,7 @@ import { MemoryStore } from './memory/store'
 import { parsePlaybook, type Playbook } from './playbooks/schema'
 import { TEMPLATES } from './playbooks/templates'
 import { JevClient } from './jev/client'
+import type { PlaybookAdmin } from './tools/playbooks'
 import type { Settings } from '@shared/types'
 
 let dir: string
@@ -49,7 +50,7 @@ const template = (): Playbook => {
   return r.playbook
 }
 
-const make = (settings: Settings, playbooks: () => Playbook[], jev?: JevClient) => {
+const make = (settings: Settings, playbooks: () => Playbook[], jev?: JevClient, playbookAdmin?: PlaybookAdmin) => {
   const traces: Array<Record<string, unknown>> = []
   const agent = new Agent({
     store,
@@ -59,6 +60,7 @@ const make = (settings: Settings, playbooks: () => Playbook[], jev?: JevClient) 
     skills: () => [],
     playbooks,
     jev,
+    playbookAdmin,
     mcp: { enabled: () => false, tools: () => ({}) } as never,
     search: { configured: () => false } as never,
     ears: { agentSpeaking: () => undefined, agentThinking: () => undefined, restartStuck: () => undefined },
@@ -170,6 +172,14 @@ describe('Agent: playbooks', () => {
       await make(settings, () => [idea()], new JevClient({ key: () => '', fetch: fetch as never })).turn('maybe y')
       expect(fetch).not.toHaveBeenCalled()
     })
+  })
+
+  it('offers the playbook tools and the rules for them only when playbooks can be edited', async () => {
+    const admin: PlaybookAdmin = { state: () => ({ dir: '/d', playbooks: [], jev: 'no_key' }), save: vi.fn(), toggle: vi.fn(), delete: vi.fn(), undo: vi.fn() } as never
+    await make(settings, () => [], undefined, admin).turn('from now on, whenever I say push the changes, offer to push')
+    expect(prompts[0]!.stable).toContain('make it a playbook with playbook_write')
+    await make(settings, () => []).turn('hello')
+    expect(prompts[1]!.stable).not.toContain('playbook_write')
   })
 })
 

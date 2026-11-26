@@ -1,4 +1,4 @@
-import type { ToolSet } from 'ai'
+import { generateText, type ToolSet } from 'ai'
 import type {
   AgentEvent,
   AudioChunk,
@@ -57,6 +57,9 @@ import { Coalescer } from './turn/coalesce'
 import { PlaybookEngine, planJev, type JevFacts, type TurnFacts } from './playbooks/engine'
 import { JevError, type JevClient } from './jev/client'
 import { describeAnswers, readAnswers, turnQuestions, turnState } from './jev/turn'
+import { playbookTools, type PlaybookAdmin } from './tools/playbooks'
+import { draftPlaybook, type DraftResult } from './playbooks/author'
+import type { PlaybookTestRow } from '@shared/types'
 import type { Playbook } from './playbooks/schema'
 import { classifyAfterCut, resumeText } from './turn/resume'
 
@@ -82,6 +85,8 @@ export interface AgentDeps {
   playbooks?: () => Playbook[]
   /** Jev, for playbooks that read the message's intent or ask their own question; none when unset. */
   jev?: JevClient
+  /** Creating, changing and deleting playbooks by voice (the playbook_* tools); none when unset. */
+  playbookAdmin?: PlaybookAdmin & { replay?(id: string, text: string): Promise<PlaybookTestRow[] | null> }
   mcp: McpBridge & { enabled(): boolean }
   search: SearchDeps & { configured(): boolean }
   /** Claude Code session manager; the claude_* tools exist only when this is set and Settings.claude.enabled. */
@@ -210,6 +215,8 @@ export class Agent {
   /** Its events are held until `turn.start` is traced, so they sit under that turn in the Console. */
   private playbookEvents: Array<[string, Record<string, unknown>]> = []
   private readonly playbookEngine = new PlaybookEngine((ev, data) => this.playbookEvents.push([ev, data]))
+  /** playbook_delete's "asked, waiting for a yes", kept across turns (the tools themselves are rebuilt each turn). */
+  private readonly playbookDeletes = new Map<string, number>()
   /** The last cancelled turn, kept until the renderer reports where the cut landed. */
   private cancelled: { turn: ActiveTurn; assistant: ChatMessage } | null = null
   private readTurn: { id: string; controller: AbortController } | null = null
@@ -1415,6 +1422,30 @@ export class Agent {
     })
   }
 
+  /** The drafter for playbook_write: the turn's own model writes the file; tokens are traced like the explorer's. */
+  private async draftPlaybook(brief: string, current: { id: string; source: string } | undefined, model: ModelInfo): Promise<DraftResult> {
+    const admin = this.deps.playbookAdmin!
+    const lm = this.factory.create(model).model
+    const state = admin.state()
+    const ok = state.playbooks.filter((p) => p.ok)
+    // two examples to imitate: ideally one with a condition and one with phrases, never the one being changed
+    const pool = ok.filter((p) => p.id !== current?.id)
+    const examples = [pool.find((p) => p.when), pool.find((p) => p.said?.length) ?? pool.find((p) => !p.when)].filter((p, i, a): p is NonNullable<typeof p> => !!p && a.indexOf(p) === i).map((p) => p.source)
+    let inputTokens = 0
+    let outputTokens = 0
+    const generate = async (system: string, prompt: string): Promise<string> => {
+      const r = await generateText({ model: lm, system, prompt, maxOutputTokens: 1200, temperature: 0.2, abortSignal: AbortSignal.timeout(45_000) })
+      inputTokens += r.usage.inputTokens ?? 0
+      outputTokens += r.usage.outputTokens ?? 0
+      return r.text
+    }
+    try {
+      return await draftPlaybook({ brief, current, taken: state.playbooks.map((p) => p.id), examples, jev: state.jev === 'ready' }, generate)
+    } finally {
+      this.tr('playbook.usage', { model: model.id, inputTokens, outputTokens })
+    }
+  }
+
   /** Profile entries, BM25-relevant entries and matching lines from past sessions, as prompt lines. */
   private memoryBlock(userText: string, s: Settings): { block: string; profile: number; relevant: number; history: number } {
     const scopes = this.scopeIds(s)
@@ -1465,6 +1496,19 @@ export class Agent {
     if (this.deps.mcp.enabled()) Object.assign(tools, mcpTools(this.deps.mcp))
     if (this.claudeOn(s)) Object.assign(tools, claudeTools(this.deps.claude!))
     if (this.deps.diagrams) Object.assign(tools, diagramTools(this.deps.diagrams, () => this.sessionId))
+    const admin = this.deps.playbookAdmin
+    if (admin) {
+      Object.assign(
+        tools,
+        playbookTools({
+          admin,
+          draft: (brief, current) => this.draftPlaybook(brief, current, model),
+          replay: admin.replay?.bind(admin),
+          trace: (ev, data) => this.tr(ev, data),
+          pendingDeletes: this.playbookDeletes
+        })
+      )
+    }
     return tools
   }
 

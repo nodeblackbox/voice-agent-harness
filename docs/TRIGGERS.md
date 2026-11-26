@@ -1,12 +1,15 @@
 # Triggers, playbooks and runbooks: plan
 
-Status: phases 1 to 3 are built. Playbook files with code triggers (`when` conditions and `said` phrases),
-gates, priority, injection into the reply, Console rows, the Playbooks view and chat chips (phases 1 and 2),
-and Jev (phase 3): `src/core/jev/` asks TypeSafe one request per message, only when an enabled playbook needs
-it, starting as soon as the message arrives and capped by `playbooks.jevTimeoutMs`. Conditions can read
-`intent` (task, question, chat, idea, feedback, or unsure) and `intentP`; `triggers.ask` adds a playbook's own
-yes/no question. The key is `typesafe` in Settings > Providers (or `TYPESAFE_API_KEY`). Templates 2 and 3
-(idea, feedback) ship. `kind: runbook` and `mode: canned|hybrid` are still refused by the parser.
+Status: phases 1 to 4 are built. Playbook files with code triggers (`when` conditions and `said` phrases),
+gates, priority, injection into the reply, Console rows, the Playbooks view and chat chips (phases 1 and 2);
+Jev (phase 3): `src/core/jev/` asks TypeSafe one request per message, only when an enabled playbook needs it,
+capped by `playbooks.jevTimeoutMs`, so conditions can read `intent` and `intentP` and `triggers.ask` adds a
+playbook's own question; authoring by voice (phase 4): the playbook_list, playbook_write, playbook_switch,
+playbook_delete and playbook_undo tools (`src/core/tools/playbooks.ts`). playbook_write hands a brief to the
+drafter (`src/core/playbooks/author.ts`), which writes the file with the turn's model, checks it with the
+loader's parser and gets one repair round; delete needs a confirmed second call; every change, by voice or in
+the view, is a commit in the playbooks folder's own git repository, which playbook_undo reverts. `kind: runbook`
+and `mode: canned|hybrid` are still refused by the parser.
 The design discussion lives in the owner's doc "Voice Agent Harness: Trigger
 and Playbook Layer". This page is the build plan. It draws on three places: what this repo already has, the
 Lemon co-host project (one-file-per-playbook, gates, voice authoring), and the Jev logic playground (the Jev

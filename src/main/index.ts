@@ -29,6 +29,7 @@ import { McpService } from './services/mcp'
 import { registerIpc } from './ipc/register'
 import { PlaybookService } from './services/playbooks'
 import { JevClient } from '@core/jev/client'
+import { testPlaybook } from '@core/playbooks/test-run'
 import { usesJev } from '@core/playbooks/schema'
 import { DiagramService } from './services/diagrams'
 import { firstRunRoots } from '@core/explore/roots'
@@ -360,6 +361,15 @@ ${fetchedList.text}`
     skills: () => settings.skills(),
     playbooks: () => playbooks.playbooks(),
     jev,
+    // the playbook_* tools: the same folder, saves and history as the Playbooks view; replay never asks Jev (it is free)
+    playbookAdmin: {
+      state: () => playbooks.state(),
+      save: (id, text, previousId, by) => playbooks.save(id, text, previousId, by),
+      toggle: (id, on, by) => playbooks.toggle(id, on, by),
+      delete: (id, by) => playbooks.delete(id, by),
+      undo: () => playbooks.undo('voice'),
+      replay: async (id, text) => (await testPlaybook(id, text, store.recentUserMessages(40), { ...settings.get().playbooks })).rows
+    },
     mcp,
     claude: claude.manager,
     diagrams: { library: diagrams.library, check: diagrams.check },
@@ -554,7 +564,21 @@ ${fetchedList.text}`
     const line = announcement(event)
     if (line) agent.announce(line)
   })
-  if (isDev && process.env.VA_SAY) setTimeout(() => void agent.send(process.env.VA_SAY!), 4000)
+  // VA_SAY="one || two || three": each message is sent once the reply to the one before has finished
+  if (isDev && process.env.VA_SAY) {
+    const lines = process.env.VA_SAY.split(' || ').map((l) => l.trim()).filter(Boolean)
+    setTimeout(() => {
+      void (async () => {
+        for (const [i, line] of lines.entries()) {
+          if (i > 0) {
+            for (let w = 0; w < 120 && agent.busy; w++) await new Promise((r) => setTimeout(r, 500))
+            await new Promise((r) => setTimeout(r, 1500))
+          }
+          await agent.send(line)
+        }
+      })()
+    }, 4000)
+  }
   if (isDev && process.env.VA_VIEW) {
     // switch to a rail view by its label (e.g. Diagnostics) before a VA_SCREENSHOT is taken
     setTimeout(() => {

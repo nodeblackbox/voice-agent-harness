@@ -4,6 +4,7 @@
 // and traced, never half-loaded. The Playbooks view edits the same files through this service: a save that
 // does not parse is refused, so what is on disk always loads.
 
+import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 import { PLAYBOOK_ID, parsePlaybook, setHeaderField, usesJev, type ParseIssue, type Playbook } from '@core/playbooks/schema'
@@ -13,6 +14,8 @@ import type { PlaybookCheck, PlaybookInfo, PlaybookSaveResult, PlaybooksState } 
 const SEEDED = '_seeded.json'
 const GUIDE_FILE = '_guide.md'
 const TRASH = '.trash'
+/** Who made a change, for the trace and the commit message. */
+type By = 'ui' | 'voice'
 
 export interface PlaybookProblem {
   id: string
@@ -29,6 +32,11 @@ export interface PlaybookServiceDeps {
   now?(): number
   /** Whether Jev can answer: a key is set and it is switched on. */
   jev?(): 'ready' | 'no_key' | 'off'
+  /**
+   * Runs git in the folder (args in, output out). Every change becomes a commit so it can be undone; without
+   * git the folder still works, just without history. Injected for tests.
+   */
+  git?(args: string[]): Promise<string>
 }
 
 interface Loaded {
@@ -44,6 +52,14 @@ export class PlaybookService {
   private fired = new Map<string, { count: number; last: number }>()
   private watcher: FSWatcher | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  /** null until checked; false when git is missing or the folder could not become a repository. */
+  private history: boolean | null = null
+  /** Commits run one after another, so two quick saves cannot race. */
+  private gitQueue: Promise<unknown> = Promise.resolve()
+  /** Set up once: the folder becomes a repository (or is found not to be able to). Never queued behind a commit. */
+  private historyReady: Promise<void> | null = null
+  /** What the last load saw, so the watcher re-reading our own write does not log and refresh a second time. */
+  private loadedSignature = ''
 
   constructor(
     readonly dir: string,
@@ -54,8 +70,13 @@ export class PlaybookService {
   start(): void {
     this.seed()
     this.load()
+    void this.startHistory()
     try {
-      this.watcher = watch(this.dir, () => this.scheduleLoad())
+      // git's own files and the trash change on every save; only the playbook files matter here
+      this.watcher = watch(this.dir, (_ev, name) => {
+        if (name && /^(\.git|\.trash|_seeded\.json)/.test(String(name))) return
+        this.scheduleLoad()
+      })
       this.watcher.on('error', (e) => this.deps.log('warn', `playbooks: watching the folder stopped: ${e.message}`))
     } catch (e) {
       this.deps.log('warn', `playbooks: cannot watch the folder, edits apply on the next launch: ${(e as Error).message}`)
@@ -93,36 +114,125 @@ export class PlaybookService {
   }
 
   /** Write a playbook. Nothing is written when it does not parse; a new id with `previousId` renames. */
-  save(id: string, text: string, previousId?: string): PlaybookSaveResult {
+  save(id: string, text: string, previousId?: string, by: By = 'ui'): PlaybookSaveResult {
     const r = parsePlaybook(id, text)
     if (!r.ok) return { ok: false, errors: r.errors }
     if (previousId && previousId !== id && existsSync(this.path(id))) return { ok: false, errors: [{ line: 0, message: `a playbook named "${id}" already exists` }] }
     mkdirSync(this.dir, { recursive: true })
     writeFileSync(this.path(id), text)
     if (previousId && previousId !== id && PLAYBOOK_ID.test(previousId) && existsSync(this.path(previousId))) unlinkSync(this.path(previousId))
-    this.deps.trace('playbooks.changed', { id, action: previousId && previousId !== id ? 'rename' : 'save', by: 'ui' })
+    const action = previousId && previousId !== id ? 'rename' : 'save'
+    this.deps.trace('playbooks.changed', { id, action, by })
     this.load()
+    this.commit(action === 'rename' ? `Rename ${previousId} to ${id}` : `Save ${id}`, by)
     return { ok: true, id }
   }
 
-  toggle(id: string, on: boolean): PlaybookSaveResult {
+  toggle(id: string, on: boolean, by: By = 'ui'): PlaybookSaveResult {
     const f = this.files.find((x) => x.id === id)
     if (!f) return { ok: false, errors: [{ line: 0, message: `no playbook named "${id}"` }] }
     const next = setHeaderField(f.source, 'enabled', on)
     if (next === null) return { ok: false, errors: [{ line: 1, message: 'the header could not be read, so it was not changed' }] }
-    const r = this.save(id, next)
-    if (r.ok) this.deps.trace('playbooks.changed', { id, action: on ? 'on' : 'off', by: 'ui' })
+    const r = this.write(id, next)
+    if (r.ok) {
+      this.deps.trace('playbooks.changed', { id, action: on ? 'on' : 'off', by })
+      this.commit(`Switch ${id} ${on ? 'on' : 'off'}`, by)
+    }
     return r
   }
 
   /** Moves the file to `.trash` (with a time stamp), so a delete can be undone by hand. */
-  delete(id: string): void {
+  delete(id: string, by: By = 'ui'): void {
     if (!PLAYBOOK_ID.test(id) || !existsSync(this.path(id))) return
     const trash = join(this.dir, TRASH)
     mkdirSync(trash, { recursive: true })
     renameSync(this.path(id), join(trash, `${id}.${(this.deps.now ?? Date.now)()}.md`))
-    this.deps.trace('playbooks.changed', { id, action: 'delete', by: 'ui' })
+    this.deps.trace('playbooks.changed', { id, action: 'delete', by })
     this.load()
+    this.commit(`Delete ${id}`, by)
+  }
+
+  /** Writes a file that parses, without a trace or a commit of its own (the caller does both). */
+  private write(id: string, text: string): PlaybookSaveResult {
+    const r = parsePlaybook(id, text)
+    if (!r.ok) return { ok: false, errors: r.errors }
+    writeFileSync(this.path(id), text)
+    this.load()
+    return { ok: true, id }
+  }
+
+  /** Whether changes are being kept in git (false until the folder's repository is ready, or without git). */
+  hasHistory(): boolean {
+    return this.history === true
+  }
+
+  /** Undo the last change: a new commit that reverses it, so the undo can itself be undone. */
+  async undo(by: By = 'voice'): Promise<{ ok: boolean; message: string }> {
+    await this.startHistory()
+    if (!this.history) return { ok: false, message: 'There is no history to undo with: git is not available for the playbooks folder.' }
+    await this.gitQueue
+    try {
+      const subject = (await this.git(['log', '-1', '--format=%s'])).trim()
+      if (!subject || subject === 'Start the playbook history') return { ok: false, message: 'There is nothing to undo yet.' }
+      await this.git(['revert', '--no-edit', 'HEAD'])
+      this.load()
+      const what = subject.replace(/ \((ui|voice)\)$/, '')
+      this.deps.trace('playbooks.changed', { id: what, action: 'undo', by })
+      return { ok: true, message: `Undid: ${what}.` }
+    } catch (e) {
+      this.deps.log('warn', `playbooks: undo failed: ${(e as Error).message}`)
+      return { ok: false, message: `The undo failed: ${(e as Error).message.split('\n')[0]}` }
+    }
+  }
+
+  private git(args: string[]): Promise<string> {
+    if (this.deps.git) return this.deps.git(args)
+    // a fixed identity for these commits, so nothing in the user's git config is needed or touched
+    const full = ['-c', 'user.name=Voice Agent', '-c', 'user.email=playbooks@voice-agent.local', '-c', 'core.autocrlf=false', ...args]
+    return new Promise((resolve, reject) =>
+      execFile('git', full, { cwd: this.dir, windowsHide: true, timeout: 15_000 }, (err, stdout, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve(stdout)))
+    )
+  }
+
+  private startHistory(): Promise<void> {
+    this.historyReady ??= (async () => {
+      try {
+        if (!existsSync(join(this.dir, '.git'))) {
+          await this.git(['init', '-q'])
+          writeFileSync(join(this.dir, '.gitignore'), `${TRASH}/\n`)
+          await this.git(['add', '-A'])
+          await this.git(['commit', '-q', '-m', 'Start the playbook history'])
+        }
+        this.history = true
+      } catch (e) {
+        this.history = false
+        this.deps.log('warn', `playbooks: no history for undo (git: ${(e as Error).message.split('\n')[0]})`)
+      }
+    })()
+    return this.historyReady
+  }
+
+  /**
+   * One commit per change, in order; failures are logged, never thrown at the user. Git reads the files when the
+   * commit runs, so two changes in the same instant land in one commit (and one undo); clicks and voice requests
+   * are seconds apart.
+   */
+  private commit(message: string, by: By): void {
+    this.gitQueue = this.gitQueue
+      .then(async () => {
+        await this.startHistory()
+        if (!this.history) return
+        await this.git(['add', '-A'])
+        const status = await this.git(['status', '--porcelain'])
+        if (status.trim()) await this.git(['commit', '-q', '-m', `${message} (${by})`])
+      })
+      .catch((e: Error) => this.deps.log('warn', `playbooks: could not record "${message}": ${e.message.split('\n')[0]}`))
+  }
+
+  /** For tests: wait until every queued commit has run. */
+  async settled(): Promise<void> {
+    await this.startHistory()
+    await this.gitQueue
   }
 
   private path(id: string): string {
@@ -210,6 +320,9 @@ export class PlaybookService {
       }
     }
     this.files = files
+    const signature = JSON.stringify(files.map((f) => [f.id, f.source]))
+    if (signature === this.loadedSignature) return
+    this.loadedSignature = signature
     const list = this.playbooks()
     this.deps.trace('playbooks.loaded', { count: list.length, enabled: list.filter((p) => p.enabled).length, invalid: files.filter((f) => !f.playbook).length, ids: list.map((p) => p.id) })
     this.deps.changed?.()
