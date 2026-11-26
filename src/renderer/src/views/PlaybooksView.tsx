@@ -6,8 +6,8 @@
  * have set it off.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, CircleAlert, Copy, FlaskConical, FolderOpen, ListChecks, Plus, RotateCcw, Save, Square, Trash2, Workflow } from 'lucide-react'
-import type { PlaybookCheck, PlaybookInfo, PlaybookIssue, PlaybooksState, PlaybookTestRow, RunbookRun, RunbookRunStatus } from '@shared/types'
+import { AlertTriangle, Check, CircleAlert, Copy, FlaskConical, FolderOpen, ListChecks, Plus, RotateCcw, Save, Scale, Sparkles, Square, Trash2, Workflow } from 'lucide-react'
+import type { PlaybookCheck, PlaybookEvalResult, PlaybookEvalRow, PlaybookInfo, PlaybookIssue, PlaybookLabel, PlaybooksState, PlaybookTestRow, RunbookRun, RunbookRunStatus } from '@shared/types'
 import { InlineDiagram } from '../components/diagram/DiagramCard'
 import { T, alpha } from '../theme'
 import { useStore } from '../state/store'
@@ -148,6 +148,96 @@ function Issues({ check }: { check: PlaybookCheck | null }) {
           <span>{r.message}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+const VERDICT: Record<PlaybookEvalRow['verdict'], { label: string; color: string }> = {
+  agree: { label: 'right', color: T.green },
+  miss: { label: 'missed', color: T.amber },
+  false_fire: { label: 'fired wrongly', color: T.red },
+  unsure: { label: 'unsure', color: T.text3 }
+}
+
+/** With a mark set or cleared, what the row now says (the mark beats the judge; clearing it leaves "unsure" until the next review). */
+function withLabel(r: PlaybookEvalRow, label: PlaybookLabel | null): PlaybookEvalRow {
+  const should = label ? label === 'should' : r.by === 'label' ? null : r.should
+  const verdict: PlaybookEvalRow['verdict'] = should === null ? 'unsure' : should === r.fires ? 'agree' : r.fires ? 'false_fire' : 'miss'
+  return { ...r, label: label ?? undefined, should, by: label ? 'label' : r.by === 'label' ? 'none' : r.by, verdict }
+}
+
+function ReviewPanel({ result, canMark, onMark, onSuggest, suggesting, onClose }: { result: PlaybookEvalResult; canMark: boolean; onMark: (row: PlaybookEvalRow, label: PlaybookLabel | null) => void; onSuggest: () => void; suggesting: boolean; onClose: () => void }) {
+  const [all, setAll] = useState(false)
+  const s = result.summary
+  const problems = result.rows.filter((r) => r.verdict === 'miss' || r.verdict === 'false_fire')
+  const shown = all ? result.rows : result.rows.filter((r) => r.verdict !== 'agree')
+  return (
+    <div className="flex flex-col gap-2 rounded-lg p-3" style={{ background: T.bg, border: `1px solid ${T.border}` }}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-xs font-medium" style={{ color: T.text2 }}>
+          {s.checked ? `Of your last ${s.checked} messages it fires on ${s.fires}. Right on ${s.agree}` : 'No messages to review yet'}
+          {s.misses ? <span style={{ color: T.amber }}>, missed {s.misses}</span> : null}
+          {s.falseFires ? <span style={{ color: T.red }}>, fired wrongly on {s.falseFires}</span> : null}
+          {s.unsure ? <span style={{ color: T.text3 }}>, unsure about {s.unsure}</span> : null}
+          {s.checked ? '.' : ''}
+        </span>
+        <div className="flex gap-1">
+          {problems.length > 0 && (
+            <Btn small primary icon={Sparkles} onClick={onSuggest} disabled={suggesting}>
+              {suggesting ? 'Drafting…' : 'Suggest a tighter trigger'}
+            </Btn>
+          )}
+          <Btn small onClick={() => setAll(!all)}>
+            {all ? 'Problems only' : 'Show all'}
+          </Btn>
+          <Btn small onClick={onClose}>
+            Close
+          </Btn>
+        </div>
+      </div>
+      {result.note && (
+        <span className="text-xs" style={{ color: T.text3, lineHeight: 1.45 }}>
+          {result.note} Your own marks count over the judge.
+        </span>
+      )}
+      {shown.length === 0 && (
+        <span className="text-xs" style={{ color: T.green }}>
+          Nothing to fix: wherever the judge was sure, the trigger did the right thing.
+        </span>
+      )}
+      {shown.map((r) => {
+        const v = VERDICT[r.verdict]
+        return (
+          <div key={r.messageId} className="flex items-start gap-2 text-xs" style={{ lineHeight: 1.45 }}>
+            <span className="shrink-0 rounded px-1.5 py-0.5" style={{ background: alpha(v.color, 14), color: v.color, minWidth: 82, textAlign: 'center' }}>
+              {v.label}
+            </span>
+            <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+              <span style={{ color: T.text, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.text}</span>
+              <span style={{ color: T.text3 }}>
+                {r.fires ? 'fires' : 'does not fire'} ·{' '}
+                {r.by === 'label' ? `you marked it ${r.label === 'should' ? 'should fire' : 'should not fire'}` : r.should === null ? 'judge unsure' : `${r.by === 'jev' ? 'Jev' : 'the model'} says it ${r.should ? 'should' : 'should not'}${r.p !== null ? ` (${r.p.toFixed(2)})` : ''}`}
+              </span>
+            </div>
+            {canMark && (
+              <div className="flex gap-1 shrink-0">
+                {(['should', 'should_not'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => onMark(r, r.label === l ? null : l)}
+                    className="rounded px-1.5 py-0.5 text-[11px]"
+                    title={r.label === l ? 'Clear your mark' : l === 'should' ? 'It should fire on this message' : 'It should not fire on this message'}
+                    style={{ cursor: 'pointer', border: `1px solid ${r.label === l ? T.cyanBorder : T.border}`, background: r.label === l ? T.cyanTint : 'transparent', color: r.label === l ? T.cyan : T.text2 }}
+                  >
+                    {l === 'should' ? 'Should fire' : "Shouldn't"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -396,6 +486,50 @@ export function PlaybooksView() {
     await load()
   }
 
+  const [review, setReview] = useState<PlaybookEvalResult | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+
+  const runReview = async () => {
+    if (!draft) return
+    setReviewing(true)
+    setTest(null)
+    try {
+      const r = await window.api.playbooks.evaluate(draft.from ?? draft.id, draft.text)
+      if (r.errors.length) setCheck({ errors: r.errors, warnings: check?.warnings ?? [] })
+      else setReview(r)
+    } catch (err) {
+      pushToast('error', `Could not review: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  const mark = (row: PlaybookEvalRow, label: PlaybookLabel | null) => {
+    if (!draft?.from || !review) return
+    void window.api.playbooks.label(draft.from, row.messageId, label)
+    const rows = review.rows.map((r) => (r.messageId === row.messageId ? withLabel(r, label) : r))
+    const count = (v: PlaybookEvalRow['verdict']) => rows.filter((r) => r.verdict === v).length
+    setReview({ ...review, rows, summary: { ...review.summary, agree: count('agree'), misses: count('miss'), falseFires: count('false_fire'), unsure: count('unsure') } })
+  }
+
+  const suggest = async () => {
+    if (!draft) return
+    setSuggesting(true)
+    try {
+      const r = await window.api.playbooks.suggest(draft.from ?? draft.id, draft.text)
+      if (r.ok) {
+        setDraft({ ...draft, text: r.text })
+        setReview(null)
+        pushToast('info', 'A tighter trigger is in the editor. Check it, test it, then Save.')
+      } else pushToast('warn', `No suggestion: ${r.errors[0] ? issueText(r.errors[0]) : 'the draft did not load'}`)
+    } catch (err) {
+      pushToast('error', `Could not draft a suggestion: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
   const runTest = async () => {
     if (!draft) return
     setTesting(true)
@@ -512,6 +646,9 @@ export function PlaybooksView() {
               <Btn small icon={FlaskConical} onClick={() => void runTest()} disabled={errors > 0 || testing}>
                 {testing ? 'Testing…' : 'Test on recent messages'}
               </Btn>
+              <Btn small icon={Scale} onClick={() => void runReview()} disabled={errors > 0 || reviewing}>
+                {reviewing ? 'Reviewing…' : 'Review'}
+              </Btn>
             </div>
 
             <div className="rounded-lg overflow-hidden" style={{ height: 380, border: `1px solid ${T.border}` }}>
@@ -522,6 +659,7 @@ export function PlaybooksView() {
 
             <Issues check={check} />
             {test && <TestResults rows={test.rows} note={test.note} onClose={() => setTest(null)} />}
+            {review && <ReviewPanel result={review} canMark={!!draft.from} onMark={mark} onSuggest={() => void suggest()} suggesting={suggesting} onClose={() => setReview(null)} />}
 
             {current?.kind === 'runbook' && current.diagram && (
               <div className="flex flex-col gap-2">

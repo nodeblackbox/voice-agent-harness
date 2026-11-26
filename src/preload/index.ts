@@ -66,7 +66,10 @@ const api: VoiceAgentApi = {
     toggle: (id, on) => invoke(IPC.playbooksToggle, id, on),
     delete: (id) => invoke(IPC.playbooksDelete, id),
     test: (id, text) => invoke(IPC.playbooksTest, id, text),
-    openFolder: () => invoke(IPC.playbooksOpenFolder)
+    openFolder: () => invoke(IPC.playbooksOpenFolder),
+    evaluate: (id, text) => invoke(IPC.playbooksEvaluate, id, text),
+    label: (id, messageId, label) => invoke(IPC.playbooksLabel, id, messageId, label),
+    suggest: (id, text) => invoke(IPC.playbooksSuggest, id, text)
   },
   runbooks: {
     runs: () => invoke(IPC.runbooksRuns),

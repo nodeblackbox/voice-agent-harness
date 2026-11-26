@@ -75,6 +75,8 @@ suite('console rows', () => {
     expect(describe(ev('jev.answer', { name: 'intent', answer: 'idea', p: 0.82 }))).toMatchObject({ title: 'Jev read it as: idea', detail: '82% sure' })
     expect(describe(ev('jev.answer', { name: 'pb_push', answer: 'yes', p: 0.91 })).title).toBe('Jev on push: yes')
     expect(describe(ev('jev.timeout', { ms: 600 })).tone).toBe('warn')
+    expect(describe(ev('playbook.review', { id: 'push', checked: 20, fires: 3, misses: 1, falseFires: 0, ms: 1400 }))).toMatchObject({ title: 'Reviewed the trigger of push', detail: '20 messages · fires on 3 · missed 1 · 1.4 s', tone: 'warn' })
+    expect(describe(ev('playbook.label', { id: 'push', label: 'should_not' })).title).toBe('Marked a message for push: it should not fire')
     expect(describe(ev('runbook.start', { id: 'brain-dump-to-tasks', title: 'Brain dump to tasks' }))).toMatchObject({ title: 'Runbook started: Brain dump to tasks', tone: 'accent' })
     expect(describe(ev('runbook.wait', { id: 'brain-dump-to-tasks', expireS: 300 })).title).toBe('brain-dump-to-tasks is waiting for your reply')
     expect(describe(ev('runbook.step', { id: 'x', step: 'add', kind: 'tool', outcome: 'ok', ms: 40, note: '2 calls' }))).toMatchObject({ title: 'x: add (tool): 2 calls', noisy: true })

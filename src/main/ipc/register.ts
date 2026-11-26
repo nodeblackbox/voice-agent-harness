@@ -2,7 +2,7 @@ import { dialog, ipcMain, shell, type BrowserWindow } from 'electron'
 import { checkRoot } from '@core/explore/roots'
 import { generateText } from 'ai'
 import { IPC } from '@shared/ipc'
-import type { CloudTtsProvider, KeyName, LogLevel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
+import type { CloudTtsProvider, KeyName, LogLevel, PlaybookLabel, McpServerConfig, MemoryEntry, Project, PromptStyle, Provider, ServiceStatus, Settings, Skill, StyleDraft, TtsEngineId } from '@shared/types'
 import type { Agent } from '@core/agent'
 import { MODELS, findModel } from '@core/providers/models'
 import { resolveModel } from '@core/providers/resolve'
@@ -18,6 +18,7 @@ import type { McpService } from '../services/mcp'
 import type { ClaudeService } from '../services/claude'
 import type { DiagramService } from '../services/diagrams'
 import type { PlaybookService } from '../services/playbooks'
+import type { PlaybookReview } from '../services/playbookReview'
 import { testPlaybook } from '@core/playbooks/test-run'
 import type { JevClient } from '@core/jev/client'
 import type { DiagramCheck } from '@shared/diagram'
@@ -38,6 +39,7 @@ export interface IpcDeps {
   claude: ClaudeService
   diagrams: DiagramService
   playbooks: PlaybookService
+  review: PlaybookReview
   jev: JevClient
   services: () => ServiceStatus[]
   edgeRoute: EdgeRouteService
@@ -139,6 +141,9 @@ export function registerIpc(d: IpcDeps): void {
     const t = d.settings.get().playbooks
     return testPlaybook(String(id), String(text), d.store.recentUserMessages(40), { ...t }, t.useJev ? { client: d.jev, timeoutMs: t.jevTimeoutMs, intentMin: t.intentMin } : undefined)
   })
+  h(IPC.playbooksEvaluate, (_e, id: string, text?: string) => d.review.evaluate(String(id), typeof text === 'string' ? text : undefined))
+  h(IPC.playbooksLabel, (_e, id: string, messageId: string, label: PlaybookLabel | null) => d.review.label(String(id), String(messageId), label === 'should' || label === 'should_not' ? label : null))
+  h(IPC.playbooksSuggest, (_e, id: string, text?: string) => d.review.suggest(String(id), typeof text === 'string' ? text : undefined))
   h(IPC.runbooksRuns, () => d.agent.runbooks.list())
   h(IPC.runbooksCancel, (_e, runId: string) => d.agent.runbooks.cancel(String(runId)))
   h(IPC.playbooksOpenFolder, async () => {

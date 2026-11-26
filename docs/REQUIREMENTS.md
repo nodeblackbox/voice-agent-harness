@@ -195,6 +195,10 @@ this is the "why" and the bar each part has to meet.
 - Runbooks also react to **Claude Code sessions and the clock**: when a session finishes with uncommitted work in a
   git project the assistant offers to have it commit and push (only on a yes), and a session left waiting on the
   owner for a while gets a spoken reminder now and then.
+- The owner can check whether a trigger is right: **Review** replays recent messages and shows where it fired
+  wrongly or missed, judged by Jev (or the model), with the owner's own marks counting over the judge; it can then
+  draft a tighter trigger to check and save. "That one shouldn't have fired" works by voice and by the small mark
+  next to a chip in the chat.
 - Playbooks must never slow a reply down or cost one: code checks take microseconds, Jev is capped by its
   timeout, and a failure inside either is logged and the reply goes ahead.
 

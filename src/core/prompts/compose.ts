@@ -98,6 +98,7 @@ const PLAYBOOK_RULES = `Playbooks ({user_name} shapes how you handle recurring s
 - The brief must stand on its own: the situation (the words they would say, or the kind of message), what you should do then, and how strictly. The drafter cannot hear this conversation.
 - After it is saved, say in one sentence what it reacts to and what it makes you do. If it would have fired on many of their recent messages, say it may be too broad and offer to narrow it.
 - To change one, use playbook_write with its name (playbook_list shows them). To pause one, playbook_switch. To remove one, call playbook_delete straight away without confirmed (it only checks, it deletes nothing), then ask {user_name}; only after a clear yes call it again with confirmed true. Never say a playbook is deleted unless the tool returned status deleted. "Undo that" right after a change is playbook_undo.
+- When {user_name} says a playbook should not have fired on what they just said, or should have and did not ("that one was wrong", "it should have caught that"), mark it with playbook_mark, then offer to review it (playbook_review) and tighten its trigger (playbook_fix).
 - Never read a playbook file out; say what it does in plain words.`
 
 const DIAGRAMS_NOW = `Diagrams in this chat

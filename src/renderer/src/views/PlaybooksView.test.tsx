@@ -26,6 +26,18 @@ const playbooks = {
   save: vi.fn(async (id: string) => ({ ok: true as const, id })),
   toggle: vi.fn(async (id: string) => ({ ok: true as const, id })),
   delete: vi.fn(async () => undefined),
+  evaluate: vi.fn(async () => ({
+    errors: [],
+    rows: [
+      { messageId: 'm1', text: 'ship it to github', createdAt: 1, fires: false, why: null, should: true, p: 0.91, by: 'jev' as const, verdict: 'miss' as const },
+      { messageId: 'm2', text: 'push the notes wording', createdAt: 2, fires: true, why: 'said', should: false, p: 0.08, by: 'jev' as const, verdict: 'false_fire' as const },
+      { messageId: 'm3', text: 'a quiet hello', createdAt: 3, fires: false, why: null, should: false, p: 0.02, by: 'jev' as const, verdict: 'agree' as const }
+    ],
+    summary: { checked: 3, fires: 1, agree: 1, misses: 1, falseFires: 1, unsure: 0 },
+    note: 'Jev judged 3 messages, about $0.0001.'
+  })),
+  label: vi.fn(async () => undefined),
+  suggest: vi.fn(async () => ({ ok: true as const, id: 'long-message-breakdown', text: `${SOURCE}# tighter\n`, repaired: false, warnings: [] })),
   test: vi.fn(async () => ({ errors: [], rows: [{ text: 'a very long ramble', createdAt: 1, why: 'when chars > 1200 (chars 1500)' }, { text: 'just saying hello there', createdAt: 2, why: null }] })),
   openFolder: vi.fn(async () => undefined)
 }
@@ -180,6 +192,29 @@ describe('PlaybooksView with runbooks', () => {
   })
 })
 
+describe('PlaybooksView review', () => {
+  it('reviews the trigger, shows only the problems, takes marks, and drafts a tighter trigger into the editor', async () => {
+    await render()
+    await click(button('Review'))
+    expect(playbooks.evaluate).toHaveBeenCalledWith('long-message-breakdown', SOURCE)
+    expect(host.textContent).toContain('Of your last 3 messages it fires on 1. Right on 1, missed 1, fired wrongly on 1.')
+    expect(host.textContent).toContain('ship it to github')
+    expect(host.textContent).not.toContain('a quiet hello')
+    expect(host.textContent).toContain('Jev says it should (0.91)')
+
+    // marking the false fire as fine after all turns it into a right one
+    const rowOf = (text: string) => [...host.querySelectorAll('div')].find((d) => d.textContent?.startsWith('fired wrongly') && d.textContent.includes(text))!
+    await click([...rowOf('push the notes wording').querySelectorAll('button')].find((b) => b.textContent === 'Should fire'))
+    expect(playbooks.label).toHaveBeenCalledWith('long-message-breakdown', 'm2', 'should')
+    expect(host.textContent).toContain('Right on 2, missed 1.')
+
+    await click(button('Suggest a tighter trigger'))
+    expect(playbooks.suggest).toHaveBeenCalledWith('long-message-breakdown', SOURCE)
+    expect((host.querySelector('textarea[aria-label="editor"]') as HTMLTextAreaElement).value).toBe(`${SOURCE}# tighter\n`)
+    expect(host.textContent).toContain('unsaved changes')
+  })
+})
+
 describe('playbook chips in the chat', () => {
   it('shows a chip under the message that fired it, and the chip opens the playbook', async () => {
     const m: ChatMessage = { id: 'u1', turnId: 't1', sessionId: 's', role: 'user', text: 'a long ramble', via: 'voice', createdAt: 1, playbooks: [{ id: 'long-message-breakdown', title: 'Break down long messages', why: 'when chars > 1200' }] }
@@ -189,5 +224,11 @@ describe('playbook chips in the chat', () => {
     expect(chip.title).toContain('when chars > 1200')
     await click(chip)
     expect(useStore.getState()).toMatchObject({ view: 'playbooks', playbookFocus: 'long-message-breakdown' })
+    // the small control next to it marks a wrong firing, once
+    useStore.setState({ view: 'chat' })
+    const wrong = host.querySelector('button[aria-label="Break down long messages should not have fired here"]') as HTMLButtonElement
+    await click(wrong)
+    expect(playbooks.label).toHaveBeenCalledWith('long-message-breakdown', 'u1', 'should_not')
+    expect(wrong.disabled).toBe(true)
   })
 })

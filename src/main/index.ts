@@ -30,6 +30,7 @@ import { registerIpc } from './ipc/register'
 import { PlaybookService } from './services/playbooks'
 import { RunbookRunStore } from './services/runbookRuns'
 import { changedFiles } from './services/gitStatus'
+import { PlaybookLabels, PlaybookReview } from './services/playbookReview'
 import { JevClient } from '@core/jev/client'
 import { testPlaybook } from '@core/playbooks/test-run'
 import { usesJev } from '@core/playbooks/schema'
@@ -347,8 +348,19 @@ ${fetchedList.text}`
   const diagrams = new DiagramService(userData, send, (doc, id) => emit({ type: 'diagram', id, doc }))
   // runbook runs, one JSON file each, so a run waiting for the user's reply survives a restart
   const runbookRuns = new RunbookRunStore(join(userData, 'runbooks', 'runs'), (m) => logAt('warn', 'runbooks', m))
+  // reviews of playbook triggers: the user's marks, and Jev or the model as the judge (set up below, once Jev exists)
+  const playbookLabels = new PlaybookLabels(join(userData, 'playbook-labels.json'))
   // Jev, the playbooks' decision model: TypeSafe's API, or another server speaking it (JEV_BASE_URL, e.g. a local jevos)
   const jev = new JevClient({ key: () => settings.keysFor('typesafe')[0], baseUrl: () => settings.envVar('JEV_BASE_URL') ?? '', model: () => settings.envVar('JEV_MODEL') ?? '' })
+  const review = new PlaybookReview({
+    settings: () => settings.get(),
+    keys: settings,
+    store,
+    jev,
+    labels: playbookLabels,
+    source: (id) => playbooks.state().playbooks.find((p) => p.id === id)?.source,
+    trace: (ev, data) => trace({ ev, sid: agent.currentSessionId, ...data })
+  })
   // playbooks (docs/TRIGGERS.md): one .md file each in <userData>/playbooks, re-read when they change
   const playbooks = new PlaybookService(join(userData, 'playbooks'), {
     log: (level, m) => logAt(level, 'playbooks', m),
@@ -372,7 +384,11 @@ ${fetchedList.text}`
       toggle: (id, on, by) => playbooks.toggle(id, on, by),
       delete: (id, by) => playbooks.delete(id, by),
       undo: () => playbooks.undo('voice'),
-      replay: async (id, text) => (await testPlaybook(id, text, store.recentUserMessages(40), { ...settings.get().playbooks })).rows
+      replay: async (id, text) => (await testPlaybook(id, text, store.recentUserMessages(40), { ...settings.get().playbooks })).rows,
+      evaluate: (id) => review.evaluate(id),
+      label: (id, messageId, label) => review.label(id, messageId, label),
+      suggest: (id) => review.suggest(id),
+      previousUserMessage: () => review.previousUserMessage()
     },
     runbookStore: runbookRuns,
     mcp,
@@ -525,6 +541,7 @@ ${fetchedList.text}`
     claude,
     diagrams,
     playbooks,
+    review,
     jev,
     services,
     edgeRoute,
@@ -611,6 +628,15 @@ ${fetchedList.text}`
         .executeJavaScript(`(() => { const b = document.querySelector('button[aria-label="${process.env.VA_VIEW!.replace(/"/g, '')}"]'); if (!b) return 'no-button'; b.click(); return 'clicked' })()`)
         .then((r) => log('devtools', `view ${process.env.VA_VIEW}: ${String(r)}`))
     }, Number(process.env.VA_VIEW_DELAY ?? 12000))
+    // VA_CLICK="Review": press the first button whose text is exactly that, after the view opened
+    if (process.env.VA_CLICK) {
+      setTimeout(() => {
+        const want = JSON.stringify(process.env.VA_CLICK)
+        void win?.webContents
+          .executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((e) => e.textContent.trim() === ${want}); if (!b) return 'not-found'; b.click(); return 'clicked' })()`)
+          .then((r) => log('devtools', `click ${process.env.VA_CLICK}: ${String(r)}`))
+      }, Number(process.env.VA_VIEW_DELAY ?? 12000) + 500)
+    }
     // VA_SCROLL_TO="Providers": scroll the first element whose own text is exactly that into view, after the view opened
     if (process.env.VA_SCROLL_TO) {
       setTimeout(() => {

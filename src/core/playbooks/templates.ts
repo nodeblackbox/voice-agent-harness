@@ -320,7 +320,9 @@ on a missing field is simply false.
 You can also ask the assistant to make or change one by voice ("from now on, whenever I..."), switch one off,
 delete one, or undo the last change: the folder keeps its own git history.
 
-Every firing, and every playbook that matched but was held back, shows in the Console.
+Every firing, and every playbook that matched but was held back, shows in the Console. Review (on the Playbooks
+page, or "review the push playbook" by voice) shows where a trigger fired wrongly or missed, and can draft a tighter
+one; the small mark next to a chip in the chat records "this should not have fired here".
 
 ## Runbooks
 

@@ -1,14 +1,16 @@
 # Triggers, playbooks and runbooks: plan
 
-Status: phases 1 to 6 are built. Playbooks (phases 1-2): files with code triggers, gates, priority, injection
-into the reply, the Playbooks view and chat chips. Jev (phase 3): `intent`, `intentP` and `triggers.ask`. Authoring
-by voice (phase 4): the playbook_* tools, the drafter, confirmed deletes, git history and undo. Runbooks (phase 5):
-`kind: runbook` with `steps`, run in the background by `RunbookRunner`, saved after every step. Events (phase 6):
-runbooks also react to `cc.finished` (with `changedFiles` from `git status` in the session's folder),
-`cc.needs_input` and a `clock.tick` every minute (`PlaybookEngine.onEvent`, `Agent.onEvent`, `Agent.startClock`);
-conditions have `%`; a claude step can message an existing session (`session:`). Templates: long message
-breakdown, idea, feedback, brain dump to tasks, change request for this app, push after a session finishes,
-remind me about waiting sessions. Still open: phase 7 (evaluation) and `mode: canned|hybrid`.
+Status: all seven phases are built. Playbooks (1-2): files with code triggers, gates, priority, injection into the
+reply, the Playbooks view and chat chips. Jev (3): `intent`, `intentP`, `triggers.ask`. Authoring by voice (4):
+the playbook_* tools, the drafter, confirmed deletes, git history and undo. Runbooks (5): `kind: runbook` with
+`steps`, run in the background, saved after every step. Events (6): `cc.finished`, `cc.needs_input`, `clock.tick`.
+Evaluation (7): `src/core/playbooks/evaluate.ts` replays the user's recent messages through a trigger and has a
+judge (Jev, one yes/no per message, or the model in one call) say where it should have fired; disagreements are
+misses and false fires, the user's own marks (`<userData>/playbook-labels.json`, set in the Review panel, by the
+small control on a chat chip, or by voice with playbook_mark) count over the judge, and `suggestTrigger` drafts a
+tighter trigger from them (the Review panel puts it in the editor; playbook_fix saves it, undoable). Still open:
+`mode: canned|hybrid`, splitting long messages into pieces (`fromSplit` is always false), and the root types
+learned from logged messages.
 The design discussion lives in the owner's doc "Voice Agent Harness: Trigger
 and Playbook Layer". This page is the build plan. It draws on three places: what this repo already has, the
 Lemon co-host project (one-file-per-playbook, gates, voice authoring), and the Jev logic playground (the Jev

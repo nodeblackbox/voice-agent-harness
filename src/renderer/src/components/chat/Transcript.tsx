@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, ListChecks, Zap } from 'lucide-react'
+import { Brain, Check, Copy, Keyboard, Mic, Play, Scissors, Square, Volume2, Workflow, ListChecks, X, Zap } from 'lucide-react'
 import type { ChatMessage, PlaybookFiring, UserTiming } from '@shared/types'
 import { T } from '../../theme'
 import { useStore } from '../../state/store'
@@ -28,13 +28,20 @@ function Chip({ children, color, title }: { children: ReactNode; color?: string;
 }
 
 /** The playbooks that fired on this message and shaped the reply; click one to open it. */
-function PlaybookChips({ firings }: { firings: PlaybookFiring[] }) {
+function PlaybookChips({ firings, messageId }: { firings: PlaybookFiring[]; messageId: string }) {
   const openPlaybook = useStore((s) => s.openPlaybook)
+  const pushToast = useStore((s) => s.pushToast)
+  const [marked, setMarked] = useState<Set<string>>(new Set())
+  const wrong = (f: PlaybookFiring) => {
+    void window.api.playbooks?.label(f.id, messageId, 'should_not')
+    setMarked(new Set([...marked, f.id]))
+    pushToast('info', `Noted: ${f.title} should not have fired there. Review it on the Playbooks page to tighten its trigger.`)
+  }
   return (
     <div className="flex flex-wrap justify-end gap-1">
       {firings.map((f) => (
+        <span key={f.id} className="inline-flex items-stretch">
         <button
-          key={f.id}
           type="button"
           onClick={() => openPlaybook(f.id)}
           title={`${f.kind === 'runbook' ? 'Runbook started' : 'Playbook fired'}: ${f.why}. Click to open it.`}
@@ -44,6 +51,18 @@ function PlaybookChips({ firings }: { firings: PlaybookFiring[] }) {
           {f.kind === 'runbook' ? <ListChecks size={11} /> : <Workflow size={11} />}
           {f.title}
         </button>
+        <button
+          type="button"
+          onClick={() => wrong(f)}
+          disabled={marked.has(f.id)}
+          aria-label={`${f.title} should not have fired here`}
+          title={marked.has(f.id) ? 'Marked as a wrong firing' : 'This should not have fired here'}
+          className="inline-flex items-center rounded px-1 ml-0.5 text-xs"
+          style={{ background: 'transparent', color: marked.has(f.id) ? T.text3 : T.violet, border: `1px solid ${T.violetBorder}`, cursor: marked.has(f.id) ? 'default' : 'pointer', opacity: marked.has(f.id) ? 0.6 : 1 }}
+        >
+          {marked.has(f.id) ? <Check size={10} /> : <X size={10} />}
+        </button>
+        </span>
       ))}
     </div>
   )
@@ -113,7 +132,7 @@ const UserBubble = memo(function UserBubble({ m, gapMs }: { m: ChatMessage; gapM
           </span>
         </div>
         {m.timing && <TimingChips t={m.timing} />}
-        {m.playbooks?.length ? <PlaybookChips firings={m.playbooks} /> : null}
+        {m.playbooks?.length ? <PlaybookChips firings={m.playbooks} messageId={m.id} /> : null}
       </div>
     </div>
   )

@@ -349,6 +349,14 @@ export function describe(e: ConsoleEntry): ConsoleRow {
       return row(`Runbook ${RUN_END[str(d.status)] ?? str(d.status)}: ${str(d.id)}`, join(`${str(d.steps)} steps`, ms(d.ms), d.status === 'done' ? '' : str(d.reason)), d.status === 'done' ? 'good' : d.status === 'blocked' ? 'bad' : 'warn')
     case 'runbook.skipped':
       return row(`Runbook not started: ${str(d.id)}`, d.reason === 'already_running' ? 'it is already running' : d.reason === 'waiting_for_reply' ? 'another one is waiting for your reply' : 'too many runbooks are running', 'dim')
+    case 'playbook.review': {
+      const parts = [`${str(d.checked)} messages`, `fires on ${str(d.fires)}`, num(d.misses) ? `missed ${str(d.misses)}` : '', num(d.falseFires) ? `fired wrongly on ${str(d.falseFires)}` : '', ms(d.ms)]
+      return row(`Reviewed the trigger of ${str(d.id)}`, join(...parts), num(d.misses) || num(d.falseFires) ? 'warn' : 'good')
+    }
+    case 'playbook.label':
+      return row(`Marked a message for ${str(d.id)}: ${d.label === 'should' ? 'it should fire' : d.label === 'should_not' ? 'it should not fire' : 'mark cleared'}`, '', 'plain')
+    case 'playbook.suggest':
+      return row(d.ok ? `Drafted a tighter trigger for ${str(d.id)}` : `Could not draft a tighter trigger for ${str(d.id)}`, join(num(d.misses) ? `${str(d.misses)} missed` : '', num(d.falseFires) ? `${str(d.falseFires)} wrong` : ''), d.ok ? 'plain' : 'warn')
     case 'runbook.withheld':
       return row('Left out of this reply, a background job does it', Array.isArray(d.tools) ? (d.tools as unknown[]).map(str).join(', ') : '', 'dim', { noisy: true })
     case 'runbook.usage':

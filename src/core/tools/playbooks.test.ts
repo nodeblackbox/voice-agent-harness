@@ -83,11 +83,53 @@ describe('playbook tools', () => {
     expect(await call(turn(), { id: 'long-message-breakdown', confirmed: true })).toMatchObject({ status: 'deleted' })
   })
 
+  it('finds a playbook by its spoken name, hyphens as spaces and words in any order', async () => {
+    const { run } = setup()
+    expect(await run('playbook_switch', { id: 'long message breakdown', on: false })).toMatchObject({ status: 'off', id: 'long-message-breakdown' })
+    expect(await run('playbook_switch', { id: 'the breakdown playbook for long messages', on: true })).toMatchObject({ status: 'on', id: 'long-message-breakdown' })
+    expect(await run('playbook_switch', { id: 'something else entirely', on: true })).toMatchObject({ status: 'not_found' })
+  })
+
   it('switches and undoes by voice', async () => {
     const { run, admin } = setup()
     expect(await run('playbook_switch', { id: 'break down long messages', on: false })).toMatchObject({ status: 'off', id: 'long-message-breakdown' })
     expect(admin.toggle).toHaveBeenCalledWith('long-message-breakdown', false, 'voice')
     expect(await run('playbook_undo', {})).toEqual({ ok: true, message: 'Undid: Save push.' })
+  })
+})
+
+describe('review, fix and mark by voice', () => {
+  const row = (id: string, text: string, verdict: 'agree' | 'miss' | 'false_fire' | 'unsure', fires: boolean) => ({ messageId: id, text, createdAt: 1, fires, why: null, should: null, p: null, by: 'jev' as const, verdict })
+  function reviewSetup(previous?: { id: string; text: string; playbooks?: Array<{ id: string; title: string; why: string }> }) {
+    const t = setup([info({ id: 'push', title: 'Push', said: ['push the changes'] }), info({ id: 'idea', title: 'Idea' })])
+    const admin = t.admin as PlaybookAdmin
+    admin.evaluate = vi.fn(async () => ({ errors: [], rows: [row('a', 'ship it to github', 'miss', false), row('b', 'push the notes', 'false_fire', true), row('c', 'push the changes', 'agree', true)], summary: { checked: 3, fires: 2, agree: 1, misses: 1, falseFires: 1, unsure: 0 }, note: 'Jev judged 3 messages.' }))
+    admin.suggest = vi.fn(async () => ({ ok: true as const, id: 'push', text: '---\ntitle: Push\n---\nx\n', repaired: false, warnings: [] }))
+    admin.label = vi.fn()
+    admin.previousUserMessage = () => (previous ? { ...previous, turnId: 't', sessionId: 's', role: 'user' as const, createdAt: 1 } : undefined)
+    const tools = playbookTools({ admin, draft: vi.fn() })
+    const run = (name: string, input: unknown) => (tools[name] as unknown as { execute: (i: unknown, o: unknown) => Promise<Record<string, unknown>> }).execute(input, {})
+    return { admin, run }
+  }
+
+  it('reviews a playbook and names what it missed and where it fired wrongly', async () => {
+    const { run } = reviewSetup()
+    expect(await run('playbook_review', { id: 'push' })).toMatchObject({ id: 'push', checked: 3, fired_on: 2, agreed: 1, missed: ['ship it to github'], fired_wrongly: ['push the notes'], next: 'Offer to tighten the trigger (playbook_fix).' })
+  })
+
+  it('fixes the trigger by saving the suggestion, by voice', async () => {
+    const { run, admin } = reviewSetup()
+    expect(await run('playbook_fix', { id: 'Push' })).toMatchObject({ status: 'changed', id: 'push' })
+    expect(admin.save).toHaveBeenCalledWith('push', expect.stringContaining('title: Push'), undefined, 'voice')
+  })
+
+  it('marks the previous message for the one playbook that fired there, and asks when it is not clear which', async () => {
+    const one = reviewSetup({ id: 'm1', text: 'push the notes', playbooks: [{ id: 'push', title: 'Push', why: 'x' }] })
+    expect(await one.run('playbook_mark', { verdict: 'should_not' })).toMatchObject({ status: 'marked', id: 'push' })
+    expect(one.admin.label).toHaveBeenCalledWith('push', 'm1', 'should_not')
+    const none = reviewSetup({ id: 'm2', text: 'hello' })
+    expect(await none.run('playbook_mark', { verdict: 'should' })).toMatchObject({ status: 'which' })
+    expect(await none.run('playbook_mark', { verdict: 'should', id: 'idea' })).toMatchObject({ status: 'marked', id: 'idea' })
   })
 })
 

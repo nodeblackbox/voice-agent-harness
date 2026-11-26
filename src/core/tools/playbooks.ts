@@ -5,7 +5,8 @@
 
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import type { PlaybookInfo, PlaybookSaveResult, PlaybooksState, PlaybookTestRow } from '@shared/types'
+import type { ChatMessage, PlaybookEvalResult, PlaybookInfo, PlaybookLabel, PlaybookSaveResult, PlaybooksState, PlaybookTestRow } from '@shared/types'
+import type { ParseIssue } from '../playbooks/schema'
 import type { DraftResult } from '../playbooks/author'
 
 export interface PlaybookAdmin {
@@ -15,6 +16,14 @@ export interface PlaybookAdmin {
   delete(id: string, by?: 'ui' | 'voice'): void
   /** Undo the last change to the folder (any of the above, by voice or by hand in the view). */
   undo(): Promise<{ ok: boolean; message: string }>
+  /** Review a trigger against recent messages (core/playbooks/evaluate.ts). */
+  evaluate?(id: string): Promise<PlaybookEvalResult & { errors: ParseIssue[] }>
+  /** Mark a message for a playbook: it should fire there, should not, or clear (null). */
+  label?(id: string, messageId: string, label: PlaybookLabel | null): void
+  /** A tighter trigger from a review, as a draft (not saved). */
+  suggest?(id: string): Promise<DraftResult>
+  /** The user's message before the one being answered. */
+  previousUserMessage?(): ChatMessage | undefined
 }
 
 export interface PlaybookToolDeps {
@@ -57,7 +66,19 @@ export function playbookTools(deps: PlaybookToolDeps): ToolSet {
   const find = (ref: string): PlaybookInfo | undefined => {
     const list = deps.admin.state().playbooks
     const r = ref.trim().toLowerCase().replace(/\.md$/, '')
-    return list.find((p) => p.id === r) ?? list.find((p) => p.title?.toLowerCase() === r) ?? list.find((p) => !!p.title && p.title.toLowerCase().includes(r))
+    const slug = r.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    // spoken names come with spaces for hyphens and in any order: "long message breakdown" is long-message-breakdown
+    const words = r.split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !['the', 'for', 'and', 'with', 'about', 'that', 'this', 'when', 'playbook', 'runbook', 'one'].includes(w))
+    const has = (p: PlaybookInfo): boolean => {
+      const own = new Set(`${p.id} ${p.title ?? ''}`.toLowerCase().split(/[^a-z0-9]+/).flatMap((w) => [w, w.replace(/s$/, '')]))
+      return words.length > 0 && words.every((w) => own.has(w) || own.has(w.replace(/s$/, '')))
+    }
+    return (
+      list.find((p) => p.id === r || p.id === slug) ??
+      list.find((p) => p.title?.toLowerCase() === r) ??
+      list.find((p) => !!p.title && p.title.toLowerCase().includes(r)) ??
+      (list.filter(has).length === 1 ? list.find(has) : undefined)
+    )
   }
   const missing = (ref: string) => ({ status: 'not_found', note: `No playbook called "${ref}". Call playbook_list for the names.` })
 
@@ -142,6 +163,64 @@ export function playbookTools(deps: PlaybookToolDeps): ToolSet {
         return { status: 'deleted', id: p.id, title: p.title, note: 'It can be brought back with playbook_undo.' }
       }
     }),
+
+    ...(deps.admin.evaluate
+      ? {
+          playbook_review: tool({
+            description:
+              'Check how well a playbook\'s trigger matches its purpose on the user\'s recent messages: where it fired and should not have, and where it should have fired and did not (judged by Jev or the model, and the user\'s own marks). Use it when the user asks whether a playbook is working, or after one misfired. Then say the result in a sentence or two and, if it found problems, offer to fix the trigger.',
+            inputSchema: z.object({ id: z.string().describe('Its name or title') }),
+            execute: async ({ id }) => {
+              const p = find(id)
+              if (!p) return missing(id)
+              const r = await deps.admin.evaluate!(p.id)
+              if (r.errors.length) return { status: 'error', note: r.errors[0]!.message }
+              const clip = (t: string): string => (t.length > 140 ? `${t.slice(0, 139)}…` : t)
+              return {
+                id: p.id,
+                title: p.title,
+                checked: r.summary.checked,
+                fired_on: r.summary.fires,
+                agreed: r.summary.agree,
+                missed: r.rows.filter((x) => x.verdict === 'miss').slice(0, 3).map((x) => clip(x.text)),
+                fired_wrongly: r.rows.filter((x) => x.verdict === 'false_fire').slice(0, 3).map((x) => clip(x.text)),
+                unsure: r.summary.unsure,
+                judge: r.note,
+                next: r.summary.misses || r.summary.falseFires ? 'Offer to tighten the trigger (playbook_fix).' : 'Nothing to fix.'
+              }
+            }
+          }),
+          playbook_fix: tool({
+            description: 'Tighten a playbook\'s trigger from a fresh review, so it fires where it should and not where it should not. Saves at once (undo brings the old one back). Use it after playbook_review found problems and the user wants them fixed.',
+            inputSchema: z.object({ id: z.string().describe('Its name or title') }),
+            execute: async ({ id }) => {
+              const p = find(id)
+              if (!p) return missing(id)
+              if (!deps.admin.suggest) return { status: 'error', note: 'Fixing triggers is not available.' }
+              const r = await deps.admin.suggest(p.id)
+              if (!r.ok) return { status: 'not_changed', note: r.errors[0]?.message ?? 'no usable draft' }
+              const saved = deps.admin.save(p.id, r.text, undefined, 'voice')
+              if (!saved.ok) return { status: 'not_changed', note: saved.errors[0]?.message }
+              const after = deps.admin.state().playbooks.find((x) => x.id === p.id)
+              return { status: 'changed', id: p.id, title: p.title, before: triggerSummary(p), now: after ? triggerSummary(after) : undefined, note: 'Say what changed in a sentence; playbook_undo puts the old trigger back.' }
+            }
+          }),
+          playbook_mark: tool({
+            description:
+              'Record that a playbook fired on the user\'s previous message when it should not have ("that one shouldn\'t have fired"), or should have fired there and did not. Reviews use these marks. Without an id it marks the playbook that fired on that message, when there was exactly one.',
+            inputSchema: z.object({ verdict: z.enum(['should_not', 'should']), id: z.string().optional().describe('Its name or title; leave out for the one that fired') }),
+            execute: async ({ verdict, id }) => {
+              const prev = deps.admin.previousUserMessage?.()
+              if (!prev || !deps.admin.label) return { status: 'error', note: 'There is no earlier message to mark.' }
+              const fired = prev.playbooks ?? []
+              const p = id ? find(id) : fired.length === 1 ? find(fired[0]!.id) : undefined
+              if (!p) return { status: 'which', note: id ? `No playbook called "${id}".` : fired.length ? `Several fired on that message: ${fired.map((f) => f.title).join(', ')}. Ask which.` : 'Nothing fired on that message; ask which playbook should have.' }
+              deps.admin.label(p.id, prev.id, verdict as PlaybookLabel)
+              return { status: 'marked', id: p.id, title: p.title, message: prev.text.slice(0, 120), verdict, note: 'Reviews now count it this way. Offer to review and fix the trigger.' }
+            }
+          })
+        }
+      : {}),
 
     playbook_undo: tool({
       description: 'Undo the last change to the playbooks (a create, change, switch or delete), e.g. "undo that" right after one.',

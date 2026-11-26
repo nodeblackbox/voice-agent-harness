@@ -52,7 +52,7 @@ describe('runbook steps', () => {
         'flowchart TD',
         '  start((start))',
         '  wait(["wait: wait for reply → reply"])',
-        '  ok{"ok: ask: Is `latest` a yes?"}',
+        "  ok{\"ok: ask: Is 'latest' a yes?\"}",
         '  hi["hi: say: [hello] {there}"]',
         '  end_((end))',
         '  start --> wait',

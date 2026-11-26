@@ -201,8 +201,8 @@ export function runbookMermaid(steps: Step[]): string {
                   : s.session
                     ? `tell Claude Code ${s.session}`
                     : `Claude Code: ${s.name}`
-    // inside a quoted Mermaid label only these need escaping: a double quote ends it, < and > read as HTML
-    return `${s.id}: ${text}`.replace(/"/g, "'").replace(/</g, '#lt;').replace(/>/g, '#gt;')
+    // backticks would turn on Mermaid's markdown labels ("Unsupported markdown: codespan"); quotes read the same
+    return `${s.id}: ${text}`.replace(/["`]/g, "'").replace(/</g, '#lt;').replace(/>/g, '#gt;')
   }
   const shape = (s: Step): string => (s.do === 'check' || s.do === 'ask' ? `{"${label(s)}"}` : s.do === 'wait' ? `(["${label(s)}"])` : `["${label(s)}"]`)
   const lines = ['flowchart TD', '  start((start))']

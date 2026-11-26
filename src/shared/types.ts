@@ -366,6 +366,34 @@ export interface RunbookRun {
   reason?: string
 }
 
+/** The user's mark on a message for one playbook: it should have fired there, or it should not have. */
+export type PlaybookLabel = 'should' | 'should_not'
+
+/** One recent message in a review: what the trigger does on it, and what it should do. */
+export interface PlaybookEvalRow {
+  messageId: string
+  text: string
+  createdAt: number
+  via?: 'voice' | 'text'
+  /** The current trigger fires on it (and why). */
+  fires: boolean
+  why: string | null
+  /** It should fire: by the user's mark, else the judge; null = unsure. */
+  should: boolean | null
+  /** Jev's yes probability, when Jev judged. */
+  p: number | null
+  by: 'label' | 'jev' | 'model' | 'none'
+  label?: PlaybookLabel
+  verdict: 'agree' | 'miss' | 'false_fire' | 'unsure'
+}
+
+export interface PlaybookEvalResult {
+  rows: PlaybookEvalRow[]
+  summary: { checked: number; fires: number; agree: number; misses: number; falseFires: number; unsure: number }
+  /** How the judging went: Jev or the model, the cost, or why there was none. */
+  note?: string
+}
+
 export type PlaybookSaveResult = { ok: true; id: string } | { ok: false; errors: PlaybookIssue[] }
 
 export interface Session {

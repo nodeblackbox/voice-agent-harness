@@ -3,6 +3,8 @@ import type { ConsoleEntry } from '@shared/console'
 import type { CcAccount, CcAnswer, CcEvent, CcExternal, CcFile, CcFileContent, CcFileSaved, CcMode, CcResult, CcSession } from '@shared/claude'
 import type {
   KeyName,
+  PlaybookEvalResult,
+  PlaybookLabel,
   RunbookRun,
   PlaybookCheck,
   PlaybookIssue,
@@ -117,6 +119,12 @@ export interface VoiceAgentApi {
     /** Replay recent user messages against a draft. */
     test(id: string, text: string): Promise<{ errors: PlaybookIssue[]; rows: PlaybookTestRow[]; jevNote?: string }>
     openFolder(): Promise<void>
+    /** Review a trigger against recent messages: misses and false fires, judged by Jev or the model. */
+    evaluate(id: string, text?: string): Promise<PlaybookEvalResult & { errors: PlaybookIssue[] }>
+    /** Mark a message: the playbook should fire there, should not, or clear the mark (null). */
+    label(id: string, messageId: string, label: PlaybookLabel | null): Promise<void>
+    /** Draft a tighter trigger from a review; nothing is saved. */
+    suggest(id: string, text?: string): Promise<{ ok: true; id: string; text: string; repaired: boolean; warnings: PlaybookIssue[] } | { ok: false; errors: PlaybookIssue[]; text: string }>
   }
   runbooks: {
     /** Recent runs, newest first: working, waiting for a reply, and finished. */
